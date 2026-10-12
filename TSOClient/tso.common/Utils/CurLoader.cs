@@ -21,7 +21,7 @@ namespace FSO.Common.Utils
             Texture2D starTex;
             using (var str = FSOFile.Open("Content/uigraphics/upgrade_star.png", FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                starTex = Texture2D.FromStream(gd, str);
+                starTex = FSO.Common.Utils.TextureLoad.FromStream(gd, str);
             }
 
             var batch = new SpriteBatch(gd);

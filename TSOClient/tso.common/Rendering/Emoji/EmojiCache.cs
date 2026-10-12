@@ -64,7 +64,7 @@ namespace FSO.Common.Rendering.Emoji
                             {
                                 using (var mem = new MemoryStream(e.Result))
                                 {
-                                    var tex = Texture2D.FromStream(GD, mem);
+                                    var tex = FSO.Common.Utils.TextureLoad.FromStream(GD, mem);
 
                                     var decimated = TextureUtils.Decimate(tex, GD, 72 / DefaultRes, true);
                                     //blit this into our emoji buffer

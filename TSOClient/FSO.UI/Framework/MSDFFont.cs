@@ -42,7 +42,7 @@ namespace FSO.UI.Framework
             {
                 using (var stream = new MemoryStream(Font.Atlas.PNGData))
                 {
-                    Atlas = Texture2D.FromStream(gd, stream);
+                    Atlas = FSO.Common.Utils.TextureLoad.FromStream(gd, stream);
                 }
             }
             return Atlas;

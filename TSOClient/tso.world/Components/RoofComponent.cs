@@ -72,7 +72,7 @@ namespace FSO.LotView.Components
                 {
                     using (var strm = FSOFile.OpenRead(path))
                     {
-                        Texture = Texture2D.FromStream(device, strm);
+                        Texture = FSO.Common.Utils.TextureLoad.FromStream(device, strm);
                     }
                 }
                 else
@@ -93,7 +93,7 @@ namespace FSO.LotView.Components
             {
                 using (var strm = FSOFile.OpenRead($"Content/Textures/roof/{searchName}_h.png"))
                 {
-                    ParallaxTexture = Texture2D.FromStream(device, strm);
+                    ParallaxTexture = FSO.Common.Utils.TextureLoad.FromStream(device, strm);
                 }
 
                 NormalMap = ImageLoader.MipTextureFromFile(device, $"Content/Textures/roof/{searchName}_n.png");

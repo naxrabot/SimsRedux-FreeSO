@@ -24,7 +24,7 @@ namespace FSO.Common.Utils
         {
             using (var stream = FSOFile.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                return Texture2D.FromStream(gd, stream);
+                return FSO.Common.Utils.TextureLoad.FromStream(gd, stream);
             }
         }
 
