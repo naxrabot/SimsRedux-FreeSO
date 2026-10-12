@@ -112,7 +112,9 @@ namespace FSO.Common.Rendering.Framework
                     State.KeyboardState = new KeyboardState();
                 }
 
-                if (State.KeyboardState.IsKeyDown(Keys.LeftAlt) && State.MouseState.LeftButton == ButtonState.Pressed)
+                // SimsRedux: Alt + left click used to be turned into a middle click (for mice without
+                // one). Alt is now the free placement / diagonal rotation key, so that's switched off.
+                if (false && State.KeyboardState.IsKeyDown(Keys.LeftAlt) && State.MouseState.LeftButton == ButtonState.Pressed)
                 {
                     //emulated middle click with alt
                     var ms = State.MouseState;

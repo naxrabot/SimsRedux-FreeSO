@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -58,6 +58,9 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.SM64Position, typeof(VMNetSM64PositionCmd) },
             { VMCommandType.SM64Event, typeof(VMNetSM64EventCmd) },
             { VMCommandType.SM64AnimData, typeof(VMNetSM64AnimDataCmd) },
+            { VMCommandType.SwapObject, typeof(VMNetSwapObjectCmd) }, // SimsRedux
+            { VMCommandType.TintObject, typeof(VMNetTintObjectCmd) }, // SimsRedux
+            { VMCommandType.ResetSim, typeof(VMNetResetSimCmd) }, // SimsRedux
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -170,6 +173,11 @@ namespace FSO.SimAntics.NetPlay.Model
         DirectControlToggle = 45,
         SM64Position = 46,
         SM64Event = 47,
-        SM64AnimData = 48
+        SM64AnimData = 48,
+
+        // SimsRedux
+        SwapObject = 49,
+        TintObject = 50,
+        ResetSim = 51
     }
 }

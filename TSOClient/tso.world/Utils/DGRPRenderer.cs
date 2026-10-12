@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using FSO.Files.Formats.IFF.Chunks;
@@ -98,6 +98,11 @@ namespace FSO.LotView.Utils
             }
         }
 
+        /// <summary>SimsRedux: packed colour tint (see ReduxTint). 0 = original colours.</summary>
+        public uint Tint;
+        /// <summary>SimsRedux: the tinted picture couldn't be made yet (still loading).</summary>
+        public bool TintPending;
+
         private float RadianDirection
         {
             get
@@ -112,6 +117,15 @@ namespace FSO.LotView.Utils
                         return (float)Math.PI;
                     case Direction.WEST:
                         return (float)Math.PI * 1.5f;
+                    // SimsRedux: diagonal placement (3D only)
+                    case Direction.NORTHEAST:
+                        return (float)Math.PI * 0.25f;
+                    case Direction.SOUTHEAST:
+                        return (float)Math.PI * 0.75f;
+                    case Direction.SOUTHWEST:
+                        return (float)Math.PI * 1.25f;
+                    case Direction.NORTHWEST:
+                        return (float)Math.PI * 1.75f;
                     default:
                         return 0;
                 }
@@ -156,6 +170,7 @@ namespace FSO.LotView.Utils
                 {
                     Dispose();
                     Items.Clear();
+                    TintPending = false;
                     var direction = (uint)_Direction;
 
                     /** Compute the direction **/
@@ -184,6 +199,13 @@ namespace FSO.LotView.Utils
                             }
                             var sprite = new _2DStandaloneSprite(); //do not use sprite pool for DGRP, since we can reliably remember our own sprites.
                             sprite.Pixel = texture.Pixel;
+                            // SimsRedux: colour tint
+                            if (Tint != 0)
+                            {
+                                bool pending;
+                                sprite.Pixel = ReduxTint.GetTinted(world.Device, dgrpSprite, texture.Pixel, Tint, out pending);
+                                if (pending) TintPending = true;
+                            }
                             sprite.Depth = texture.ZBuffer;
                             if (texture.ZBuffer != null)
                             {

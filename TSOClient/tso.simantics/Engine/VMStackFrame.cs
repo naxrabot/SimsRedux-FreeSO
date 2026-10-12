@@ -162,6 +162,14 @@ namespace FSO.SimAntics.Engine
             else Routine = (VMRoutine)Global.Resource.GetRoutine(input.RoutineID);
 
             InstructionPointer = (byte)input.InstructionPointer;
+            // SimsRedux: lots saved by the original game can resume an object at a step its
+            // script here doesn't have (e.g. "Tiled Counter main:3"). Restart that script
+            // instead of crashing and resetting the object.
+            if (Routine != null && Routine.Instructions != null && InstructionPointer >= Routine.Instructions.Length)
+            {
+                System.Console.WriteLine("[SimsRedux] Saved script position " + InstructionPointer + " is past the end of routine " + input.RoutineID + "; restarting it.");
+                InstructionPointer = 0;
+            }
             Caller = context.VM.GetObjectById(input.Caller);
             Callee = context.VM.GetObjectById(input.Callee);
             StackObjectID = input.StackObject;

@@ -783,7 +783,21 @@ namespace FSO.SimAntics
                     if (Thread == null) return 0;
                     return (short)((SkillGameplayMul(Thread.Context.VM) == 0)?0x7FFF:0);
             }
+            // SimsRedux: Sims loaded from the neighbourhood only carry 88 values; treat missing ones as 0
+            if ((ushort)variable >= PersonData.Length) return 0;
             return PersonData[(ushort)variable];
+        }
+
+        /// <summary>SimsRedux: makes sure the person data array is big enough for every variable.</summary>
+        private void EnsurePersonDataSize(int size)
+        {
+            if (PersonData == null) PersonData = new short[size];
+            else if (PersonData.Length < size)
+            {
+                var bigger = new short[size];
+                Array.Copy(PersonData, bigger, PersonData.Length);
+                PersonData = bigger;
+            }
         }
 
         public short[] GetPersonDataClone()
@@ -942,6 +956,7 @@ namespace FSO.SimAntics
                     }
                     break;
             }
+            if ((ushort)variable >= PersonData.Length) EnsurePersonDataSize((ushort)variable + 1);
             PersonData[(ushort)variable] = value;
             return true;
         }
@@ -951,7 +966,16 @@ namespace FSO.SimAntics
             var lastGender = GetPersonData(VMPersonDataVariable.Gender);
             var lastPersonType = GetPersonData(VMPersonDataVariable.PersonType);
             var sched = GetPersonData(VMPersonDataVariable.VisitorSchedule);
-            if (neigh.PersonData != null) PersonData = neigh.PersonData.ToArray();
+            if (neigh.PersonData != null)
+            {
+                // SimsRedux: the neighbourhood only stores the first 88 values. Keep the full-size
+                // array so Makin' Magic / Superstar variables beyond that don't crash.
+                var size = Math.Max(PersonData?.Length ?? 0, 101);
+                var merged = new short[Math.Max(size, neigh.PersonData.Length)];
+                if (PersonData != null) Array.Copy(PersonData, merged, PersonData.Length);
+                Array.Copy(neigh.PersonData, merged, neigh.PersonData.Length);
+                PersonData = merged;
+            }
             SetPersonData(VMPersonDataVariable.Gender, lastGender); //fixes cats switching to children suddenly
             SetPersonData(VMPersonDataVariable.NeighborId, neigh.NeighbourID);
             if (lastPersonType == 0) SetPersonData(VMPersonDataVariable.PersonType, (short)((GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == current?.ChunkID) ? 0 : 1));
@@ -1118,6 +1142,8 @@ namespace FSO.SimAntics
 
         public override VMEntity GetSlot(int slot)
         {
+            // SimsRedux: some expansion objects ask for hand slots a Sim doesn't have
+            if (slot < 0 || slot >= Contained.Length) return null;
             return Contained[slot];
         }
 
@@ -1227,6 +1253,7 @@ namespace FSO.SimAntics
             MotiveChanges = input.MotiveChanges;
             MotiveDecay = input.MotiveDecay;
             PersonData = input.PersonData;
+            EnsurePersonDataSize(101);
             MotiveData = input.MotiveData;
             RadianDirection = input.RadianDirection;
             KillTimeout = input.KillTimeout;

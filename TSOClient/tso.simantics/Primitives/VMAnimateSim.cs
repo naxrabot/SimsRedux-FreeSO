@@ -1,4 +1,4 @@
-﻿using FSO.Files.Utils;
+using FSO.Files.Utils;
 using FSO.SimAntics.Engine.Scopes;
 using FSO.SimAntics.Engine.Utils;
 using FSO.Vitaboy;
@@ -140,6 +140,12 @@ namespace FSO.SimAntics.Engine.Primitives
                     else
                     {
                         var cAnim = avatar.CurrentAnimationState;
+
+                        // SimsRedux: "play and wait" on an animation that's already running as a
+                        // loop (started by a "play looping" step just before, e.g. the computer's
+                        // typing while it looks for another job) would wait forever, because a loop
+                        // never ends. Let it finish its current cycle instead, like the original.
+                        if (cAnim.Loop) cAnim.Loop = false;
 
                         //SPECIAL CASE: if we are ending the animation, and the number of events run < expected events
                         //forcefully run those events, with id as their event number. (required for bath drain)

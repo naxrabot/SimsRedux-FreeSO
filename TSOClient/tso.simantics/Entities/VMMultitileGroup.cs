@@ -183,6 +183,15 @@ namespace FSO.SimAntics.Entities
                     Dir = 4; break;
                 case Direction.WEST:
                     Dir = 6; break;
+                // SimsRedux: diagonal placement
+                case Direction.NORTHEAST:
+                    Dir = 1; break;
+                case Direction.SOUTHEAST:
+                    Dir = 3; break;
+                case Direction.SOUTHWEST:
+                    Dir = 5; break;
+                case Direction.NORTHWEST:
+                    Dir = 7; break;
             }
 
             Matrix rotMat = Matrix.CreateRotationZ((float)(Dir * Math.PI / 4.0));

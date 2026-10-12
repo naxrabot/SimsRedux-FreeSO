@@ -1,4 +1,4 @@
-﻿using FSO.Common;
+using FSO.Common;
 using FSO.Files.Formats.IFF;
 using FSO.Files.Formats.IFF.Chunks;
 using System;
@@ -59,6 +59,11 @@ namespace FSO.Content.TS1
             if (!Directory.Exists(userPath))
             {
                 var source = Path.Combine(ContentManager.TS1BasePath, udName + "/");
+                // SimsRedux: start from the game's untouched starting neighbourhood (TemplateUserData)
+                // rather than the player's own Sims 1 save, so a new game is always a fresh game.
+                var template = Path.Combine(ContentManager.TS1BasePath, "TemplateUserData/");
+                bool usedTemplate = false;
+                if (TemplateIsUsable(template)) { source = template; usedTemplate = true; }
                 var destination = userPath;
 
                 //quick and dirty copy.
@@ -70,6 +75,23 @@ namespace FSO.Content.TS1
                 foreach (string newPath in Directory.GetFiles(source, "*.*",
                     SearchOption.AllDirectories))
                     File.Copy(newPath, newPath.Replace('\\', '/').Replace(source, destination), true);
+
+                // the template can be missing the expansion packs' lot description files; borrow
+                // just those from the normal UserData (they only hold lot names and descriptions)
+                if (usedTemplate)
+                {
+                    var normal = Path.Combine(ContentManager.TS1BasePath, udName + "/");
+                    foreach (var name in new[] { "Houses/NeighborhoodDesc.iff", "Houses/STDesc.iff", "Houses/MTDesc.iff" })
+                    {
+                        var to = Path.Combine(destination, name);
+                        var from = Path.Combine(normal, name);
+                        if (!File.Exists(to) && File.Exists(from))
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(to));
+                            File.Copy(from, to, true);
+                        }
+                    }
+                }
             }
 
             UserPath = userPath;
@@ -101,6 +123,26 @@ namespace FSO.Content.TS1
 
             LoadCharacters(true);
             //todo: manage avatar iffs here
+        }
+
+        /// <summary>
+        /// SimsRedux: the game's untouched starting neighbourhood can only be used if it has the
+        /// neighbour list and neighbourhood data in it (otherwise fall back to the normal UserData).
+        /// </summary>
+        private static bool TemplateIsUsable(string template)
+        {
+            try
+            {
+                var nbhd = Path.Combine(template, "Neighborhood.iff");
+                if (!Directory.Exists(template) || !File.Exists(nbhd)) return false;
+                if (!File.Exists(Path.Combine(template, "LotLocations.iff")) || !File.Exists(Path.Combine(template, "LotZoning.iff"))) return false;
+                var iff = new IffFile(nbhd);
+                return iff.List<NBRS>()?.Count > 0 && iff.List<NGBH>()?.Count > 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public void AddMissingNeighbors()

@@ -7,6 +7,7 @@ namespace FSO.SimAntics.Marshals
     {
         public Direction Direction;
         public VMGameObjectDisableFlags Disabled;
+        public uint Tint; // SimsRedux: colour tint (version 39+)
 
         public VMGameObjectMarshal() { }
         public VMGameObjectMarshal(int version, bool ts1) : base(version, ts1) { }
@@ -16,12 +17,14 @@ namespace FSO.SimAntics.Marshals
             base.Deserialize(reader);
             Direction = (Direction)reader.ReadByte();
             if (Version > 9) Disabled = (VMGameObjectDisableFlags)reader.ReadByte();
+            if (Version > 38) Tint = reader.ReadUInt32();
         }
         public override void SerializeInto(BinaryWriter writer)
         {
             base.SerializeInto(writer);
             writer.Write((byte)Direction);
             writer.Write((byte)Disabled);
+            writer.Write(Tint);
         }
     }
 }

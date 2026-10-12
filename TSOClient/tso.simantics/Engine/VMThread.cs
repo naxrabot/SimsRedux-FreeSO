@@ -1,4 +1,4 @@
-﻿//#define THROW_SIMANTICS
+//#define THROW_SIMANTICS
 #if !Server
     #define IDE_COMPAT
 #endif
@@ -582,8 +582,27 @@ namespace FSO.SimAntics.Engine
             HandleResult(frame, instruction, result);
         }
 
+        // SimsRedux: debug trace of one Sim's script steps (used to find scripts that loop forever)
+        public static VMEntity TraceEntity;
+        public static List<string> TraceLog = new List<string>();
+        public static HashSet<VMRoutine> TraceRoutines = new HashSet<VMRoutine>();
+
         private void HandleResult(VMStackFrame frame, VMInstruction instruction, VMPrimitiveExitCode result)
         {
+            if (TraceEntity != null && Entity == TraceEntity && TraceLog.Count < 4000 && frame?.Routine != null)
+            {
+                try
+                {
+                    var t = TempRegisters;
+                    TraceLog.Add((frame.Routine.Chunk?.ChunkLabel ?? "?") + "(" + frame.Routine.ID + ") line " + frame.InstructionPointer
+                        + " op " + (instruction?.Opcode.ToString() ?? "-") + " -> " + result
+                        + "  temps " + t[0] + "," + t[1] + "," + t[2] + "," + t[3]
+                        + "  locals " + string.Join(",", frame.Locals ?? new short[0])
+                        + "  args " + string.Join(",", frame.Args ?? new short[0]));
+                    TraceRoutines.Add(frame.Routine);
+                }
+                catch { }
+            }
             switch (result)
             {
                 // Don't advance the instruction pointer, this primitive isnt finished yet
@@ -1128,6 +1147,14 @@ namespace FSO.SimAntics.Engine
                 {
                     Stack.Add(new VMStackFrame(item, context, this));
                 }
+            }
+            // SimsRedux: a save can point an object at a script that doesn't exist here (seen with
+            // custom lamps: "CT - Get my Room Impact in Temp"). Running it would crash and pop up a
+            // SimAntics error. For objects, start the script over instead (the same as a reset, without the popup).
+            if (Entity is VMGameObject && Stack.Any(f => f.GetType() == typeof(VMStackFrame) && f.Routine == null))
+            {
+                System.Console.WriteLine("[SimsRedux] An object was saved in a script that no longer exists; restarting it.");
+                Stack.Clear();
             }
             Queue = new List<VMQueuedAction>();
             QueueDirty = true;

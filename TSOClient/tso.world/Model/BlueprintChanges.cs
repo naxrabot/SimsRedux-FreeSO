@@ -1,4 +1,4 @@
-﻿using FSO.LotView.Components;
+using FSO.LotView.Components;
 using FSO.LotView.Model;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -45,6 +45,7 @@ namespace FSO.LotView
 
         public void PreDraw(GraphicsDevice gd, WorldState state)
         {
+            FSO.LotView.Components.ObjectComponent.RetryPendingTints(); // SimsRedux
             DrawImmediate = state.ForceImmediate;
             if (state.CameraMode < CameraRenderMode._3D)
             {

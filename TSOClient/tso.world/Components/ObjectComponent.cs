@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework.Graphics;
@@ -315,9 +315,57 @@ namespace FSO.LotView.Components
                         return (float)Math.PI;
                     case Direction.WEST:
                         return (float)Math.PI * 1.5f;
+                    // SimsRedux: diagonal placement (3D only)
+                    case Direction.NORTHEAST:
+                        return (float)Math.PI * 0.25f;
+                    case Direction.SOUTHEAST:
+                        return (float)Math.PI * 0.75f;
+                    case Direction.SOUTHWEST:
+                        return (float)Math.PI * 1.25f;
+                    case Direction.NORTHWEST:
+                        return (float)Math.PI * 1.75f;
                     default:
                         return 0;
                 }
+            }
+        }
+
+        // SimsRedux: colour tint (see ReduxTint). Setting it redraws the object in its new colours.
+        private uint _Tint;
+        public uint Tint
+        {
+            get { return _Tint; }
+            set
+            {
+                if (_Tint == value) return;
+                _Tint = value;
+                TintRetries = 0;
+                if (dgrp != null)
+                {
+                    dgrp.Tint = value;
+                    dgrp.InvalidateRotation();
+                }
+                if (blueprint != null) blueprint.Changes.RegisterObjectChange(this);
+            }
+        }
+
+        // SimsRedux: objects whose tinted picture was still loading; they get redrawn shortly.
+        private static HashSet<ObjectComponent> TintWaiting = new HashSet<ObjectComponent>();
+        private static int TintTick;
+        private int TintRetries;
+
+        /// <summary>Called once a frame by the lot drawing code.</summary>
+        public static void RetryPendingTints()
+        {
+            if (TintWaiting.Count == 0) return;
+            if (++TintTick % 10 != 0) return;
+            var list = TintWaiting.ToList();
+            TintWaiting.Clear();
+            foreach (var c in list)
+            {
+                if (c.dgrp == null || c.dgrp.Tint == 0 || c.TintRetries++ > 60) continue;
+                c.dgrp.InvalidateRotation();
+                if (c.blueprint != null) c.blueprint.Changes.RegisterObjectChange(c);
             }
         }
 
@@ -520,6 +568,7 @@ namespace FSO.LotView.Components
                 {
                     if (Container != null) dgrp.Position = pos;
                     dgrp.DrawImmediate(world);
+                    if (dgrp.TintPending && dgrp.Tint != 0) TintWaiting.Add(this);
                 }
             }
 

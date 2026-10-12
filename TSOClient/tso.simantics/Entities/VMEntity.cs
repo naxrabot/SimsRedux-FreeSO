@@ -1210,6 +1210,9 @@ namespace FSO.SimAntics
             {
                 VMPlacementError wallValid = WallChangeValid(wall, direction, true);
                 if (wallValid != VMPlacementError.Success) return new VMPlacementResult(wallValid);
+
+                VMPlacementError freeValid = FreePlacementValid(pos, direction, context);
+                if (freeValid != VMPlacementError.Success) return new VMPlacementResult(freeValid);
             }
 
             var floor = arch.GetPreciseFloor(pos);
@@ -1231,6 +1234,42 @@ namespace FSO.SimAntics
             if (valid.Object != null && ((flags & VMPlaceRequestFlags.AcceptSlots) == 0))
                 valid.Status = VMPlacementError.CantIntersectOtherObjects;
             return valid;
+        }
+
+        /// <summary>
+        /// SimsRedux: free placement (Alt) lets an object sit off the grid, so its footprint can reach
+        /// into neighbouring tiles. The normal checks only look at the object's own tile, so here we
+        /// make sure no wall, fence, diagonal wall or lot edge is inside the part that sticks out.
+        /// Objects that stay inside their tile (all normal placements) skip this completely.
+        /// </summary>
+        public VMPlacementError FreePlacementValid(LotTilePos pos, Direction direction, VMContext context)
+        {
+            if (pos.x % 16 == 8 && pos.y % 16 == 8) return VMPlacementError.Success; // normal, on-grid placement
+            var fp = GetObstacle(pos, direction, true);
+            if (fp == null) return VMPlacementError.Success;
+            int tx = pos.TileX * 16, ty = pos.TileY * 16;
+            if (fp.x1 >= tx && fp.y1 >= ty && fp.x2 <= tx + 16 && fp.y2 <= ty + 16) return VMPlacementError.Success;
+
+            var arch = context.Architecture;
+            int c1 = (int)Math.Floor(fp.x1 / 16f), c2 = (int)Math.Floor((fp.x2 - 1) / 16f);
+            int r1 = (int)Math.Floor(fp.y1 / 16f), r2 = (int)Math.Floor((fp.y2 - 1) / 16f);
+            if (c1 < 0 || r1 < 0 || c2 >= arch.Width || r2 >= arch.Height) return VMPlacementError.LocationOutOfBounds;
+
+            for (int c = c1; c <= c2; c++)
+            {
+                for (int r = r1; r <= r2; r++)
+                {
+                    var w = arch.GetWall((short)c, (short)r, pos.Level);
+                    // diagonal walls inside the covered area
+                    if ((w.Segments & (WallSegments.HorizontalDiag | WallSegments.VerticalDiag)) > 0) return VMPlacementError.CantBeThroughWall;
+                    // wall between this column and the one to its left (inside the covered area)
+                    if (c > c1 && (w.Segments & WallSegments.TopLeft) > 0) return VMPlacementError.CantBeThroughWall;
+                    // wall between this row and the one above it (inside the covered area)
+                    if (r > r1 && (w.Segments & WallSegments.TopRight) > 0) return VMPlacementError.CantBeThroughWall;
+                    if (context.IsUserOutOfBounds(new LotTilePos((short)(c * 16 + 8), (short)(r * 16 + 8), pos.Level))) return VMPlacementError.LocationOutOfBounds;
+                }
+            }
+            return VMPlacementError.Success;
         }
 
         public VMPlacementError SlopeValid()
@@ -1288,6 +1327,17 @@ namespace FSO.SimAntics
         public VMPlacementError WallChangeValid(WallTile wall, Direction direction, bool checkUnused)
         {
             var placeFlags = (WallPlacementFlags)ObjectData[(int)VMStackObjectVariable.WallPlacementFlags];
+
+            // SimsRedux: diagonal objects can't hang on walls, and must fit for both neighbouring
+            // straight directions (so they never end up through a wall)
+            Direction diagA, diagB;
+            if (VMDiagonal.SplitDiagonal(direction, out diagA, out diagB))
+            {
+                if (((int)placeFlags & 15) != 0) return VMPlacementError.MustBeAgainstWall;
+                var resA = WallChangeValid(wall, diagA, checkUnused);
+                if (resA != VMPlacementError.Success) return resA;
+                return WallChangeValid(wall, diagB, checkUnused);
+            }
 
             bool diag = ((wall.Segments & (WallSegments.HorizontalDiag | WallSegments.VerticalDiag)) > 0);
             if (diag && (placeFlags & WallPlacementFlags.DiagonalAllowed) == 0) return VMPlacementError.CantBeThroughWall; //does not allow diagonal and one is present

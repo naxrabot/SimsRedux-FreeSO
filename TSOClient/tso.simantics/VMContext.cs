@@ -1274,7 +1274,12 @@ namespace FSO.SimAntics
                     status = VMPlacementError.CantIntersectOtherObjects;
                     
                     //this object is technically solid. Check if we can place on top of it
-                    if (allowedHeights>1 && obj.TotalSlots() > 0 && (obj.GetSlot(0) == null || obj.GetSlot(0) == target))
+                    // SimsRedux: when you pick something up off a counter, the real object stays hidden in the
+                    // counter's slot while you hold a copy. Count that slot as free, so it can be put back.
+                    var slotObj = (obj.TotalSlots() > 0) ? obj.GetSlot(0) : null;
+                    var slotFree = slotObj == null || slotObj == target
+                        || (target.IgnoreIntersection != null && target.IgnoreIntersection.Objects.Contains(slotObj));
+                    if (allowedHeights>1 && obj.TotalSlots() > 0 && slotFree)
                     {
                         //first check if we have a slot 0, which is what we place onto. then check if it's empty, 
                         //then check if the object can support this one's weight.
@@ -1365,6 +1370,8 @@ namespace FSO.SimAntics
                     newGroup.Objects[i].DynamicSpriteFlags2 = group.Objects[i].DynamicSpriteFlags2;
                     newGroup.Objects[i].SetDynamicSpriteFlag(0, group.Objects[i].IsDynamicSpriteFlagSet(0));
                     newGroup.Objects[i].PlatformState = group.Objects[i].PlatformState;
+                    if (newGroup.Objects[i] is VMGameObject && original is VMGameObject) // SimsRedux: keep the colour tint
+                        ((VMGameObject)newGroup.Objects[i]).SetReduxTint(((VMGameObject)original).ReduxTint);
                     if (newGroup.Objects[i] is VMGameObject)
                     {
                         ((VMGameObject)newGroup.Objects[i]).RefreshGraphic();

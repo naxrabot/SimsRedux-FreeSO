@@ -237,7 +237,10 @@ namespace FSO.SimAntics
         public override bool PlaceInSlot(VMEntity obj, int slot, bool cleanOld, VMContext context)
         {
             if (GetSlot(slot) == obj) return true; //already in slot
-            if (GetSlot(slot) != null || WillLoopSlot(obj) || obj.Dead) return false; //would recursively loop slot..
+            var occupant = GetSlot(slot);
+            // SimsRedux: the held copy of an object may sit (visually) where its hidden original still is
+            var ghostOverOriginal = occupant != null && obj.GhostImage && obj.IgnoreIntersection != null && obj.IgnoreIntersection.Objects.Contains(occupant);
+            if ((occupant != null && !ghostOverOriginal) || WillLoopSlot(obj) || obj.Dead) return false; //would recursively loop slot..
             if (cleanOld) obj.PrePositionChange(context);
 
             if (Contained != null)
@@ -355,6 +358,21 @@ namespace FSO.SimAntics
         public override VMEntityObstacle GetObstacle(LotTilePos pos, Direction dir, bool temp)
         {
             if (GetFlag(VMEntityFlags.HasZeroExtent) || Container != null) return null;
+
+            // SimsRedux: a diagonal object covers (at least) what it would cover facing either
+            // neighbouring straight direction, so use both footprints together.
+            Direction a, b;
+            if (VMDiagonal.SplitDiagonal(dir, out a, out b))
+            {
+                var fa = GetObstacle(pos, a, true);
+                var fb = GetObstacle(pos, b, true);
+                var fp = (Footprint == null || temp) ? new VMEntityObstacle() { Parent = this } : Footprint;
+                fp.x1 = Math.Min(fa.x1, fb.x1);
+                fp.y1 = Math.Min(fa.y1, fb.y1);
+                fp.x2 = Math.Max(fa.x2, fb.x2);
+                fp.y2 = Math.Max(fa.y2, fb.y2);
+                return fp;
+            }
 
             var idir = (DirectionToWallOff(dir)*4);
 
@@ -486,10 +504,19 @@ namespace FSO.SimAntics
         #endregion
 
 
+        /// <summary>SimsRedux: colour tint (see FSO.LotView.Utils.ReduxTint). 0 = original colours.</summary>
+        public uint ReduxTint { get; private set; }
+
+        public void SetReduxTint(uint tint)
+        {
+            ReduxTint = tint;
+            if (UseWorld && WorldUI is ObjectComponent) ((ObjectComponent)WorldUI).Tint = tint;
+        }
+
         #region VM Marshalling Functions
         public VMGameObjectMarshal Save()
         {
-            var gameObj = new VMGameObjectMarshal { Direction = Direction, Disabled = Disabled };
+            var gameObj = new VMGameObjectMarshal { Direction = Direction, Disabled = Disabled, Tint = ReduxTint };
             SaveEnt(gameObj);
             return gameObj;
         }
@@ -501,6 +528,7 @@ namespace FSO.SimAntics
             Position = Position;
             Direction = input.Direction;
             Disabled = input.Disabled;
+            SetReduxTint(input.Tint);
             if (UseWorld)
             {
                 ((ObjectComponent)this.WorldUI).DynamicSpriteFlags = this.DynamicSpriteFlags;

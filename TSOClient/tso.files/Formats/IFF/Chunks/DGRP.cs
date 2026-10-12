@@ -267,6 +267,14 @@ namespace FSO.Files.Formats.IFF.Chunks
 
         #endregion
 
+        /// <summary>SimsRedux: the SPR2 frame this sprite draws (null for old-style SPR sprites). Used for colour tinting.</summary>
+        public SPR2Frame GetSPR2Frame()
+        {
+            var spr2 = Parent?.ChunkParent?.Get<SPR2>((ushort)this.SpriteID);
+            if (spr2 == null || this.SpriteFrameIndex >= spr2.Frames.Length) return null;
+            return spr2.Frames[this.SpriteFrameIndex];
+        }
+
         #region IWorldTextureProvider Members
 
         public byte[] GetDepth()
