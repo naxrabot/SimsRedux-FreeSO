@@ -93,7 +93,12 @@ namespace FSO.Common.Utils
                     DepthBufferEnable = forceDepth, //(ActiveColor == null),
                     DepthBufferWriteEnable = forceDepth, //(ActiveColor == null),
                     ReferenceStencil = StencilValue,
+#if WEB
+                    // SimsRedux web: WebGL engine has no two-sided stencil; both sides are the same here anyway
+                    TwoSidedStencilMode = false
+#else
                     TwoSidedStencilMode = true
+#endif
                 };
                 effect.Parameters["depthMap"].SetValue(depth);
                 effect.Parameters["depthOutMode"].SetValue(false);
