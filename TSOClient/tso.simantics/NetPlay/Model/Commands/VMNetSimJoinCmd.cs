@@ -52,7 +52,13 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 if (vm.TS1State.CurrentFamily == null) return true;
                 var gameState = Content.Content.Get().Neighborhood.GameState;
                 var control = vm.Entities.FirstOrDefault(x => x is VMAvatar && !((VMAvatar)x).IsPet && ((VMAvatar)x).GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == vm.TS1State.CurrentFamily?.ChunkID);
-                if (control == null)
+                // SimsRedux: on the family's own home lot, never bring in a stand-in Sim. A family
+                // that's just moving in walks onto the lot a moment later, and the game then selects
+                // one of them. (The stand-in is for Downtown and other trips, where the travelling
+                // Sim has to be created.) Without this, the Sim who last travelled joined every
+                // new family and dropped out again when you picked one of the real family members.
+                bool homeLot = vm.GetGlobalValue(10) == vm.TS1State.CurrentFamily.HouseNumber;
+                if (control == null && !homeLot)
                 {
                     control = vm.Context.CreateObjectInstance((gameState.DowntownSimGUID == 0)?0x32AA2056:gameState.DowntownSimGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
                     control?.SetPosition(LotTilePos.FromBigTile(1, 1, 1), Direction.NORTH, vm.Context);
