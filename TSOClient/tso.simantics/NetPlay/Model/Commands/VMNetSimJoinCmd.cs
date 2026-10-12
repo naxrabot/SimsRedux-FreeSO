@@ -58,9 +58,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 // Sim has to be created.) Without this, the Sim who last travelled joined every
                 // new family and dropped out again when you picked one of the real family members.
                 bool homeLot = vm.GetGlobalValue(10) == vm.TS1State.CurrentFamily.HouseNumber;
-                if (control == null && !homeLot)
+                // and the stand-in must belong to the family being played
+                var standIn = (gameState.DowntownSimGUID == 0) ? 0x32AA2056 : gameState.DowntownSimGUID;
+                bool standInIsFamily = vm.TS1State.CurrentFamily.FamilyGUIDs?.Contains(standIn) == true;
+                if (control == null && !homeLot && standInIsFamily)
                 {
-                    control = vm.Context.CreateObjectInstance((gameState.DowntownSimGUID == 0)?0x32AA2056:gameState.DowntownSimGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
+                    control = vm.Context.CreateObjectInstance(standIn, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject;
                     control?.SetPosition(LotTilePos.FromBigTile(1, 1, 1), Direction.NORTH, vm.Context);
                 }
                 if (control != null)
