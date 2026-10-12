@@ -1,4 +1,8 @@
-﻿#include "LightingCommon.fx"
+﻿#if WEBGL
+// SimsRedux web: WebGL has no tex2Dgrad, so plain sampling is used there
+#define tex2Dgrad(s, uv, dx, dy) tex2D(s, uv)
+#endif
+#include "LightingCommon.fx"
 
 float4x4 World;
 float4x4 ViewProjection;
