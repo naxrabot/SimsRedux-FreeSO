@@ -17,7 +17,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pProjection.SetValue(value);
+                pProjection?.SetValue(value);
             }
         }
 

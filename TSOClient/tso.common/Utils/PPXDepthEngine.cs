@@ -100,15 +100,15 @@ namespace FSO.Common.Utils
                     TwoSidedStencilMode = true
 #endif
                 };
-                effect.Parameters["depthMap"].SetValue(depth);
-                effect.Parameters["depthOutMode"].SetValue(false);
+                effect.Parameters["depthMap"]?.SetValue(depth);
+                effect.Parameters["depthOutMode"]?.SetValue(false);
                 proc(false);
 
                 //now draw the depth using the depth test information we got previously.
 
                 //unbind depth map since we are writing to it
-                effect.Parameters["depthMap"].SetValue((Texture2D)null);
-                effect.Parameters["depthOutMode"].SetValue(true);
+                effect.Parameters["depthMap"]?.SetValue((Texture2D)null);
+                effect.Parameters["depthOutMode"]?.SetValue(true);
                 gd.SetRenderTarget(depth);
                 gd.DepthStencilState = new DepthStencilState
                 {
@@ -124,17 +124,17 @@ namespace FSO.Common.Utils
                 StencilValue++; //can increment up to 254 times. Assume we're not going to be rendering that much between clears.
                 if (StencilValue > 255) StencilValue = 1;
                 gd.SetRenderTarget(color);
-                effect.Parameters["depthOutMode"].SetValue(false);
+                effect.Parameters["depthOutMode"]?.SetValue(false);
             }
             else if (!FSOEnvironment.UseMRT && depth != null)
             {
                 //draw color then draw depth
                 gd.SetRenderTarget(color);
                 proc(false);
-                effect.Parameters["depthOutMode"].SetValue(true);
+                effect.Parameters["depthOutMode"]?.SetValue(true);
                 gd.SetRenderTarget(depth);
                 proc(true);
-                effect.Parameters["depthOutMode"].SetValue(false);
+                effect.Parameters["depthOutMode"]?.SetValue(false);
             }
             else
             {

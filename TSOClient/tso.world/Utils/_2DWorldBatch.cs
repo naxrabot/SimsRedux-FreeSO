@@ -334,7 +334,7 @@ namespace FSO.LotView.Utils
             effect.dirToFront = frontDir;
             effect.offToBack = BackOffForRot(((FSO.LotView.Utils.WorldCamera)WorldCamera).Rotation);
             //frontDir /= 3;
-            //WorldContent._2DWorldBatchEffect.Parameters["LightOffset"].SetValue(new Vector2(frontDir.X / (6 * 75), frontDir.Z / (6 * 75)));
+            //WorldContent._2DWorldBatchEffect.Parameters["LightOffset"]?.SetValue(new Vector2(frontDir.X / (6 * 75), frontDir.Z / (6 * 75)));
             var mat = this.WorldCamera.View * this.WorldCamera.Projection;
             effect.worldViewProjection = mat;
             var inv = Matrix.Invert(mat);
@@ -412,13 +412,13 @@ namespace FSO.LotView.Utils
                 effect.dirToFront = frontDir;
                 effect.offToBack = BackOffForRot(((FSO.LotView.Utils.WorldCamera)WorldCamera).Rotation);
                 //frontDir /= 3;
-                //WorldContent._2DWorldBatchEffect.Parameters["LightOffset"].SetValue(new Vector2(frontDir.X / (6 * 75), frontDir.Z / (6 * 75)));
+                //WorldContent._2DWorldBatchEffect.Parameters["LightOffset"]?.SetValue(new Vector2(frontDir.X / (6 * 75), frontDir.Z / (6 * 75)));
                 var mat = this.WorldCamera.View * this.WorldCamera.Projection;
                 effect.worldViewProjection = mat;
                 var inv = Matrix.Invert(mat);
                 effect.iWVP = inv;
                 effect.rotProjection = ((WorldCamera)this.WorldCamera).GetRotationMatrix() * this.WorldCamera.Projection;
-                //effect.Parameters["depthOutMode"].SetValue(outputDepth && (!FSOEnvironment.UseMRT));
+                //effect.Parameters["depthOutMode"]?.SetValue(outputDepth && (!FSOEnvironment.UseMRT));
             }
 
             if (Sprites.Count == 0) return;
@@ -499,11 +499,11 @@ namespace FSO.LotView.Utils
             effect.dirToFront = frontDir;
             effect.offToBack = BackOffForRot(((FSO.LotView.Utils.WorldCamera)WorldCamera).Rotation);
             //frontDir /= 3;
-            //WorldContent._2DWorldBatchEffect.Parameters["LightOffset"].SetValue(new Vector2(frontDir.X / (6 * 75), frontDir.Z / (6 * 75)));
+            //WorldContent._2DWorldBatchEffect.Parameters["LightOffset"]?.SetValue(new Vector2(frontDir.X / (6 * 75), frontDir.Z / (6 * 75)));
             var mat = this.WorldCamera.View * this.WorldCamera.Projection;
             effect.worldViewProjection = mat;
             effect.iWVP = Matrix.Invert(mat);
-            //effect.Parameters["depthOutMode"].SetValue(OutputDepth && (!FSOEnvironment.UseMRT));
+            //effect.Parameters["depthOutMode"]?.SetValue(OutputDepth && (!FSOEnvironment.UseMRT));
 
             foreach (var buffer in cache)
             {

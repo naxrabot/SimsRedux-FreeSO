@@ -197,15 +197,15 @@ namespace FSO.LotView.Components
             var room = (Room > 65530 || Room == 0) ? Room : blueprint.Rooms[Room].Base;
             foreach (var pass in technique.Passes)
             {
-                effect.Parameters["ObjectID"].SetValue(ObjectID / 65535f);
-                effect.Parameters["Level"].SetValue(ALevel + 0.0001f);
+                effect.Parameters["ObjectID"]?.SetValue(ObjectID / 65535f);
+                effect.Parameters["Level"]?.SetValue(ALevel + 0.0001f);
                 var roomLights = blueprint?.RoomColors;
                 if (roomLights != null)
                 {
                     var col = ((WorldConfig.Current.AdvancedLighting) ? new Vector4(1) : PowColorVec(roomLights[room].ToVector4(), 1 / 2.2f)) * baseCol.ToVector4();
-                    effect.Parameters["AmbientLight"].SetValue(col);
+                    effect.Parameters["AmbientLight"]?.SetValue(col);
                 }
-                effect.Parameters["World"].SetValue(world);
+                effect.Parameters["World"]?.SetValue(world);
                 pass.Apply();
 
                 Avatar.DrawGeometry(device, effect);

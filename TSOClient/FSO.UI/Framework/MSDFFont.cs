@@ -113,8 +113,8 @@ namespace FSO.UI.Framework
             var verts = data.Vertices;
             var inds = data.Indices;
 
-            effect.Parameters["WorldViewProjection"].SetValue(wvp);
-            effect.Parameters["Color"].SetValue(color.ToVector4());
+            effect.Parameters["WorldViewProjection"]?.SetValue(wvp);
+            effect.Parameters["Color"]?.SetValue(color.ToVector4());
 
             effect.CurrentTechnique = effect.Techniques[0];
             var subScale = 1f;
@@ -210,10 +210,10 @@ namespace FSO.UI.Framework
 
             foreach (var group in groups.Values)
             {
-                effect.Parameters["PxRange"].SetValue(group.Font.Font.PxRange);
+                effect.Parameters["PxRange"]?.SetValue(group.Font.Font.PxRange);
                 var groupAtlas = group.Font.GetAtlas(gd);
-                effect.Parameters["TextureSize"].SetValue(new Vector2(groupAtlas.Width, groupAtlas.Height));
-                effect.Parameters["GlyphTexture"].SetValue(groupAtlas);
+                effect.Parameters["TextureSize"]?.SetValue(new Vector2(groupAtlas.Width, groupAtlas.Height));
+                effect.Parameters["GlyphTexture"]?.SetValue(groupAtlas);
                 effect.CurrentTechnique.Passes[0].Apply();
                 if (group.Vertices.Count == 0) continue;
 

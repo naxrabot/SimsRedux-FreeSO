@@ -219,26 +219,26 @@ namespace FSO.LotView.Components
                     transp = new Vector3(world.CenterTile.X * 3 + Volume.Max.X, basealt * 3, world.CenterTile.Y * 3 + Volume.Max.Z) * 2;
                 }
                 trans = Matrix.CreateTranslation(transp);
-                effect.Parameters["World"].SetValue(trans);
+                effect.Parameters["World"]?.SetValue(trans);
 
                 var velocity = (world.CameraMode == CameraRenderMode._3D) ? transp - LastPosition : new Vector3();
-                effect.Parameters["CameraVelocity"].SetValue(velocity);
+                effect.Parameters["CameraVelocity"]?.SetValue(velocity);
                 if (Mode == ParticleType.RAIN)
                 {
                     opacity = Math.Min(1, (3f / velocity.Length() + 0.001f));
                     opacity /= (float)Math.Sqrt(Math.Max(1, TimeRate));
                 }
                 LastPosition = transp;
-                effect.Parameters["Level"].SetValue((float)(Math.Min((world.Level + 1), Bp.Stories) - 0.999f));
+                effect.Parameters["Level"]?.SetValue((float)(Math.Min((world.Level + 1), Bp.Stories) - 0.999f));
             } else
             {
-                effect.Parameters["World"].SetValue(OwnerWorld);// Matrix.CreateScale(3,3,3));
-                effect.Parameters["Level"].SetValue(Level-0.999f);
+                effect.Parameters["World"]?.SetValue(OwnerWorld);// Matrix.CreateScale(3,3,3));
+                effect.Parameters["Level"]?.SetValue(Level-0.999f);
             }
 
-            effect.Parameters["View"].SetValue(world.View);
-            effect.Parameters["Projection"].SetValue(world.Projection);
-            effect.Parameters["InvRotation"].SetValue(inv * Matrix.CreateScale(0.5f));
+            effect.Parameters["View"]?.SetValue(world.View);
+            effect.Parameters["Projection"]?.SetValue(world.Projection);
+            effect.Parameters["InvRotation"]?.SetValue(inv * Matrix.CreateScale(0.5f));
             
             Tint = Color.White * opacity;
             if (Mode == ParticleType.RAIN)
@@ -247,16 +247,16 @@ namespace FSO.LotView.Components
                 //rot.Backward = new Vector3(0, 0, 1);
                 rot.Up = new Vector3(0, 1, 0);
                 var invxz = (cam3d)?Matrix.Invert(rot): Matrix.Identity;
-                effect.Parameters["InvXZRotation"].SetValue(invxz * Matrix.CreateScale(0.5f));
-                effect.Parameters["SubColor"].SetValue(Bp.OutsideColor.ToVector4() * 0.6f * opacity);
+                effect.Parameters["InvXZRotation"]?.SetValue(invxz * Matrix.CreateScale(0.5f));
+                effect.Parameters["SubColor"]?.SetValue(Bp.OutsideColor.ToVector4() * 0.6f * opacity);
             } else
             {
-                effect.Parameters["SubColor"].SetValue(Vector4.Zero);
+                effect.Parameters["SubColor"]?.SetValue(Vector4.Zero);
             }
-            effect.Parameters["ClipLevel"].SetValue(cam3d ? float.MaxValue : world.Level);
-            effect.Parameters["BaseAlt"].SetValue(basealt * 3);
-            effect.Parameters["BpSize"].SetValue(new Vector2(Bp.Width * 3, Bp.Height * 3));
-            effect.Parameters["Stories"].SetValue((float)(Bp.Stories + 1));
+            effect.Parameters["ClipLevel"]?.SetValue(cam3d ? float.MaxValue : world.Level);
+            effect.Parameters["BaseAlt"]?.SetValue(basealt * 3);
+            effect.Parameters["BpSize"]?.SetValue(new Vector2(Bp.Width * 3, Bp.Height * 3));
+            effect.Parameters["Stories"]?.SetValue((float)(Bp.Stories + 1));
             InternalDraw(device, effect, scale2d, true, cam3d);
         }
 
@@ -281,44 +281,44 @@ namespace FSO.LotView.Components
             var basealt = -1000f;
             var transp = (camera.Position + forward * -20f + new Vector3(Volume.Max.X, 0, Volume.Max.Z)) * 2;
             var trans = Matrix.CreateTranslation(transp);
-            effect.Parameters["advancedLight"].SetValue(Common.Utils.TextureGenerator.GetPxWhite(device));
+            effect.Parameters["advancedLight"]?.SetValue(Common.Utils.TextureGenerator.GetPxWhite(device));
             Blueprint.SetLightColor(effect, Color.White, Color.White * 0.75f);
             Tint = lightColor;
 
-            effect.Parameters["World"].SetValue(trans);
-            effect.Parameters["CameraVelocity"].SetValue(transp - LastPosition);
-            effect.Parameters["View"].SetValue(camera.View);
-            effect.Parameters["Projection"].SetValue(camera.Projection);
-            effect.Parameters["InvRotation"].SetValue(inv * Matrix.CreateScale(0.5f));
+            effect.Parameters["World"]?.SetValue(trans);
+            effect.Parameters["CameraVelocity"]?.SetValue(transp - LastPosition);
+            effect.Parameters["View"]?.SetValue(camera.View);
+            effect.Parameters["Projection"]?.SetValue(camera.Projection);
+            effect.Parameters["InvRotation"]?.SetValue(inv * Matrix.CreateScale(0.5f));
             if (Mode == ParticleType.RAIN)
             {
                 rot.Up = new Vector3(0, 1, 0);
                 var invxz = Matrix.Invert(rot);
-                effect.Parameters["InvXZRotation"].SetValue(invxz * Matrix.CreateScale(0.5f));
-                effect.Parameters["SubColor"].SetValue(lightColor.ToVector4()*0.5f);// * new Vector4(0.25f, 0.25f, 0.5f, 0.25f));
+                effect.Parameters["InvXZRotation"]?.SetValue(invxz * Matrix.CreateScale(0.5f));
+                effect.Parameters["SubColor"]?.SetValue(lightColor.ToVector4()*0.5f);// * new Vector4(0.25f, 0.25f, 0.5f, 0.25f));
             }
             else
             {
-                effect.Parameters["SubColor"].SetValue(Vector4.Zero);
+                effect.Parameters["SubColor"]?.SetValue(Vector4.Zero);
             }
-            effect.Parameters["Level"].SetValue((float)((5 + 1) - 0.999f));
-            effect.Parameters["ClipLevel"].SetValue(float.MaxValue);
-            effect.Parameters["BaseAlt"].SetValue(basealt * 3);
-            effect.Parameters["BpSize"].SetValue(new Vector2(3, 3));
-            effect.Parameters["Stories"].SetValue(6f);
+            effect.Parameters["Level"]?.SetValue((float)((5 + 1) - 0.999f));
+            effect.Parameters["ClipLevel"]?.SetValue(float.MaxValue);
+            effect.Parameters["BaseAlt"]?.SetValue(basealt * 3);
+            effect.Parameters["BpSize"]?.SetValue(new Vector2(3, 3));
+            effect.Parameters["Stories"]?.SetValue(6f);
             InternalDraw(device, effect, 1, useDepth, true);
             LastPosition = transp;
         }
 
         private void InternalDraw(GraphicsDevice device, Effect effect, int scale, bool useDepth, bool cam3d)
         {
-            effect.Parameters["BaseTex"].SetValue(Tex);
-            effect.Parameters["IndoorsTex"].SetValue(Indoors);
+            effect.Parameters["BaseTex"]?.SetValue(Tex);
+            effect.Parameters["IndoorsTex"]?.SetValue(Indoors);
 
             var fade = FadeProgress ?? 0f;
             if (fade < 0) fade = fade * fade; //give a bias to weather fading in
-            effect.Parameters["Color"].SetValue(Tint.ToVector4() * (1 - Math.Abs(fade)));
-            effect.Parameters["TimeRate"].SetValue(Math.Max(1,TimeRate)*0.001f/ FSOEnvironment.RefreshRate);
+            effect.Parameters["Color"]?.SetValue(Tint.ToVector4() * (1 - Math.Abs(fade)));
+            effect.Parameters["TimeRate"]?.SetValue(Math.Max(1,TimeRate)*0.001f/ FSOEnvironment.RefreshRate);
 
             //Parameters:
             //miny, yrange, fall speed, fall speed variation
@@ -326,15 +326,15 @@ namespace FSO.LotView.Components
             //minx, xrange, minz, zrange
             switch (Mode) {
                 case ParticleType.SNOW:
-                    effect.Parameters["Parameters1"].SetValue(new Vector4(Volume.Min.Y, Volume.Max.Y - Volume.Min.Y, 1.33f, 0.2f));
-                    effect.Parameters["Parameters2"].SetValue(new Vector4(30f, 10f, 12.5f, 100f));
-                    effect.Parameters["Parameters3"].SetValue(new Vector4(Volume.Min.X, Volume.Max.X - Volume.Min.X, Volume.Min.Z, Volume.Max.Z - Volume.Min.Z));
-                    effect.Parameters["Parameters4"].SetValue(new Vector4((cam3d)?0.66f:0.8f, 0f, 0f, 0f));
+                    effect.Parameters["Parameters1"]?.SetValue(new Vector4(Volume.Min.Y, Volume.Max.Y - Volume.Min.Y, 1.33f, 0.2f));
+                    effect.Parameters["Parameters2"]?.SetValue(new Vector4(30f, 10f, 12.5f, 100f));
+                    effect.Parameters["Parameters3"]?.SetValue(new Vector4(Volume.Min.X, Volume.Max.X - Volume.Min.X, Volume.Min.Z, Volume.Max.Z - Volume.Min.Z));
+                    effect.Parameters["Parameters4"]?.SetValue(new Vector4((cam3d)?0.66f:0.8f, 0f, 0f, 0f));
                     break;
                 case ParticleType.RAIN:
-                    effect.Parameters["Parameters1"].SetValue(new Vector4(Volume.Min.Y, Volume.Max.Y - Volume.Min.Y, 0.20f, 0.01f)); //0.1f
-                    effect.Parameters["Parameters2"].SetValue(new Vector4(30f, 10f, 10f, ((cam3d || Indoors == null)? 0.3f:1f)));
-                    effect.Parameters["Parameters3"].SetValue(new Vector4(Volume.Min.X, Volume.Max.X - Volume.Min.X, Volume.Min.Z, Volume.Max.Z - Volume.Min.Z));
+                    effect.Parameters["Parameters1"]?.SetValue(new Vector4(Volume.Min.Y, Volume.Max.Y - Volume.Min.Y, 0.20f, 0.01f)); //0.1f
+                    effect.Parameters["Parameters2"]?.SetValue(new Vector4(30f, 10f, 10f, ((cam3d || Indoors == null)? 0.3f:1f)));
+                    effect.Parameters["Parameters3"]?.SetValue(new Vector4(Volume.Min.X, Volume.Max.X - Volume.Min.X, Volume.Min.Z, Volume.Max.Z - Volume.Min.Z));
                     break;
                 //(deltax, deltay, deltaz, gravity)
                 //(deltavar, rotdeltavar, size, sizevel)
@@ -342,13 +342,13 @@ namespace FSO.LotView.Components
                 case ParticleType.GENERIC_BOX:
                     if (Resource.Parameters == null) Resource.BakeParameters();
                     var p = Resource.Parameters;
-                    effect.Parameters["Parameters1"].SetValue(p[0]);
-                    effect.Parameters["Parameters2"].SetValue(p[1]);
-                    effect.Parameters["Parameters3"].SetValue(p[2]);
-                    effect.Parameters["Parameters4"].SetValue(p[3]);
+                    effect.Parameters["Parameters1"]?.SetValue(p[0]);
+                    effect.Parameters["Parameters2"]?.SetValue(p[1]);
+                    effect.Parameters["Parameters3"]?.SetValue(p[2]);
+                    effect.Parameters["Parameters4"]?.SetValue(p[3]);
 
-                    effect.Parameters["Frequency"].SetValue(Resource.Frequency);
-                    effect.Parameters["StopTime"].SetValue(StopTime);
+                    effect.Parameters["Frequency"]?.SetValue(Resource.Frequency);
+                    effect.Parameters["StopTime"]?.SetValue(StopTime);
                     break;
             }
 
@@ -362,7 +362,7 @@ namespace FSO.LotView.Components
 
             for (int i = 0; i < scale; i++)
             {
-                effect.Parameters["Time"].SetValue(Time + i);
+                effect.Parameters["Time"]?.SetValue(Time + i);
                 effect.CurrentTechnique.Passes[0].Apply();
                 device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, Primitives);
             }

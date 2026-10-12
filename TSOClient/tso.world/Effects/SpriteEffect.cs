@@ -22,28 +22,28 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pMatrixTransform.SetValue(value);
+                pMatrixTransform?.SetValue(value);
             }
         }
         public Vector2 GaussianStep
         {
             set
             {
-                pGaussianStep.SetValue(value);
+                pGaussianStep?.SetValue(value);
             }
         }
         public float AllowedValue
         {
             set
             {
-                pAllowedValue.SetValue(value);
+                pAllowedValue?.SetValue(value);
             }
         }
         public float Highlight
         {
             set
             {
-                pHighlight.SetValue(value);
+                pHighlight?.SetValue(value);
             }
         }
 

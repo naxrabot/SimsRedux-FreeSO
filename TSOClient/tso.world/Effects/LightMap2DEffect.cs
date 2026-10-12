@@ -48,7 +48,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pProjection.SetValue(value);
+                pProjection?.SetValue(value);
             }
         }
         /// <summary>
@@ -58,7 +58,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTileSize.SetValue(value);
+                pTileSize?.SetValue(value);
             }
         }
 
@@ -71,21 +71,21 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pRoomTarget.SetValue(value);
+                pRoomTarget?.SetValue(value);
             }
         }
         public Vector2 RoomUVRescale
         {
             set
             {
-                pRoomUVRescale.SetValue(value);
+                pRoomUVRescale?.SetValue(value);
             }
         }
         public Vector2 RoomUVOff
         {
             set
             {
-                pRoomUVOff.SetValue(value);
+                pRoomUVOff?.SetValue(value);
             }
         }
 
@@ -96,14 +96,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pLightPosition.SetValue(value);
+                pLightPosition?.SetValue(value);
             }
         }
         public Vector4 LightColor
         {
             set
             {
-                pLightColor.SetValue(value);
+                pLightColor?.SetValue(value);
             }
         }
         /// <summary>
@@ -113,7 +113,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pLightSize.SetValue(value);
+                pLightSize?.SetValue(value);
             }
         }
         /// <summary>
@@ -123,7 +123,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pLightPower.SetValue(value);
+                pLightPower?.SetValue(value);
             }
         }
         public float LightIntensity
@@ -137,35 +137,35 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTargetRoom.SetValue(value);
+                pTargetRoom?.SetValue(value);
             }
         }
         public float BlurMax
         {
             set
             {
-                pBlurMax.SetValue(value);
+                pBlurMax?.SetValue(value);
             }
         }
         public float BlurMin
         {
             set
             {
-                pBlurMin.SetValue(value);
+                pBlurMin?.SetValue(value);
             }
         }
         public Vector2 MapLayout
         {
             set
             {
-                pMapLayout.SetValue(value);
+                pMapLayout?.SetValue(value);
             }
         }
         public Vector2 UVBase
         {
             set
             {
-                pUVBase.SetValue(value);
+                pUVBase?.SetValue(value);
             }
         }
 
@@ -173,14 +173,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pLightDirection.SetValue(value);
+                pLightDirection?.SetValue(value);
             }
         }
         public float LightHeight
         {
             set
             {
-                pLightHeight.SetValue(value);
+                pLightHeight?.SetValue(value);
             }
         }
 
@@ -188,14 +188,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pShadowPowers.SetValue(value);
+                pShadowPowers?.SetValue(value);
             }
         }
         public Vector2 SSAASize
         {
             set
             {
-                pSSAASize.SetValue(value);
+                pSSAASize?.SetValue(value);
             }
         }
 

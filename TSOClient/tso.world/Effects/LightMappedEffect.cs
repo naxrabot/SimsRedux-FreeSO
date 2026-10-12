@@ -20,7 +20,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pOutsideDark.SetValue(value);
+                pOutsideDark?.SetValue(value);
             }
         }
         public Vector2 MinAvg
@@ -34,21 +34,21 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pWorldToLightFactor.SetValue(value);
+                pWorldToLightFactor?.SetValue(value);
             }
         }
         public Vector2 LightOffset
         {
             set
             {
-                pLightOffset.SetValue(value);
+                pLightOffset?.SetValue(value);
             }
         }
         public Vector2 MapLayout
         {
             set
             {
-                pMapLayout.SetValue(value);
+                pMapLayout?.SetValue(value);
             }
         }
 
@@ -60,7 +60,7 @@ namespace FSO.LotView.Effects
                 if (value != _CurrentLevel)
                 {
                     _CurrentLevel = value;
-                    pLevel.SetValue(value);
+                    pLevel?.SetValue(value);
                 }
             }
         }
@@ -68,7 +68,7 @@ namespace FSO.LotView.Effects
         public Texture2D AdvancedLight {
             set
             {
-                pAdvancedLight.SetValue(value);
+                pAdvancedLight?.SetValue(value);
             }
         }
         public Texture2D AdvancedDirection

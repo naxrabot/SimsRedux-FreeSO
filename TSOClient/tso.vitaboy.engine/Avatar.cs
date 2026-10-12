@@ -272,10 +272,10 @@ namespace FSO.Vitaboy
         public override void Draw(Microsoft.Xna.Framework.Graphics.GraphicsDevice device)
         {
             Effect.CurrentTechnique = Effect.Techniques[DefaultTechnique];
-            Effect.Parameters["View"].SetValue(View);
-            Effect.Parameters["Projection"].SetValue(Projection);
-            Effect.Parameters["World"].SetValue(World);
-            Effect.Parameters["AmbientLight"].SetValue(AmbientLight);
+            Effect.Parameters["View"]?.SetValue(View);
+            Effect.Parameters["Projection"]?.SetValue(Projection);
+            Effect.Parameters["World"]?.SetValue(World);
+            Effect.Parameters["AmbientLight"]?.SetValue(AmbientLight);
 
             DrawGeometry(device, Effect);
         }
@@ -294,7 +294,7 @@ namespace FSO.Vitaboy
                 if (bone.Name == "HEAD") matrixCopy[i] = headMatrix;
             }
 
-            effect.Parameters["SkelBindings"].SetValue(matrixCopy);
+            effect.Parameters["SkelBindings"]?.SetValue(matrixCopy);
 
             lock (Bindings)
             {
@@ -305,11 +305,11 @@ namespace FSO.Vitaboy
                         if (binding.Texture != null)
                         {
                             var tex = binding.Texture.Get(device);
-                            effect.Parameters["MeshTex"].SetValue(tex);
+                            effect.Parameters["MeshTex"]?.SetValue(tex);
                         }
                         else
                         {
-                            effect.Parameters["MeshTex"].SetValue((Texture2D)null);
+                            effect.Parameters["MeshTex"]?.SetValue((Texture2D)null);
                         }
                         pass.Apply();
                         binding.Mesh.Draw(device);
@@ -322,7 +322,7 @@ namespace FSO.Vitaboy
         {
             //Effect.CurrentTechnique = Effect.Techniques[0];
             if (SkelBones == null) ReloadSkeleton();
-            effect.Parameters["SkelBindings"].SetValue(SkelBones);
+            effect.Parameters["SkelBindings"]?.SetValue(SkelBones);
 
             lock (Bindings)
             {
@@ -338,11 +338,11 @@ namespace FSO.Vitaboy
                         if (binding.Texture != null)
                         {
                             var tex = binding.Texture.Get(device);
-                            effect.Parameters["MeshTex"].SetValue(tex);
+                            effect.Parameters["MeshTex"]?.SetValue(tex);
                         }
                         else
                         {
-                            effect.Parameters["MeshTex"].SetValue((Texture2D)null);
+                            effect.Parameters["MeshTex"]?.SetValue((Texture2D)null);
                         }
                         pass.Apply();
                         binding.Mesh.Draw(device);
@@ -378,8 +378,8 @@ namespace FSO.Vitaboy
 
             foreach (var light in LightPositions)
             {
-                //effect.Parameters["FloorHeight"].SetValue((float)(Math.Floor(Position.Y/2.95)*2.95 + 0.05));
-                effect.Parameters["LightPosition"].SetValue(light);
+                //effect.Parameters["FloorHeight"]?.SetValue((float)(Math.Floor(Position.Y/2.95)*2.95 + 0.05));
+                effect.Parameters["LightPosition"]?.SetValue(light);
                 var oldTech = effect.CurrentTechnique;
                 effect.CurrentTechnique = effect.Techniques[4];
                 effect.CurrentTechnique.Passes[0].Apply();
@@ -407,8 +407,8 @@ namespace FSO.Vitaboy
             device.RasterizerState = RasterizerState.CullClockwise;
 
             var trans = Matrix.Invert(effect.Parameters["View"].GetValueMatrix()).Translation;
-            effect.Parameters["HOCameraPosition"].SetValue(trans);
-            effect.Parameters["World"].SetValue(Matrix.CreateScale(1.33f) * Matrix.CreateRotationY(HeadObjectRotation) * Matrix.CreateTranslation(Skeleton.GetBone("HEAD").AbsoluteMatrix.Translation + new Vector3(0, 3.25f, 0)) * effect.Parameters["World"].GetValueMatrix());
+            effect.Parameters["HOCameraPosition"]?.SetValue(trans);
+            effect.Parameters["World"]?.SetValue(Matrix.CreateScale(1.33f) * Matrix.CreateRotationY(HeadObjectRotation) * Matrix.CreateTranslation(Skeleton.GetBone("HEAD").AbsoluteMatrix.Translation + new Vector3(0, 3.25f, 0)) * effect.Parameters["World"].GetValueMatrix());
 
             for (int i=0; i<headObj.Geoms.Count; i++)
             {
@@ -416,9 +416,9 @@ namespace FSO.Vitaboy
                 var geom = headObj.Geoms[i];
                 foreach (var item in geom)
                 {
-                    effect.Parameters["MeshTex"].SetValue(item.Key);
-                    effect.Parameters["HOToonSpecThresh"].SetValue(0.5f);
-                    effect.Parameters["HOToonSpecColor"].SetValue(new Vector3(multi * ((headObj.Geoms.Count-1) - i)));
+                    effect.Parameters["MeshTex"]?.SetValue(item.Key);
+                    effect.Parameters["HOToonSpecThresh"]?.SetValue(0.5f);
+                    effect.Parameters["HOToonSpecColor"]?.SetValue(new Vector3(multi * ((headObj.Geoms.Count-1) - i)));
 
                     effect.CurrentTechnique.Passes[0].Apply();
                     //if (i != 1) device.RasterizerState = RasterizerState.CullClockwise;

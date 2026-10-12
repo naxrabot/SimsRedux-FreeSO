@@ -35,21 +35,21 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pViewProjection.SetValue(value);
+                pViewProjection?.SetValue(value);
             }
         }
         public Matrix worldViewProjection
         {
             set
             {
-                pWorldViewProjection.SetValue(value);
+                pWorldViewProjection?.SetValue(value);
             }
         }
         public Matrix rotProjection
         {
             set
             {
-                pRotProjection.SetValue(value);
+                pRotProjection?.SetValue(value);
             }
         }
         public Matrix iWVP
@@ -64,28 +64,28 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pWorldUnitsPerTile.SetValue(value);
+                pWorldUnitsPerTile?.SetValue(value);
             }
         }
         public Vector3 dirToFront
         {
             set
             {
-                pDirToFront.SetValue(value);
+                pDirToFront?.SetValue(value);
             }
         }
         public Vector4 offToBack
         {
             set
             {
-                pOffToBack.SetValue(value);
+                pOffToBack?.SetValue(value);
             }
         }
         public bool depthOutMode
         {
             set
             {
-                pDepthOutMode.SetValue(value);
+                pDepthOutMode?.SetValue(value);
             }
         }
 
@@ -93,7 +93,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pMaxFloor.SetValue(value);
+                pMaxFloor?.SetValue(value);
             }
         }
         
@@ -102,28 +102,28 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pPixelTexture.SetValue(value);
+                pPixelTexture?.SetValue(value);
             }
         }
         public Texture2D depthTexture
         {
             set
             {
-                pDepthTexture.SetValue(value);
+                pDepthTexture?.SetValue(value);
             }
         }
         public Texture2D maskTexture
         {
             set
             {
-                pMaskTexture.SetValue(value);
+                pMaskTexture?.SetValue(value);
             }
         }
         public Texture2D ambientLight
         {
             set
             {
-                pAmbientLight.SetValue(value);
+                pAmbientLight?.SetValue(value);
             }
         }
 

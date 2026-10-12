@@ -471,7 +471,7 @@ namespace FSO.LotView
                 effect.LightingAdjust = LightingAdjust;
             }
             WorldContent._2DWorldBatchEffect.ambientLight = amb;
-            //WorldContent._2DWorldBatchEffect.Parameters["ambientLight"].SetValue(amb);
+            //WorldContent._2DWorldBatchEffect.Parameters["ambientLight"]?.SetValue(amb);
         }
     }
 

@@ -161,8 +161,8 @@ namespace FSO.LotView.Platform
                     //state._3D.Begin(gd);
                     var effect = WorldContent.AvatarEffect;
                     effect.CurrentTechnique = WorldContent.AvatarEffect.Techniques[1];
-                    effect.Parameters["View"].SetValue(state.View);
-                    effect.Parameters["Projection"].SetValue(state.Projection);
+                    effect.Parameters["View"]?.SetValue(state.View);
+                    effect.Parameters["Projection"]?.SetValue(state.Projection);
 
                     foreach (var avatar in bp.Avatars)
                     {

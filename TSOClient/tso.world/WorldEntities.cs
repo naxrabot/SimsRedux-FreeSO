@@ -75,8 +75,8 @@ namespace FSO.LotView
             var effect = WorldContent.AvatarEffect;
             effect.CurrentTechnique = WorldContent.AvatarEffect.Techniques[pass];
 
-            effect.Parameters["View"].SetValue(state.View);
-            effect.Parameters["Projection"].SetValue(state.Projection);
+            effect.Parameters["View"]?.SetValue(state.View);
+            effect.Parameters["Projection"]?.SetValue(state.Projection);
 
             var _2d = state._2D;
             var pxOffset = -state.WorldSpace.GetScreenOffset();

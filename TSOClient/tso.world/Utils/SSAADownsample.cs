@@ -10,8 +10,8 @@ namespace FSO.LotView.Utils
             var effect = WorldContent.SSAA;
             gd.BlendState = BlendState.Opaque;
             effect.CurrentTechnique = effect.Techniques[0];
-            effect.Parameters["SSAASize"].SetValue(new Vector2(1f / targ.Width, 1f / targ.Height));
-            effect.Parameters["tex"].SetValue(targ);
+            effect.Parameters["SSAASize"]?.SetValue(new Vector2(1f / targ.Width, 1f / targ.Height));
+            effect.Parameters["tex"]?.SetValue(targ);
             effect.CurrentTechnique.Passes[0].Apply();
 
             gd.SetVertexBuffer(WorldContent.GetTextureVerts(gd));

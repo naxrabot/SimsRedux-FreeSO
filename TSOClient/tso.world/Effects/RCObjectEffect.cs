@@ -27,14 +27,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pWorld.SetValue(value);
+                pWorld?.SetValue(value);
             }
         }
         public Matrix ViewProjection
         {
             set
             {
-                pViewProjection.SetValue(value);
+                pViewProjection?.SetValue(value);
             }
         }
 
@@ -42,7 +42,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pObjectID.SetValue(value);
+                pObjectID?.SetValue(value);
             }
         }
 
@@ -55,7 +55,7 @@ namespace FSO.LotView.Effects
                 if (value != _CurrentUVScale)
                 {
                     _CurrentUVScale = value;
-                    pUVScale.SetValue(value);
+                    pUVScale?.SetValue(value);
                 }
             }
         }
@@ -63,14 +63,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pAmbientLight.SetValue(value);
+                pAmbientLight?.SetValue(value);
             }
         }
         public float SideMask
         {
             set
             {
-                pSideMask.SetValue(value);
+                pSideMask?.SetValue(value);
             }
         }
 
@@ -78,22 +78,22 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pMeshTex.SetValue(value);
+                pMeshTex?.SetValue(value);
             }
         }
         public Texture2D AnisoTex
         {
             set
             {
-                if (pAnisoTex == null) pMeshTex.SetValue(value);
-                else pAnisoTex.SetValue(value);
+                if (pAnisoTex == null) pMeshTex?.SetValue(value);
+                else pAnisoTex?.SetValue(value);
             }
         }
         public Texture2D MaskTex
         {
             set
             {
-                pMaskTex.SetValue(value);
+                pMaskTex?.SetValue(value);
             }
         }
 

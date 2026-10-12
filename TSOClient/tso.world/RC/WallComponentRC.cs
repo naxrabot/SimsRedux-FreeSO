@@ -319,8 +319,8 @@ namespace FSO.LotView.RC
             effect.World = baseWorld;
             effect.SideMask = 0f;
             effect.Level = (float)(state.Level - 0.999f);
-            //effect.Parameters["CutawayTex"].SetValue(Cutaway);
-            //effect.Parameters["CurrentLevel"].SetValue(state.Level - 1);
+            //effect.Parameters["CutawayTex"]?.SetValue(Cutaway);
+            //effect.Parameters["CurrentLevel"]?.SetValue(state.Level - 1);
             if (GroupsByTexture.Count < state.Level) return;
 
             for (int i = 0; i < state.Level; i++)

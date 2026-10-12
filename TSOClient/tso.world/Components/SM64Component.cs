@@ -854,11 +854,11 @@ namespace FSO.LotView.Components
             var aEffect = WorldContent.AvatarEffect;
             var technique = aEffect.CurrentTechnique;
 
-            aEffect.Parameters["Level"].SetValue((level - 1) + 0.0001f);
-            aEffect.Parameters["AmbientLight"].SetValue(WorldConfig.Current.AdvancedLighting ? new Vector4(1) : state.OutsideColor.ToVector4());
-            aEffect.Parameters["World"].SetValue(world);
-            aEffect.Parameters["SkelBindings"].SetValue(newMatrices);
-            aEffect.Parameters["MeshTex"].SetValue(Texture);
+            aEffect.Parameters["Level"]?.SetValue((level - 1) + 0.0001f);
+            aEffect.Parameters["AmbientLight"]?.SetValue(WorldConfig.Current.AdvancedLighting ? new Vector4(1) : state.OutsideColor.ToVector4());
+            aEffect.Parameters["World"]?.SetValue(world);
+            aEffect.Parameters["SkelBindings"]?.SetValue(newMatrices);
+            aEffect.Parameters["MeshTex"]?.SetValue(Texture);
 
             foreach (var pass in aEffect.CurrentTechnique.Passes)
             {
@@ -875,7 +875,7 @@ namespace FSO.LotView.Components
                 //var room = (avatar.Room > 65530 || Room == 0) ? Room : blueprint.Rooms[Room].Base;
                 foreach (var pass in technique.Passes)
                 {
-                    aEffect.Parameters["ObjectID"].SetValue(avatar.ObjectID / 65535f);
+                    aEffect.Parameters["ObjectID"]?.SetValue(avatar.ObjectID / 65535f);
                     pass.Apply();
 
                     var rotateHead = Matrix.CreateFromYawPitchRoll((float)(Math.PI / 2), (float)(Math.PI / -2), (float)(Math.PI / 2));

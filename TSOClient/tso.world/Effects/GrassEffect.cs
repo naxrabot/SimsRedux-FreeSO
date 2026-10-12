@@ -69,21 +69,21 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pProjection.SetValue(value);
+                pProjection?.SetValue(value);
             }
         }
         public Matrix View
         {
             set
             {
-                pView.SetValue(value);
+                pView?.SetValue(value);
             }
         }
         public Matrix World
         {
             set
             {
-                pWorld.SetValue(value);
+                pWorld?.SetValue(value);
             }
         }
 
@@ -91,63 +91,63 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pScreenSize.SetValue(value);
+                pScreenSize?.SetValue(value);
             }
         }
         public Vector4 LightGreen
         {
             set
             {
-                pLightGreen.SetValue(value);
+                pLightGreen?.SetValue(value);
             }
         }
         public Vector4 DarkGreen
         {
             set
             {
-                pDarkGreen.SetValue(value);
+                pDarkGreen?.SetValue(value);
             }
         }
         public Vector4 LightBrown
         {
             set
             {
-                pLightBrown.SetValue(value);
+                pLightBrown?.SetValue(value);
             }
         }
         public Vector4 DarkBrown
         {
             set
             {
-                pDarkBrown.SetValue(value);
+                pDarkBrown?.SetValue(value);
             }
         }
         public Vector4 DiffuseColor
         {
             set
             {
-                pDiffuseColor.SetValue(value);
+                pDiffuseColor?.SetValue(value);
             }
         }
         public Vector2 ScreenOffset
         {
             set
             {
-                pScreenOffset.SetValue(value);
+                pScreenOffset?.SetValue(value);
             }
         }
         public float GrassProb
         {
             set
             {
-                pGrassProb.SetValue(value);
+                pGrassProb?.SetValue(value);
             }
         }
         public float GrassFadeMul
         {
             set
             {
-                pGrassFadeMul.SetValue(value);
+                pGrassFadeMul?.SetValue(value);
             }
         }
 
@@ -155,14 +155,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTexOffset.SetValue(value);
+                pTexOffset?.SetValue(value);
             }
         }
         public Vector4 TexMatrix
         {
             set
             {
-                pTexMatrix.SetValue(value);
+                pTexMatrix?.SetValue(value);
             }
         }
 
@@ -170,7 +170,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pScreenRotCenter.SetValue(value);
+                pScreenRotCenter?.SetValue(value);
             }
         }
     
@@ -178,7 +178,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pScreenMatrix.SetValue(value);
+                pScreenMatrix?.SetValue(value);
             }
         }
 
@@ -186,7 +186,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pScreenAlignUV.SetValue(value);
+                pScreenAlignUV?.SetValue(value);
             }
         }
 
@@ -194,7 +194,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTexSize.SetValue(value);
+                pTexSize?.SetValue(value);
             }
         }
 
@@ -203,7 +203,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTileSize.SetValue(value);
+                pTileSize?.SetValue(value);
             }
         }
 
@@ -218,63 +218,63 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pWater.SetValue(value);
+                pWater?.SetValue(value);
             }
         }
         public Vector3 CamPos
         {
             set
             {
-                pCamPos.SetValue(value);
+                pCamPos?.SetValue(value);
             }
         }
         public Vector3 LightVec
         {
             set
             {
-                pLightVec.SetValue(value);
+                pLightVec?.SetValue(value);
             }
         }
         public float Alpha
         {
             set
             {
-                pAlpha.SetValue(value);
+                pAlpha?.SetValue(value);
             }
         }
         public float GrassShininess
         {
             set
             {
-                pGrassShininess.SetValue(value);
+                pGrassShininess?.SetValue(value);
             }
         }
         public bool UseTexture
         {
             set
             {
-                pUseTexture.SetValue(value);
+                pUseTexture?.SetValue(value);
             }
         }
         public bool IgnoreColor
         {
             set
             {
-                pIgnoreColor.SetValue(value);
+                pIgnoreColor?.SetValue(value);
             }
         }
         public bool Ceiling
         {
             set
             {
-                pCeiling.SetValue(value);
+                pCeiling?.SetValue(value);
             }
         }
         public float Bias
         {
             set
             {
-                pBias.SetValue(value);
+                pBias?.SetValue(value);
             }
         }
 
@@ -299,14 +299,14 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pFadeRectangle.SetValue(value);
+                pFadeRectangle?.SetValue(value);
             }
         }
         public float FadeWidth
         {
             set
             {
-                pFadeWidth.SetValue(value);
+                pFadeWidth?.SetValue(value);
             }
         }
 
@@ -314,21 +314,21 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pMulRange.SetValue(value);
+                pMulRange?.SetValue(value);
             }
         }
         public float MulBase
         {
             set
             {
-                pMulBase.SetValue(value);
+                pMulBase?.SetValue(value);
             }
         }
         public Vector4 BlurBounds
         {
             set
             {
-                pBlurBounds.SetValue(value);
+                pBlurBounds?.SetValue(value);
             }
         }
 
@@ -338,7 +338,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pBaseTex.SetValue(value);
+                pBaseTex?.SetValue(value);
             }
         }
         public Texture2D ParallaxTex
@@ -352,21 +352,21 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pNormalMapTex.SetValue(value);
+                pNormalMapTex?.SetValue(value);
             }
         }
         public Texture2D RoomMap
         {
             set
             {
-                pRoomMap.SetValue(value);
+                pRoomMap?.SetValue(value);
             }
         }
         public Texture2D RoomLight
         {
             set
             {
-                pRoomLight.SetValue(value);
+                pRoomLight?.SetValue(value);
             }
         }
         
@@ -377,7 +377,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTerrainNoise.SetValue(value);
+                pTerrainNoise?.SetValue(value);
             }
         }
 
@@ -388,7 +388,7 @@ namespace FSO.LotView.Effects
         {
             set
             {
-                pTerrainNoiseMip.SetValue(value);
+                pTerrainNoiseMip?.SetValue(value);
             }
         }
 
