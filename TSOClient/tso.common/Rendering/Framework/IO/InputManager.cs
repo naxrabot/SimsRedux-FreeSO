@@ -38,8 +38,10 @@ namespace FSO.Common.Rendering.Framework.IO
             return LastFocus;
         }
 
+#if !WEB
         [DllImport("user32.dll")]
         static extern int MapVirtualKey(uint uCode, uint uMapType);
+#endif
 
         /// <summary>
         /// Utility to apply the result of pressing keys against a buffer
