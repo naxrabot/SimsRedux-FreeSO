@@ -1179,8 +1179,7 @@ namespace FSO.Client.UI.Framework
         /// </summary>
         public void Async(AsyncHandler handler)
         {
-            var t = new Thread(new ThreadStart(handler));
-            t.Start();
+            FSO.Common.Utils.FSOThreads.Start(() => handler());
         }
 
         public delegate void AsyncHandler();

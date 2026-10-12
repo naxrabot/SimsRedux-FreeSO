@@ -5,6 +5,8 @@ namespace FSO.Common
     public static class FSOEnvironment
     {
         public static Thread GameThread;
+        /// <summary>SimsRedux: no extra threads (the web browser version). See FSOThreads.</summary>
+        public static bool NoThreads = false;
 
         public static string ContentDir = "Content/";
         public static string UserDir = "Content/";

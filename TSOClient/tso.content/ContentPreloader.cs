@@ -32,10 +32,7 @@ namespace FSO.Content
             Total = Pending.Count + (int)ContentLoadingProgress.Done;
             Completed = 0;
 
-            Thread T = new Thread(new ThreadStart(LoadContent));
-            //TODO: This should only be set to speed up debug
-            //T.Priority = ThreadPriority.AboveNormal;
-            T.Start();
+            FSO.Common.Utils.FSOThreads.Start(LoadContent);
 
             //LoadContent();
         }
