@@ -1,4 +1,5 @@
-﻿using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework;
 
 namespace FSO.Common.Rendering.Framework
 {
@@ -10,6 +11,10 @@ namespace FSO.Common.Rendering.Framework
 		public Game() : base()
         {
             Graphics = new GraphicsDeviceManager(this);
+#if WEB
+            // SimsRedux web: the game's shaders need WebGL 2 (KNI's HiDef profile)
+            Graphics.GraphicsProfile = GraphicsProfile.HiDef;
+#endif
         }
 
         protected override void Initialize(){
