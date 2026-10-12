@@ -7,6 +7,7 @@ using System.Threading;
 using FSO.Common;
 using Microsoft.Xna.Framework;
 
+using FSO.Common.IO;
 namespace FSO.Content.Model
 {
     public interface ITextureRef
@@ -27,7 +28,7 @@ namespace FSO.Content.Model
 
         protected override Stream GetStream()
         {
-            return new FileStream(_FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return FSOFile.Open(_FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         }
     }
 
@@ -157,7 +158,7 @@ namespace FSO.Content.Model
 
                     if (ReplacePath != null)
                     {
-                        using (var str = File.Open(ReplacePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        using (var str = FSOFile.Open(ReplacePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                         {
                             var hidef = ImageLoader.FromStream(device, str);
                             hidef.Tag = new { obj = this, _Instance };

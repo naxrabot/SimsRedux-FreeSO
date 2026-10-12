@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using FSO.Common.IO;
 namespace FSO.Files.Formats.IFF
 {
     public static class PIFFRegistry
@@ -15,8 +16,8 @@ namespace FSO.Files.Formats.IFF
 
         public static void Init(string basePath)
         {
-            if (!Directory.Exists(basePath)) return;
-            string[] paths = Directory.GetFiles(basePath, "*.piff", SearchOption.AllDirectories);
+            if (!FSODirectory.Exists(basePath)) return;
+            string[] paths = FSODirectory.GetFiles(basePath, "*.piff", SearchOption.AllDirectories);
             for (int i = 0; i < paths.Length; i++)
             {
                 string entry = paths[i].Replace('\\', '/');
@@ -60,7 +61,7 @@ namespace FSO.Files.Formats.IFF
                 PIFFsByName[piff.SourceIff].Add(piffFile);
             }
 
-            string[] otfs = Directory.GetFiles(basePath, "*.otf", SearchOption.AllDirectories);
+            string[] otfs = FSODirectory.GetFiles(basePath, "*.otf", SearchOption.AllDirectories);
 
             foreach (var otf in otfs)
             {

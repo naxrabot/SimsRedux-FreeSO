@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Facade
 {
     /// <summary>
@@ -345,7 +346,7 @@ namespace FSO.LotView.Facade
             world.State.SilentLevel = oldLevel;
 
             /*
-            using (var fs = new FileStream(@"C:\Users\Rhys\Desktop\floor.png", FileMode.Create, FileAccess.Write))
+            using (var fs = FSOFile.Open(@"C:\Users\Rhys\Desktop\floor.png", FileMode.Create, FileAccess.Write))
                 tex.SaveAsPng(fs, tex.Width, tex.Height);
                 */
 
@@ -605,10 +606,10 @@ namespace FSO.LotView.Facade
         public void SaveToPath(string dirname)
         {
             var filename = Path.Combine(dirname, "lot.obj");
-            using (var io = File.Open(filename, FileMode.Create, FileAccess.Write))
+            using (var io = FSOFile.Open(filename, FileMode.Create, FileAccess.Write))
                 SaveOBJ(io, Path.GetFileNameWithoutExtension(filename));
             var ext = Path.GetExtension(filename);
-            using (var io = File.Open(filename.Substring(0, filename.Length - ext.Length) + ".mtl", FileMode.Create))
+            using (var io = FSOFile.Open(filename.Substring(0, filename.Length - ext.Length) + ".mtl", FileMode.Create))
                 SaveMTL(io, dirname);
         }
 
@@ -721,7 +722,7 @@ namespace FSO.LotView.Facade
                 {
                     try
                     {
-                        using (var io2 = File.Open(Path.Combine(path, oname + ".png"), FileMode.Create))
+                        using (var io2 = FSOFile.Open(Path.Combine(path, oname + ".png"), FileMode.Create))
                             tex.SaveAsPng(io2, tex.Width, tex.Height);
                     }
                     catch (Exception e)

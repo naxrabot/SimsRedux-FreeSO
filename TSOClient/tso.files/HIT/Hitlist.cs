@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Files.HIT
 {
     /// <summary>
@@ -97,7 +98,7 @@ namespace FSO.Files.HIT
         /// <param name="Filepath">The path to the hitlist to read.</param>
         public Hitlist(string Filepath)
         {
-            Read(File.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
+            Read(FSOFile.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
         }
     }
 }

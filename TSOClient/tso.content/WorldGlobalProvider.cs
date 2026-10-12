@@ -8,6 +8,7 @@ using FSO.Files.Formats.OTF;
 using FSO.Files.FAR1;
 using FSO.Common.TS1;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     /// <summary>
@@ -202,7 +203,7 @@ namespace FSO.Content
                         var rewrite = PIFFRegistry.GetOTFRewrite(filename + ".otf");
                         var path = rewrite ?? Path.Combine(ContentManager.BasePath, ("objectdata/globals/" + filename + ".otf"));
 
-                        if (File.Exists(path))
+                        if (FSOFile.Exists(path))
                         {
                             otf = new OTFFile(path);
                         }

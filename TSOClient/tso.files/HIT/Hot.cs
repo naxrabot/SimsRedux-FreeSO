@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Files.HIT
 {
     /// <summary>
@@ -211,14 +212,14 @@ namespace FSO.Files.HIT
             return result;
         }
 
-        public Hot(string Filepath) : this(File.ReadAllBytes(Filepath))
+        public Hot(string Filepath) : this(FSOFile.ReadAllBytes(Filepath))
         {
         }
 
         public Hot(string Filepath, HSM myAsm)
         {
             AsmNames = myAsm;
-            LoadFrom(File.ReadAllBytes(Filepath));
+            LoadFrom(FSOFile.ReadAllBytes(Filepath));
         }
     }
 

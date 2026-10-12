@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Files.FAR3
 {
     /// <summary>
@@ -33,7 +34,7 @@ namespace FSO.Files.FAR3
 
                 try
                 {
-                    m_Reader = new BinaryReader(File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read));
+                    m_Reader = new BinaryReader(FSOFile.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read));
                 }
                 catch (Exception ex)
                 {

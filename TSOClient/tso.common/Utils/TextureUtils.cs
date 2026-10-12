@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
+using FSO.Common.IO;
 namespace FSO.Common.Utils
 {
     public readonly struct TextureData<T> where T : struct
@@ -21,7 +22,7 @@ namespace FSO.Common.Utils
     {
         public static Texture2D TextureFromFile(GraphicsDevice gd, string filePath)
         {
-            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var stream = FSOFile.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 return Texture2D.FromStream(gd, stream);
             }

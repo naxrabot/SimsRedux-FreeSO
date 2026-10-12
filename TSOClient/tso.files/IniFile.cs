@@ -1,12 +1,13 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Files
 {
     public class IniFile : Dictionary<string, IniSection>
     {
         public static IniFile Read(string path){
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read)){
+            using (var stream = FSOFile.Open(path, FileMode.Open, FileAccess.Read)){
                 var result = new IniFile();
                 result.Decode(stream);
                 return result;

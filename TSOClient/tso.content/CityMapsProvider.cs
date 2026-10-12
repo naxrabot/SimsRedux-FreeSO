@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     public class CityMapsProvider : IContentProvider<CityMap>
@@ -25,14 +26,14 @@ namespace FSO.Content
             Cache = new ConcurrentDictionary<int, CityMap>();
 
             var dir = Content.GetPath("cities");
-            foreach (var map in Directory.GetDirectories(dir))
+            foreach (var map in FSODirectory.GetDirectories(dir))
             {
                 var id = int.Parse(Path.GetFileName(map).Replace("city_", ""));
                 DirCache.Add(id, map);
             }
 
             dir = Path.Combine(FSOEnvironment.ContentDir, "Cities/");
-            foreach (var map in Directory.GetDirectories(dir))
+            foreach (var map in FSODirectory.GetDirectories(dir))
             {
                 var id = int.Parse(Path.GetFileName(map).Replace("city_", ""));
                 DirCache.Add(id, map);

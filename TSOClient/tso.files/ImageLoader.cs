@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System.Runtime.InteropServices;
 using System.Text;
 
+using FSO.Common.IO;
 namespace FSO.Files
 {
     public struct ImageData
@@ -163,7 +164,7 @@ namespace FSO.Files
 
         public static Texture2D MipTextureFromFile(GraphicsDevice gd, string filePath)
         {
-            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var stream = FSOFile.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 return FromStreamAvgMips(gd, stream);
             }

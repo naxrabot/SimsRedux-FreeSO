@@ -9,6 +9,7 @@ using System.IO;
 using FSO.LotView.Model;
 using FSO.Files.Formats.IFF.Chunks;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Components
 {
     public class ParticleComponent : WorldComponent
@@ -67,7 +68,7 @@ namespace FSO.LotView.Components
             if (Indices != null) Indices.Dispose();
             if (Mode == ParticleType.SNOW)
             {
-                using (var file = File.OpenRead(Path.Combine(FSOEnvironment.ContentDir, "Textures/snowflake.png")))
+                using (var file = FSOFile.OpenRead(Path.Combine(FSOEnvironment.ContentDir, "Textures/snowflake.png")))
                     Tex = ImageLoader.FromStream(gd, file);
             }
             var verts = new List<ParticleVertex>();

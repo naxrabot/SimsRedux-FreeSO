@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Utils
 {
     /// <summary>
@@ -207,7 +208,7 @@ namespace FSO.LotView.Utils
             {
                 var dir = FSO.Common.FSOEnvironment.UserDir;
                 if (string.IsNullOrEmpty(dir)) return;
-                System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "tint_debug.log"), DateTime.Now + " " + text + "\r\n");
+                FSOFile.AppendAllText(System.IO.Path.Combine(dir, "tint_debug.log"), DateTime.Now + " " + text + "\r\n");
             }
             catch { }
         }

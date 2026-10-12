@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using FSO.Files.Formats.IFF.Chunks;
 using Microsoft.Xna.Framework.Graphics;
 
+using FSO.Common.IO;
 namespace FSO.Common.Utils
 {
     /// <summary>
@@ -101,7 +102,7 @@ namespace FSO.Common.Utils
 
         public void Dispose()
         {
-            Directory.CreateDirectory(Path.Combine(dir, id + "_files"));
+            FSODirectory.CreateDirectory(Path.Combine(dir, id + "_files"));
 
             var sb = new StringBuilder();
 
@@ -110,7 +111,7 @@ namespace FSO.Common.Utils
                 AppendItem(sb, item);
             }
 
-            File.WriteAllText(Path.Combine(dir, id + ".html"), sb.ToString());
+            FSOFile.WriteAllText(Path.Combine(dir, id + ".html"), sb.ToString());
         }
 
         #endregion
@@ -180,18 +181,18 @@ namespace FSO.Common.Utils
             var texture = frame.GetTexture(this.Gd);
 
             var temp = Path.GetTempFileName();
-            texture.SaveAsPng(new FileStream(temp, FileMode.OpenOrCreate), texture.Width, texture.Height);
+            texture.SaveAsPng(FSOFile.Open(temp, FileMode.OpenOrCreate), texture.Width, texture.Height);
 
             var hash = FileUtils.ComputeMD5(temp);
             var filename = id + "_files/" + hash + ".png";
             var newDest = Path.Combine(dir, filename);
-            if (File.Exists(newDest))
+            if (FSOFile.Exists(newDest))
             {
-                File.Delete(temp);
+                FSOFile.Delete(temp);
             }
             else
             {
-                File.Move(temp, newDest);
+                FSOFile.Move(temp, newDest);
             }
 
             return filename;
@@ -202,18 +203,18 @@ namespace FSO.Common.Utils
             var texture = frame.GetTexture(this.Gd);
             
             var temp = Path.GetTempFileName();
-            texture.SaveAsPng(new FileStream(temp, FileMode.OpenOrCreate), texture.Width, texture.Height);
+            texture.SaveAsPng(FSOFile.Open(temp, FileMode.OpenOrCreate), texture.Width, texture.Height);
 
             var hash = FileUtils.ComputeMD5(temp);
             var filename = id + "_files/" + hash + ".png";
             var newDest = Path.Combine(dir, filename);
-            if (File.Exists(newDest))
+            if (FSOFile.Exists(newDest))
             {
-                File.Delete(temp);
+                FSOFile.Delete(temp);
             }
             else
             {
-                File.Move(temp, newDest);
+                FSOFile.Move(temp, newDest);
             }
 
             return filename;

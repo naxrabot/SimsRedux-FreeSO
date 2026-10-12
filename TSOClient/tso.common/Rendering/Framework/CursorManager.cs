@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Graphics;
 using FSO.Common.Utils;
 
+using FSO.Common.IO;
 namespace FSO.Common.Rendering.Framework
 {
     public enum CursorType
@@ -147,7 +148,7 @@ namespace FSO.Common.Rendering.Framework
         private Stream OpenCursor(string basepath, string curPath, string name)
         {
             var path = Path.Combine(basepath ?? "", curPath, name);
-            if (File.Exists(path)) return File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (FSOFile.Exists(path)) return FSOFile.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             var bytes = ExtraSource?.Invoke(name);
             return (bytes == null) ? null : new MemoryStream(bytes);
         }
@@ -217,12 +218,12 @@ namespace FSO.Common.Rendering.Framework
 
         private CursorGroup[] LoadUpgradeCursors(string path, int maxStars)
         {
-            return CurLoader.LoadUpgradeCursors(GD, File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read), maxStars);
+            return CurLoader.LoadUpgradeCursors(GD, FSOFile.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read), maxStars);
         }
 
         private CursorGroup LoadCustomCursor(string path)
         {
-            return CurLoader.LoadMonoCursor(GD, File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read));
+            return CurLoader.LoadMonoCursor(GD, FSOFile.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read));
         }
     }
 }

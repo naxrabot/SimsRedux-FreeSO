@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Files.UTK
 {
     /// <summary>
@@ -127,7 +128,7 @@ namespace FSO.Files.UTK
         public UTKFile2(string Filepath)
         {
             m_DecompressedStream = new MemoryStream();
-            m_Reader = new BinaryReader(File.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
+            m_Reader = new BinaryReader(FSOFile.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
 
             ReadHeader();
         }

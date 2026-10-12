@@ -6,6 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FSO.Common.IO;
 namespace FSO.Common.Audio
 {
     /// <summary>
@@ -101,7 +102,7 @@ namespace FSO.Common.Audio
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
 
-                _stream = new MP3Stream(new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read));
+                _stream = new MP3Stream(FSOFile.Open(_path, FileMode.Open, FileAccess.Read, FileShare.Read));
                 _stream.DecodeFrames(1);
                 var freq = _stream.Frequency;
 

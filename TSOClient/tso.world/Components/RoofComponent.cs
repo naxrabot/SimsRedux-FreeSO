@@ -12,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Components
 {
     public class RoofComponent : WorldComponent, IDisposable
@@ -67,9 +68,9 @@ namespace FSO.LotView.Components
             {
                 TexRescale = 0.2f;
                 var path = $"Content/Textures/roof/{searchName}.png";
-                if (File.Exists(path))
+                if (FSOFile.Exists(path))
                 {
-                    using (var strm = File.OpenRead(path))
+                    using (var strm = FSOFile.OpenRead(path))
                     {
                         Texture = Texture2D.FromStream(device, strm);
                     }
@@ -90,7 +91,7 @@ namespace FSO.LotView.Components
             NormalMap = null;
             try
             {
-                using (var strm = File.OpenRead($"Content/Textures/roof/{searchName}_h.png"))
+                using (var strm = FSOFile.OpenRead($"Content/Textures/roof/{searchName}_h.png"))
                 {
                     ParallaxTexture = Texture2D.FromStream(device, strm);
                 }

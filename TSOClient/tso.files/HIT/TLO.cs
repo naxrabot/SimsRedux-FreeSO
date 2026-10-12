@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 //ok, why do we have support for this? it's only used by hitlab and only the hitlab test files have them...
 
 namespace FSO.Files.HIT
@@ -50,7 +51,7 @@ namespace FSO.Files.HIT
         /// <param name="Filepath">The path to the tracklogic file to read.</param>
         public TLO(string Filepath)
         {
-            BinaryReader Reader = new BinaryReader(File.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
+            BinaryReader Reader = new BinaryReader(FSOFile.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
 
             Reader.ReadBytes(4); //Reserved.
             m_Count = Reader.ReadUInt32();

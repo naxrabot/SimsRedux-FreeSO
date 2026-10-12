@@ -12,6 +12,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 
+using FSO.Common.IO;
 namespace FSO.Files.RC
 {
     public struct DGRP3DTextureSource
@@ -345,7 +346,7 @@ namespace FSO.Files.RC
                 {
                     try
                     {
-                        using (var io2 = File.Open(Path.Combine(path, oname + ".png"), FileMode.Create))
+                        using (var io2 = FSOFile.Open(Path.Combine(path, oname + ".png"), FileMode.Create))
                             Pixel.SaveAsPng(io2, Pixel.Width, Pixel.Height);
                     }
                     catch (Exception e)

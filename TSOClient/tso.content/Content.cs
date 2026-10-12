@@ -14,6 +14,7 @@ using FSO.Content.Framework;
 using FSO.Vitaboy;
 using FSO.Content.Upgrades;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     public enum ContentMode
@@ -213,14 +214,14 @@ namespace FSO.Content
                 DataDefinition = new TSODataDefinition();
                 try
                 {
-                    using (var stream = File.Open("Content/FSODataDefinition.dat", FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var stream = FSOFile.Open("Content/FSODataDefinition.dat", FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
                         DataDefinition.Read(stream);
                     }
                 }
                 catch
                 {
-                    using (var stream = File.OpenRead(GetPath("TSOData_datadefinition.dat")))
+                    using (var stream = FSOFile.OpenRead(GetPath("TSOData_datadefinition.dat")))
                     {
                         DataDefinition.Read(stream);
                     }
@@ -228,7 +229,7 @@ namespace FSO.Content
 
                 try
                 {
-                    VersionString = File.ReadAllText(GetPath("version"));
+                    VersionString = FSOFile.ReadAllText(GetPath("version"));
                 }
                 catch { }
             } else
@@ -325,13 +326,13 @@ namespace FSO.Content
             }
 
             var fullPath = dir;
-            var files = Directory.GetFiles(fullPath);
+            var files = FSODirectory.GetFiles(fullPath);
             foreach (var file in files)
             {
                 fileList.Add(file.Substring(baseDir.Length));
             }
 
-            var dirs = Directory.GetDirectories(fullPath);
+            var dirs = FSODirectory.GetDirectories(fullPath);
             foreach (var subDir in dirs)
             {
                 _ScanFiles(subDir, fileList, baseDir);
@@ -374,7 +375,7 @@ namespace FSO.Content
 
             if (path.EndsWith(".bmp") || path.EndsWith(".png") || path.EndsWith(".tga")) path = "uigraphics/" + path;
 
-            return File.OpenRead(GetPath(path));
+            return FSOFile.OpenRead(GetPath(path));
         }
 
         /** World **/

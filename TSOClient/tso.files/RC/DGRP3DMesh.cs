@@ -14,6 +14,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FSO.Common.IO;
 namespace FSO.Files.RC
 {
     public class DGRP3DMesh
@@ -227,7 +228,7 @@ namespace FSO.Files.RC
                     // Open the stream in the task, as the file ctor can be a bit expensive.
                     try
                     {
-                        using (var source = File.OpenRead(filePath))
+                        using (var source = FSOFile.OpenRead(filePath))
                         {
                             LoadData(dgrp, source, gd);
                         }
@@ -251,7 +252,7 @@ namespace FSO.Files.RC
             }
             else
             {
-                using (var source = File.OpenRead(filePath))
+                using (var source = FSOFile.OpenRead(filePath))
                 {
                     LoadData(dgrp, source, gd);
                 }
@@ -788,8 +789,8 @@ namespace FSO.Files.RC
         {
             if (SaveDirectory == null) return;
             var dir = Path.Combine(SaveDirectory, Name + ".fsom");
-            Directory.CreateDirectory(SaveDirectory);
-            using (var stream = File.Open(dir, FileMode.Create))
+            FSODirectory.CreateDirectory(SaveDirectory);
+            using (var stream = FSOFile.Open(dir, FileMode.Create))
             {
                 using (var memstream = new MemoryStream())
                 {

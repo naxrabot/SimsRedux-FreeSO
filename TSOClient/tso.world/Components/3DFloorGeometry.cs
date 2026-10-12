@@ -7,6 +7,7 @@ using FSO.LotView.Model;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Components
 {
     /// <summary>
@@ -54,10 +55,10 @@ namespace FSO.LotView.Components
 
             for (int i=0; i<16; i++)
             {
-                using (var file = System.IO.File.Open($"Content/Textures/{folder}/diffuse/pool{i}.png", System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read)) {
+                using (var file = FSOFile.Open($"Content/Textures/{folder}/diffuse/pool{i}.png", System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read)) {
                     PoolReplace[i] = Files.ImageLoader.FromStream(gd, file);
                 }
-                using (var file = System.IO.File.Open($"Content/Textures/{folder}/parallax/pool{i}.png", System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
+                using (var file = FSOFile.Open($"Content/Textures/{folder}/parallax/pool{i}.png", System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
                 {
                     PoolReplaceParallax[i] = Files.ImageLoader.FromStream(gd, file);
                 }

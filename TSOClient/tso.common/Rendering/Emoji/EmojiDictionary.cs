@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using FSO.Common.IO;
 namespace FSO.Common.Rendering.Emoji
 {
     public class EmojiDictionary
@@ -15,7 +16,7 @@ namespace FSO.Common.Rendering.Emoji
         {
             JObject emojis;
             using (var emojiDict = new StreamReader(
-                new FileStream(Path.Combine(FSOEnvironment.ContentDir, "UI/emojis.json"), FileMode.Open, FileAccess.Read, FileShare.Read)))
+                FSOFile.Open(Path.Combine(FSOEnvironment.ContentDir, "UI/emojis.json"), FileMode.Open, FileAccess.Read, FileShare.Read)))
             {
                 emojis = (JObject)Newtonsoft.Json.JsonConvert.DeserializeObject(emojiDict.ReadToEnd());
             }
@@ -31,7 +32,7 @@ namespace FSO.Common.Rendering.Emoji
             }
 
             using (var emojiDict = new StreamReader(
-                new FileStream(Path.Combine(FSOEnvironment.ContentDir, "UI/customemojis.json"), FileMode.Open, FileAccess.Read, FileShare.Read)))
+                FSOFile.Open(Path.Combine(FSOEnvironment.ContentDir, "UI/customemojis.json"), FileMode.Open, FileAccess.Read, FileShare.Read)))
             {
                 emojis = (JObject)Newtonsoft.Json.JsonConvert.DeserializeObject(emojiDict.ReadToEnd());
             }

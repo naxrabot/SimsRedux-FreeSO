@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Components
 {
     public class AbstractSkyDome : IDisposable
@@ -49,7 +50,7 @@ namespace FSO.LotView.Components
 
             if (!IsFinal && needsFinal)
             {
-                using (var file = File.OpenRead(Path.Combine(FSOEnvironment.ContentDir, FinalSkyCol)))
+                using (var file = FSOFile.OpenRead(Path.Combine(FSOEnvironment.ContentDir, FinalSkyCol)))
                 {
                     GradTex = ImageLoader.FromStream(GD, file);
                 };
@@ -62,7 +63,7 @@ namespace FSO.LotView.Components
         {
             try
             {
-                using (var file = File.OpenRead(Path.Combine(FSOEnvironment.ContentDir, path)))
+                using (var file = FSOFile.OpenRead(Path.Combine(FSOEnvironment.ContentDir, path)))
                 {
                     GradTex = ImageLoader.FromStream(GD, file);
                 };

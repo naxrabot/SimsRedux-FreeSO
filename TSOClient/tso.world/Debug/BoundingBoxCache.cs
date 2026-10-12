@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Debug
 {
     internal static class BoundingBoxCache
@@ -18,7 +19,7 @@ namespace FSO.LotView.Debug
         {
             try
             {
-                using (var file = new FileStream("Content/bboxCache.txt", FileMode.Open, FileAccess.Read))
+                using (var file = FSOFile.Open("Content/bboxCache.txt", FileMode.Open, FileAccess.Read))
                 {
                     using (var reader = new StreamReader(file))
                     {
@@ -68,7 +69,7 @@ namespace FSO.LotView.Debug
 
         public static void Save()
         {
-            using (var file = new FileStream("Content/bboxCache.txt", FileMode.Create))
+            using (var file = FSOFile.Open("Content/bboxCache.txt", FileMode.Create))
             {
                 using (var writer = new StreamWriter(file))
                 {

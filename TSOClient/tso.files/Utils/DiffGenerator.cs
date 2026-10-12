@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using xxHashSharp;
 
+using FSO.Common.IO;
 namespace FSO.Files.Utils
 {
     public class DiffGenerator
@@ -66,7 +67,7 @@ namespace FSO.Files.Utils
 
         private static byte[] GetFileBytes(string path)
         {
-            using (var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var stream = FSOFile.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 var memory = new MemoryStream();
                 stream.CopyTo(memory);
@@ -77,13 +78,13 @@ namespace FSO.Files.Utils
 
         private static void RecursiveDirectoryScan(string folder, HashSet<string> fileNames, string basePath)
         {
-            var files = Directory.GetFiles(folder);
+            var files = FSODirectory.GetFiles(folder);
             foreach (var file in files)
             {
                 fileNames.Add(GetRelativePath(basePath, file));
             }
 
-            var dirs = Directory.GetDirectories(folder);
+            var dirs = FSODirectory.GetDirectories(folder);
             foreach (var dir in dirs)
             {
                 RecursiveDirectoryScan(dir, fileNames, basePath);

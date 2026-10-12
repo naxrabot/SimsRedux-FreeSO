@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using FSO.Common.IO;
 namespace FSO.SimAntics.NetPlay.SandboxMode
 {
     public class BanList
@@ -14,9 +15,9 @@ namespace FSO.SimAntics.NetPlay.SandboxMode
         {
             Dir = FSOEnvironment.UserDir;
             var path = Path.Combine(Dir, "banlist.txt");
-            if (!File.Exists(path)) File.Create(path).Close();
+            if (!FSOFile.Exists(path)) FSOFile.Create(path).Close();
 
-            using (var list = File.OpenText(path))
+            using (var list = FSOFile.OpenText(path))
             {
                 BannedHosts = new HashSet<string>();
                 string line;
@@ -51,7 +52,7 @@ namespace FSO.SimAntics.NetPlay.SandboxMode
 
         public void Write()
         {
-            using (var list = File.Open(Dir + "banlist.txt", FileMode.Create))
+            using (var list = FSOFile.Open(Dir + "banlist.txt", FileMode.Create))
             {
                 var writer = new StreamWriter(list);
                 foreach (var host in BannedHosts)

@@ -24,6 +24,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Components
 {
     /*
@@ -258,7 +259,7 @@ namespace FSO.LotView.Components
 
             try
             {
-                Data = new RomSource(new FileStream("Content/sm64.z64", FileMode.Open, FileAccess.Read));
+                Data = new RomSource(FSOFile.Open("Content/sm64.z64", FileMode.Open, FileAccess.Read));
             }
             catch
             {

@@ -5,6 +5,7 @@ using FSO.Client.UI.Framework.Parser;
 using FSO.Common.Rendering.Framework.Model;
 using FSO.Common;
 
+using FSO.Common.IO;
 namespace FSO.Client.UI.Framework
 {
     public class UIContainer : UIElement
@@ -189,7 +190,7 @@ namespace FSO.Client.UI.Framework
         public UIScript RenderScript(string uiScript)
         {
             var path = Path.Combine(FSOEnvironment.ContentDir, @"UI/uiscripts/" + uiScript);
-            if (!File.Exists(path))
+            if (!FSOFile.Exists(path))
                 path = Path.Combine(GlobalSettings.Default.StartupPath, @"gamedata/uiscripts/" + uiScript);
             
             var script = new UIScript(GameFacade.GraphicsDevice, this);

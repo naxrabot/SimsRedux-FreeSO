@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using FSO.Files.Utils;
 
+using FSO.Common.IO;
 namespace FSO.Files.Formats.DBPF
 {
     /// <summary>
@@ -38,7 +39,7 @@ namespace FSO.Files.Formats.DBPF
         /// <param name="file">The path to an DBPF archive.</param>
         public DBPFFile(string file)
         {
-            var stream = File.OpenRead(file);
+            var stream = FSOFile.OpenRead(file);
                 Read(stream);
         }
 

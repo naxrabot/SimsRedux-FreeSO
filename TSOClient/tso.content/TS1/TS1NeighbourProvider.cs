@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using FSO.Common.IO;
 namespace FSO.Content.TS1
 {
     /// <summary>
@@ -56,7 +57,7 @@ namespace FSO.Content.TS1
 
             var userPath = Path.Combine(FSOEnvironment.UserDir, udName + "/");
 
-            if (!Directory.Exists(userPath))
+            if (!FSODirectory.Exists(userPath))
             {
                 var source = Path.Combine(ContentManager.TS1BasePath, udName + "/");
                 // SimsRedux: start from the game's untouched starting neighbourhood (TemplateUserData)
@@ -68,13 +69,13 @@ namespace FSO.Content.TS1
 
                 //quick and dirty copy.
 
-                foreach (string dirPath in Directory.GetDirectories(source, "*",
+                foreach (string dirPath in FSODirectory.GetDirectories(source, "*",
                     SearchOption.AllDirectories))
-                    Directory.CreateDirectory(dirPath.Replace('\\', '/').Replace(source, destination));
+                    FSODirectory.CreateDirectory(dirPath.Replace('\\', '/').Replace(source, destination));
 
-                foreach (string newPath in Directory.GetFiles(source, "*.*",
+                foreach (string newPath in FSODirectory.GetFiles(source, "*.*",
                     SearchOption.AllDirectories))
-                    File.Copy(newPath, newPath.Replace('\\', '/').Replace(source, destination), true);
+                    FSOFile.Copy(newPath, newPath.Replace('\\', '/').Replace(source, destination), true);
 
                 // the template can be missing the expansion packs' lot description files; borrow
                 // just those from the normal UserData (they only hold lot names and descriptions)
@@ -85,10 +86,10 @@ namespace FSO.Content.TS1
                     {
                         var to = Path.Combine(destination, name);
                         var from = Path.Combine(normal, name);
-                        if (!File.Exists(to) && File.Exists(from))
+                        if (!FSOFile.Exists(to) && FSOFile.Exists(from))
                         {
-                            Directory.CreateDirectory(Path.GetDirectoryName(to));
-                            File.Copy(from, to, true);
+                            FSODirectory.CreateDirectory(Path.GetDirectoryName(to));
+                            FSOFile.Copy(from, to, true);
                         }
                     }
                 }
@@ -147,8 +148,8 @@ namespace FSO.Content.TS1
             try
             {
                 var nbhd = Path.Combine(template, "Neighborhood.iff");
-                if (!Directory.Exists(template) || !File.Exists(nbhd)) return false;
-                if (!File.Exists(Path.Combine(template, "LotLocations.iff")) || !File.Exists(Path.Combine(template, "LotZoning.iff"))) return false;
+                if (!FSODirectory.Exists(template) || !FSOFile.Exists(nbhd)) return false;
+                if (!FSOFile.Exists(Path.Combine(template, "LotLocations.iff")) || !FSOFile.Exists(Path.Combine(template, "LotZoning.iff"))) return false;
                 var iff = new IffFile(nbhd);
                 return iff.List<NBRS>()?.Count > 0 && iff.List<NGBH>()?.Count > 0;
             }
@@ -193,7 +194,7 @@ namespace FSO.Content.TS1
 
             NextSim = 0;
             var path = Path.Combine(UserPath, "Characters/");
-            var files = Directory.EnumerateFiles(path);
+            var files = FSODirectory.EnumerateFiles(path);
             foreach (var filename in files)
             {
                 if (Path.GetExtension(filename) != ".iff") return;
@@ -248,7 +249,7 @@ namespace FSO.Content.TS1
             //save to a new user iff
             var path = Path.Combine(UserPath, "Characters/");
             var filename = Path.Combine(path, "User" + (NextSim++).ToString().PadLeft(5, '0') + ".iff");
-            using (var stream = new FileStream(filename, FileMode.Create))
+            using (var stream = FSOFile.Open(filename, FileMode.Create))
                 obj.Resource.MainIff.Write(stream);
 
             objs.Entries[obj.OBJ.GUID] = new GameObjectReference(objs)
@@ -374,14 +375,14 @@ namespace FSO.Content.TS1
                     var obj = ContentManager.WorldObjects.Get(ava);
                     if (obj != null)
                     {
-                        using (var stream = new FileStream(obj.Resource.Name, FileMode.Create))
+                        using (var stream = FSOFile.Open(obj.Resource.Name, FileMode.Create))
                             obj.Resource.MainIff.Write(stream);
                     }
                 }
                 DirtyAvatars.Clear();
             }
 
-            using (var stream = new FileStream(Path.Combine(UserPath, "Neighborhood.iff"), FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var stream = FSOFile.Open(Path.Combine(UserPath, "Neighborhood.iff"), FileMode.Create, FileAccess.Write, FileShare.None))
                 MainResource.Write(stream);
 
             return true;
@@ -425,7 +426,7 @@ namespace FSO.Content.TS1
                     }
                 }
                 if (!found) str.InsertString(str.Length, new STRItem(entry));
-                using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var stream = FSOFile.Open(path, FileMode.Create, FileAccess.Write, FileShare.None))
                     iff.Write(stream);
                 return true;
             }
@@ -438,7 +439,7 @@ namespace FSO.Content.TS1
 
         public bool SaveHouse(int houseID, IffFile file)
         {
-            using (var stream = new FileStream(GetHousePath(houseID), FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var stream = FSOFile.Open(GetHousePath(houseID), FileMode.Create, FileAccess.Write, FileShare.None))
                 file.Write(stream);
 
             return true;

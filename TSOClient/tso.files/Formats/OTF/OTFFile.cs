@@ -3,6 +3,7 @@ using System.IO;
 using System.Xml;
 using FSO.Files.Formats.IFF;
 
+using FSO.Common.IO;
 namespace FSO.Files.Formats.OTF
 {
     /// <summary>
@@ -18,7 +19,7 @@ namespace FSO.Files.Formats.OTF
         /// <param name="filepath">Path to the OTF.</param>
         public OTFFile(string filepath)
         {
-            using (var stream = File.OpenRead(filepath))
+            using (var stream = FSOFile.OpenRead(filepath))
             {
                 this.Read(stream);
             }

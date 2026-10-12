@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Xml;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     public class WorldObjectCatalog : IObjectCatalog
@@ -45,7 +46,7 @@ namespace FSO.Content
             }
 
             //load and build Content Objects into catalog
-            if (File.Exists(Path.Combine(FSOEnvironment.ContentDir, "Objects/catalog_downloads.xml")))
+            if (FSOFile.Exists(Path.Combine(FSOEnvironment.ContentDir, "Objects/catalog_downloads.xml")))
             {
                 var dpackingslip = new XmlDocument();
 

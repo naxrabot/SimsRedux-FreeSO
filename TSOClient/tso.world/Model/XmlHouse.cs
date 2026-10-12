@@ -4,6 +4,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Model
 {
     [XmlRoot("house")]
@@ -28,7 +29,7 @@ namespace FSO.LotView.Model
 
         public static XmlHouseData Parse(string xmlFilePath)
         {
-            using (var reader = File.OpenRead(xmlFilePath))
+            using (var reader = FSOFile.OpenRead(xmlFilePath))
             {
                 return Parse(reader);
             }

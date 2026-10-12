@@ -1,6 +1,7 @@
 ﻿using DeltaQ.BsDiff;
 using FSO.Files.Utils;
 
+using FSO.Common.IO;
 namespace TSOVersionPatcher
 {
     public class TSOp
@@ -71,13 +72,13 @@ namespace TSOVersionPatcher
 
         private void RecursiveDirectoryScan(string folder, HashSet<string> fileNames, string basePath)
         {
-            var files = Directory.GetFiles(folder);
+            var files = FSODirectory.GetFiles(folder);
             foreach (var file in files)
             {
                 fileNames.Add(GetRelativePath(basePath, file));
             }
 
-            var dirs = Directory.GetDirectories(folder);
+            var dirs = FSODirectory.GetDirectories(folder);
             foreach (var dir in dirs)
             {
                 RecursiveDirectoryScan(dir, fileNames, basePath);
@@ -114,9 +115,9 @@ namespace TSOVersionPatcher
                     foreach (var file in sourceFiles)
                     {
                         var destP = Path.Combine(dest, file);
-                        Directory.CreateDirectory(Path.GetDirectoryName(destP));
+                        FSODirectory.CreateDirectory(Path.GetDirectoryName(destP));
 
-                        File.Copy(Path.Combine(source, file), destP);
+                        FSOFile.Copy(Path.Combine(source, file), destP);
                     }
                 }
 
@@ -128,12 +129,12 @@ namespace TSOVersionPatcher
                     progress($"Patching {patch.FileTarget}...", fileNum / (float)total);
                     var path = Path.Combine(source, patch.FileTarget);
                     var dpath = Path.Combine(dest, patch.FileTarget);
-                    var data = File.ReadAllBytes(path);
-                    Directory.CreateDirectory(Path.GetDirectoryName(dpath));
+                    var data = FSOFile.ReadAllBytes(path);
+                    FSODirectory.CreateDirectory(Path.GetDirectoryName(dpath));
 
                     Str.Seek(patch.Offset, SeekOrigin.Begin);
                     var patchd = reader.ReadBytes(patch.Length);
-                    Patch.Apply(data, patchd, File.Open(dpath, FileMode.Create, FileAccess.Write, FileShare.None));
+                    Patch.Apply(data, patchd, FSOFile.Open(dpath, FileMode.Create, FileAccess.Write, FileShare.None));
                     fileNum++;
                 }
 
@@ -141,11 +142,11 @@ namespace TSOVersionPatcher
                 {
                     progress($"Adding {add.FileTarget}...", fileNum / (float)total);
                     var dpath = Path.Combine(dest, add.FileTarget);
-                    Directory.CreateDirectory(Path.GetDirectoryName(dpath));
+                    FSODirectory.CreateDirectory(Path.GetDirectoryName(dpath));
 
                     Str.Seek(add.Offset, SeekOrigin.Begin);
                     var addData = reader.ReadBytes(add.Length);
-                    File.WriteAllBytes(dpath, addData);
+                    FSOFile.WriteAllBytes(dpath, addData);
                     fileNum++;
                 }
 
@@ -154,7 +155,7 @@ namespace TSOVersionPatcher
                     try
                     {
                         progress($"Deleting {del}...", fileNum / (float)total);
-                        File.Delete(Path.Combine(dest, del));
+                        FSOFile.Delete(Path.Combine(dest, del));
                         fileNum++;
                     }
                     catch

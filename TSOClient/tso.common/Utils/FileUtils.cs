@@ -2,6 +2,7 @@
 using System.IO;
 using System.Security.Cryptography;
 
+using FSO.Common.IO;
 namespace FSO.Common.Utils
 {
     public class FileUtils
@@ -15,7 +16,7 @@ namespace FSO.Common.Utils
         {
             using (var md5 = MD5.Create())
             {
-                using (var stream = File.OpenRead(filePath))
+                using (var stream = FSOFile.OpenRead(filePath))
                 {
                     return md5.ComputeHash(stream);
                 }

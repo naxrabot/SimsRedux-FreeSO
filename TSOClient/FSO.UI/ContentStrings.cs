@@ -6,6 +6,7 @@ using System.IO;
 using FSO.Files.Formats.IFF;
 using FSO.Files.Formats.IFF.Chunks;
 
+using FSO.Common.IO;
 namespace FSO.Client.GameContent
 {
     public class ContentStrings
@@ -26,13 +27,13 @@ namespace FSO.Client.GameContent
             {
                 var tsodir = Path.Combine(GlobalSettings.Default.StartupPath, @"gamedata/uitext/");
 
-                if (Directory.Exists(Path.Combine(tsodir, langdir)))
+                if (FSODirectory.Exists(Path.Combine(tsodir, langdir)))
                     Load("UIText", Path.Combine(tsodir, langdir));
                 else
                     Load("UIText", Path.Combine(tsodir, "english.dir"));
             }
             var fsodir = "Content/UI/uitext/";
-            if (Directory.Exists(Path.Combine(fsodir, langdir)))
+            if (FSODirectory.Exists(Path.Combine(fsodir, langdir)))
                 Load("UIText", Path.Combine(fsodir, langdir));
             else
                 Load("UIText", Path.Combine(fsodir, "english.dir"));
@@ -156,7 +157,7 @@ namespace FSO.Client.GameContent
                 StringTable.Add(dirName, table);
             }
 
-            var files = Directory.GetFiles(basePath);
+            var files = FSODirectory.GetFiles(basePath);
             foreach (var file in files)
             {
                 var tableID = Path.GetFileName(file);
@@ -167,7 +168,7 @@ namespace FSO.Client.GameContent
 
                 var tableData = new Dictionary<string, string>();
 
-                var contentLines = File.ReadAllLines(file).ToList();
+                var contentLines = FSOFile.ReadAllLines(file).ToList();
                 /** Expected pattern: {digit} ^ {TXT} ^ **/
 
                 var io = 0;

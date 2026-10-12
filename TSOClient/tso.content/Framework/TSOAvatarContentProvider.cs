@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
+using FSO.Common.IO;
 namespace FSO.Content.Framework
 {
     public class TSOAvatarContentProvider<T> : CompositeProvider<T>
@@ -83,8 +84,8 @@ namespace FSO.Content.Framework
 
                 //write the file
                 var folder = Path.Combine(FileFolder, "User/");
-                Directory.CreateDirectory(folder);
-                using (var file = File.Open(Path.Combine(folder, name), FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+                FSODirectory.CreateDirectory(folder);
+                using (var file = FSOFile.Open(Path.Combine(folder, name), FileMode.Create, FileAccess.ReadWrite, FileShare.None))
                 {
                     file.Write(data, 0, data.Length);
                 }

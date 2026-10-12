@@ -5,6 +5,7 @@ using System.Text;
 using FSO.Files.FAR3;
 using System.Globalization;
 
+using FSO.Common.IO;
 namespace FSO.Files
 {
     public struct TuningEntry
@@ -60,7 +61,7 @@ namespace FSO.Files
 		{
 			try
 			{
-				m_Reader = new BinaryReader(File.OpenRead(Path));
+				m_Reader = new BinaryReader(FSOFile.OpenRead(Path));
 			}
 			catch(Exception)
 			{

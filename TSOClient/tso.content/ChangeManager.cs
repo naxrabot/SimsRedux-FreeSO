@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     public class ChangeManager
@@ -125,8 +126,8 @@ namespace FSO.Content
                 {
                     //just save out iff
                     var filename = file.RuntimeInfo.Path;
-                    Directory.CreateDirectory(Path.GetDirectoryName(filename));
-                    using (var stream = new FileStream(filename, FileMode.Create))
+                    FSODirectory.CreateDirectory(Path.GetDirectoryName(filename));
+                    using (var stream = FSOFile.Open(filename, FileMode.Create))
                         file.Write(stream);
 
                     foreach (var chunk in file.ListAll())
@@ -137,7 +138,7 @@ namespace FSO.Content
                 else
                 {
                     string dest = Path.Combine(FSOEnvironment.ContentDir, ((file.RuntimeInfo.State == IffRuntimeState.PIFFClone) ? "Objects/" : "Patch/User/"));
-                    Directory.CreateDirectory(dest);
+                    FSODirectory.CreateDirectory(dest);
                     if (file.RuntimeInfo.State == IffRuntimeState.ReadOnly)
                     {
                         file.RuntimeInfo.State = IffRuntimeState.PIFFPatch;
@@ -159,7 +160,7 @@ namespace FSO.Content
                     {
                         if (piff.Filename == null) piff.Filename = name + (sprites ? ".spf" : "") + ".piff";
                         var filename = dest + piff.Filename;
-                        using (var stream = new FileStream(filename, FileMode.Create)) piff.Write(stream);
+                        using (var stream = FSOFile.Open(filename, FileMode.Create)) piff.Write(stream);
                         file.RuntimeInfo.Patches.Add(piff);
                     }
 
@@ -171,7 +172,7 @@ namespace FSO.Content
                         {
                             if (piff.Filename == null) piff.Filename = name + ".str.piff";
                             var filename = dest + piff.Filename;
-                            using (var stream = new FileStream(filename, FileMode.Create)) piff.Write(stream);
+                            using (var stream = FSOFile.Open(filename, FileMode.Create)) piff.Write(stream);
                             file.RuntimeInfo.Patches.Add(piff);
                         }
                     }

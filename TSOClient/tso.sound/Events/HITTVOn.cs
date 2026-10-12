@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
+using FSO.Common.IO;
 namespace FSO.HIT.Events
 {
     /// <summary>
@@ -160,7 +161,7 @@ namespace FSO.HIT.Events
                 var lines = new List<string>();
                 lines.Add("Music mode " + mode + " -> " + Station + " (" + Sounds.Count + " songs)");
                 foreach (var s in Sounds) lines.Add("    " + s);
-                File.AppendAllLines(Path.Combine(Common.FSOEnvironment.UserDir, "music_debug.log"), lines);
+                FSOFile.AppendAllLines(Path.Combine(Common.FSOEnvironment.UserDir, "music_debug.log"), lines);
             }
             catch { }
         }
@@ -183,7 +184,7 @@ namespace FSO.HIT.Events
             string[] files;
             if (!isRegex) {
                 statBase = (content.TS1) ? Path.Combine(content.TS1BasePath, path) : content.GetPath(path);
-                files = Directory.GetFiles(statBase, "*.xa", SearchOption.AllDirectories);
+                files = FSODirectory.GetFiles(statBase, "*.xa", SearchOption.AllDirectories);
             } else
             {
                 statBase = (content.TS1) ? content.TS1BasePath : content.BasePath;
@@ -201,7 +202,7 @@ namespace FSO.HIT.Events
                 var index = bs.LastIndexOf('/');
                 if (index == -1) index = bs.LastIndexOf('\\');
 
-                var files2 = Directory.GetFiles(bs.Substring(0, index), "*.xa", SearchOption.TopDirectoryOnly);
+                var files2 = FSODirectory.GetFiles(bs.Substring(0, index), "*.xa", SearchOption.TopDirectoryOnly);
                 foreach (var file in files2)
                 {
                     Sounds.Insert(rand.Next(Sounds.Count + 1), file);
@@ -214,7 +215,7 @@ namespace FSO.HIT.Events
                     var regex = new Regex(path);
                     files = content.AllFiles.Where(x => regex.IsMatch(x.Replace('\\', '/'))).Select(x => content.GetPath(x)).ToArray();
                 } else {
-                    files = Directory.GetFiles(statBase, "*.mp3", SearchOption.AllDirectories);
+                    files = FSODirectory.GetFiles(statBase, "*.mp3", SearchOption.AllDirectories);
                 }
                 IsMusic = true;
             }

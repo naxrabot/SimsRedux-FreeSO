@@ -11,6 +11,7 @@ using FSO.Files.HIT;
 using Microsoft.Xna.Framework.Audio;
 using FSO.Content.Interfaces;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     /// <summary>
@@ -174,7 +175,7 @@ namespace FSO.Content
             RegisterEvents(turkey);
 
             //register the .xa files over in the nightclub folders.
-            var files = Directory.GetFiles(content.GetPath("sounddata/nightclubsounds/"));
+            var files = FSODirectory.GetFiles(content.GetPath("sounddata/nightclubsounds/"));
             foreach (var file in files)
             {
                 if (!file.EndsWith(".xa")) continue;

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FSO.Common.IO;
 namespace FSO.Common.Utils.Cache
 {
     public class FileSystemCache : ICache
@@ -138,7 +139,7 @@ namespace FSO.Common.Utils.Cache
         private void _ScanDirectory(CacheKey parent, List<FileSystemCacheEntry> tempList)
         {
             var dir = GetFilePath(parent);
-            if (!Directory.Exists(dir)) { return; }
+            if (!FSODirectory.Exists(dir)) { return; }
 
             var info = new DirectoryInfo(dir);
 
@@ -199,8 +200,8 @@ namespace FSO.Common.Utils.Cache
                 {
                     var file = GetFilePath(key);
                     byte[] result = null;
-                    if (File.Exists(file)){
-                        result = File.ReadAllBytes(file);
+                    if (FSOFile.Exists(file)){
+                        result = FSOFile.ReadAllBytes(file);
                     }else{
                         throw new Exception("File not found");
                     }
@@ -277,8 +278,8 @@ namespace FSO.Common.Utils.Cache
         {
             var path = cache.GetFilePath(Key);
             var finalPart = path.LastIndexOf('/');
-            Directory.CreateDirectory((finalPart == -1)?path:path.Substring(0, finalPart));
-            File.WriteAllBytes(path, Data);
+            FSODirectory.CreateDirectory((finalPart == -1)?path:path.Substring(0, finalPart));
+            FSOFile.WriteAllBytes(path, Data);
 
             var entry = cache.GetEntry(Key);
             if (entry == null)
@@ -315,7 +316,7 @@ namespace FSO.Common.Utils.Cache
 
         public void Execute(FileSystemCache cache)
         {
-            File.Delete(cache.GetFilePath(Key));
+            FSOFile.Delete(cache.GetFilePath(Key));
             cache.RemoveEntry(Key);
         }
 

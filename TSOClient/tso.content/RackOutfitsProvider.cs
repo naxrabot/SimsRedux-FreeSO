@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     public class RackOutfitsProvider
@@ -22,7 +23,7 @@ namespace FSO.Content
         public void Init()
         {
             var purchasable = Content.GetPath("packingslips/purchasable.xml");
-            if (!File.Exists(purchasable)){
+            if (!FSOFile.Exists(purchasable)){
                 return;
             }
 

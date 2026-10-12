@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework;
 using FSO.Client.Utils;
 using FSO.Client.UI.Controls;
 
+using FSO.Common.IO;
 namespace FSO.Client.UI.Framework.Parser
 {
     public class UIScript
@@ -483,7 +484,7 @@ namespace FSO.Client.UI.Framework.Parser
         {
             var parser = new UIScriptParser();
             parser.Setup();
-            using (var reader = File.OpenText(path))
+            using (var reader = FSOFile.OpenText(path))
             {
                 var didParse = parser.Parse(reader);
                 if (didParse)

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Files.HIT
 {
     public class FSC
@@ -48,7 +49,7 @@ namespace FSO.Files.HIT
         /// <param name="Filedata">The path to the data to create the hsm from.</param>
         public FSC(string Filepath)
         {
-            ReadFile(File.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
+            ReadFile(FSOFile.Open(Filepath, FileMode.Open, FileAccess.Read, FileShare.Read));
         }
 
         private void ReadFile(Stream stream)

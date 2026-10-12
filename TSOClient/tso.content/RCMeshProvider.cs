@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using FSO.Common.IO;
 namespace FSO.Content
 {
     public class RCMeshProvider
@@ -26,17 +27,17 @@ namespace FSO.Content
 
             var repldir = Path.Combine(FSOEnvironment.ContentDir, "MeshReplace/");
             var userrepl = Path.Combine(FSOEnvironment.UserDir, "MeshReplace/");
-            if (Directory.Exists(userrepl)) repldir = userrepl;
+            if (FSODirectory.Exists(userrepl)) repldir = userrepl;
             var dir = Path.Combine(FSOEnvironment.UserDir, "MeshCache/");
             try
             {
-                Directory.CreateDirectory(dir);
-                Directory.CreateDirectory(repldir);
+                FSODirectory.CreateDirectory(dir);
+                FSODirectory.CreateDirectory(repldir);
             } catch
             {
             }
-            CacheFiles = new HashSet<string>(Directory.GetFiles(dir).Select(x => Path.GetFileName(x).ToLowerInvariant()));
-            ReplaceFiles = new HashSet<string>(Directory.GetFiles(repldir).Select(x => Path.GetFileName(x).ToLowerInvariant()));
+            CacheFiles = new HashSet<string>(FSODirectory.GetFiles(dir).Select(x => Path.GetFileName(x).ToLowerInvariant()));
+            ReplaceFiles = new HashSet<string>(FSODirectory.GetFiles(repldir).Select(x => Path.GetFileName(x).ToLowerInvariant()));
         }
         public Dictionary<DGRP, DGRP3DMesh> Cache = new Dictionary<DGRP, DGRP3DMesh>();
         public HashSet<DGRP> IgnoreRCCache = new HashSet<DGRP>();
@@ -165,9 +166,9 @@ namespace FSO.Content
                 {
                     var path = Path.Combine(dir, name);
 
-                    if (File.Exists(path))
+                    if (FSOFile.Exists(path))
                     {
-                        result = new MTEX(File.OpenRead(path));
+                        result = new MTEX(FSOFile.OpenRead(path));
                     }
                 }
                 catch (Exception)

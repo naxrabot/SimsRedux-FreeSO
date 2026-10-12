@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using FSO.Common.IO;
 namespace FSO.Content.Upgrades
 {
     public class ObjectUpgradeProvider
@@ -31,7 +32,7 @@ namespace FSO.Content.Upgrades
             FileUpgrades.Clear();
             try
             {
-                var json = File.ReadAllText("Content/upgrades.json");
+                var json = FSOFile.ReadAllText("Content/upgrades.json");
                 ActiveFile = JsonConvert.DeserializeObject<UpgradesFile>(json);
                 Editable = true;
             }
@@ -45,7 +46,7 @@ namespace FSO.Content.Upgrades
         public void SaveJSONTuning()
         {
             var result = JsonConvert.SerializeObject(ActiveFile);
-            File.WriteAllText("Content/upgrades.json", result);
+            FSOFile.WriteAllText("Content/upgrades.json", result);
         }
 
         public void LoadNetTuning(byte[] data)

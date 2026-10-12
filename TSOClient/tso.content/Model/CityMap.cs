@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Content.Model
 {
     public class CityMap
@@ -30,7 +31,7 @@ namespace FSO.Content.Model
         {
             _Directory = directory;
             string ext = "bmp";
-            if (!File.Exists(Path.Combine(directory, "elevation.bmp")))
+            if (!FSOFile.Exists(Path.Combine(directory, "elevation.bmp")))
             {
                 ext = "png"; //fso maps use png
             }

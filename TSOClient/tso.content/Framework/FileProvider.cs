@@ -6,6 +6,7 @@ using System.IO;
 using FSO.Content.Codecs;
 using FSO.Files.Utils;
 
+using FSO.Common.IO;
 namespace FSO.Content.Framework
 {
     /// <summary>
@@ -110,7 +111,7 @@ namespace FSO.Content.Framework
                 if (EntriesByName.ContainsKey(name))
                 {
                     var fullPath = UseContent? ("Content/"+EntriesByName[name]):(UseTS1?Path.Combine(ContentManager.TS1BasePath, EntriesByName[name]):ContentManager.GetPath(EntriesByName[name]));
-                    using (var reader = File.OpenRead(fullPath))
+                    using (var reader = FSOFile.OpenRead(fullPath))
                     {
                         T item;
                         if (Codec == null) item = (T)SmartCodec.Decode(reader, Path.GetExtension(fullPath));
@@ -129,7 +130,7 @@ namespace FSO.Content.Framework
             if (EntriesByName.ContainsKey(name))
             {
                 var fullPath = UseContent ? ("Content/" + EntriesByName[name]) : (UseTS1 ? Path.Combine(ContentManager.TS1BasePath, EntriesByName[name]) : ContentManager.GetPath(EntriesByName[name]));
-                using (var reader = File.OpenRead(fullPath))
+                using (var reader = FSOFile.OpenRead(fullPath))
                 {
                     T item;
                     if (Codec == null) item = (T)SmartCodec.Decode(reader, Path.GetExtension(fullPath));

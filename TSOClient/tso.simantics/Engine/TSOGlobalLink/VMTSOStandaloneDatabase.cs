@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using FSO.Common;
 
+using FSO.Common.IO;
 namespace FSO.SimAntics.Engine.TSOGlobalLink
 {
     public class VMTSOStandaloneDatabase : VMSerializable
@@ -24,7 +25,7 @@ namespace FSO.SimAntics.Engine.TSOGlobalLink
             //attempt to load first
             try
             {
-                using (var db = File.OpenRead(Path.Combine(FSOEnvironment.UserDir, "stubdb.fsodb")))
+                using (var db = FSOFile.OpenRead(Path.Combine(FSOEnvironment.UserDir, "stubdb.fsodb")))
                 {
                     Deserialize(new BinaryReader(db));
                     return;
@@ -32,7 +33,7 @@ namespace FSO.SimAntics.Engine.TSOGlobalLink
             } catch (Exception) {
                 try
                 {
-                    using (var db = File.OpenRead(Path.Combine(FSOEnvironment.UserDir, "stubdb_backup.fsodb")))
+                    using (var db = FSOFile.OpenRead(Path.Combine(FSOEnvironment.UserDir, "stubdb_backup.fsodb")))
                     {
                         Deserialize(new BinaryReader(db));
                         return;
@@ -51,10 +52,10 @@ namespace FSO.SimAntics.Engine.TSOGlobalLink
         {
             try
             {
-                File.Copy(Path.Combine(FSOEnvironment.UserDir, "stubdb.fsodb"), Path.Combine(FSOEnvironment.UserDir, "stubdb_backup.fsodb"), true);
+                FSOFile.Copy(Path.Combine(FSOEnvironment.UserDir, "stubdb.fsodb"), Path.Combine(FSOEnvironment.UserDir, "stubdb_backup.fsodb"), true);
             }
             catch (Exception) { }
-            using (var writer = new BinaryWriter(File.Open(Path.Combine(FSOEnvironment.UserDir, "stubdb.fsodb"), FileMode.Create))) SerializeInto(writer);
+            using (var writer = new BinaryWriter(FSOFile.Open(Path.Combine(FSOEnvironment.UserDir, "stubdb.fsodb"), FileMode.Create))) SerializeInto(writer);
         }
 
         public uint FindOrAddAvatar(string idString)

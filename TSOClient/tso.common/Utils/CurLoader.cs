@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Input;
 using System;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Common.Utils
 {
     public static class CurLoader
@@ -18,7 +19,7 @@ namespace FSO.Common.Utils
         {
             var cur = LoadCursor(gd, stream);
             Texture2D starTex;
-            using (var str = File.Open("Content/uigraphics/upgrade_star.png", FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var str = FSOFile.Open("Content/uigraphics/upgrade_star.png", FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 starTex = Texture2D.FromStream(gd, str);
             }

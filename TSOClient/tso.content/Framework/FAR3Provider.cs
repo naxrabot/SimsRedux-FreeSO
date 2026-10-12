@@ -8,6 +8,7 @@ using FSO.Common.Content;
 using FSO.Files.Utils;
 using FSO.Common.Utils;
 
+using FSO.Common.IO;
 namespace FSO.Content.Framework
 {
     /// <summary>
@@ -167,7 +168,7 @@ namespace FSO.Content.Framework
                     List<string> FarFiles = new List<string>();
                     foreach (var File in ContentManager.AllFiles)
                     {
-                        if (FarFilePattern.IsMatch(File.Replace('\\', '/')))
+                        if (FarFilePattern.IsMatch(FSOFile.Replace('\\', '/')))
                         {
                             FarFiles.Add(File);
                         }

@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System.Collections.Generic;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.LotView.Components.Geometry
 {
     /// <summary>
@@ -38,7 +39,7 @@ namespace FSO.LotView.Components.Geometry
             PoolTiles = new Modelled3DFloorTile[16];
             for (int i=0; i<16; i++)
             {
-                using (var file = File.Open($"Content/3D/floor/pool_hq_{i}.obj", FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var file = FSOFile.Open($"Content/3D/floor/pool_hq_{i}.obj", FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
                     var obj = new OBJ(file);
                     PoolTiles[i] = new Modelled3DFloorTile(obj, "pool.png");
@@ -48,7 +49,7 @@ namespace FSO.LotView.Components.Geometry
             CornerTiles = new Modelled3DFloorTile[4];
             for (int i = 0; i < 4; i++)
             {
-                using (var file = File.Open($"Content/3D/floor/poolcorner_hq_{i}.obj", FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var file = FSOFile.Open($"Content/3D/floor/poolcorner_hq_{i}.obj", FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
                     var obj = new OBJ(file);
                     CornerTiles[i] = new Modelled3DFloorTile(obj, "pool.png");

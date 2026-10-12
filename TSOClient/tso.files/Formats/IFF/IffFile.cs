@@ -6,6 +6,7 @@ using FSO.Files.Formats.IFF.Chunks;
 using FSO.Files.Utils;
 using FSO.Common.Utils;
 
+using FSO.Common.IO;
 namespace FSO.Files.Formats.IFF
 {
     /// <summary>
@@ -97,7 +98,7 @@ namespace FSO.Files.Formats.IFF
         /// <param name="filepath">Path to the IFF.</param>
         public IffFile(string filepath) : this()
         {
-            using (var stream = File.Open(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var stream = FSOFile.Open(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 this.Read(stream);
                 SetFilename(Path.GetFileName(filepath));
@@ -111,7 +112,7 @@ namespace FSO.Files.Formats.IFF
         public IffFile(string filepath, bool retainData) : this()
         {
             RetainChunkData = retainData;
-            using (var stream = File.Open(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var stream = FSOFile.Open(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 this.Read(stream);
                 SetFilename(Path.GetFileName(filepath));

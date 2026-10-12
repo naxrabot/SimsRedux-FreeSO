@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
+using FSO.Common.IO;
 namespace FSO.Common
 {
     public abstract class IniConfig
@@ -44,12 +45,12 @@ namespace FSO.Common
                 SetValue(pair.Key, pair.Value);
             }
 
-            if (!File.Exists(ActivePath))
+            if (!FSOFile.Exists(ActivePath))
             {
                 Save();
             } else
             {
-                var lines = File.ReadAllLines(ActivePath);
+                var lines = FSOFile.ReadAllLines(ActivePath);
                 foreach (var line in lines)
                 {
                     var clean = line.Trim();
@@ -68,7 +69,7 @@ namespace FSO.Common
         {
             try
             {
-                using (var stream = new StreamWriter(File.Open(ActivePath, FileMode.Create, FileAccess.Write)))
+                using (var stream = new StreamWriter(FSOFile.Open(ActivePath, FileMode.Create, FileAccess.Write)))
                 {
                     stream.WriteLine($"# {HeadingComment}");
                     var props = this.GetType().GetProperties();
