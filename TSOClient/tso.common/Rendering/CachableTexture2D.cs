@@ -77,7 +77,13 @@ namespace FSO.Common.Rendering
 
         protected override void Dispose(bool disposing)
         {
+#if WEB
+            // SimsRedux web: a texture cleaned up after the garbage collector already let go of it
+            // may have lost its browser-side handle; there is nothing left to free, so carry on
+            if (disposing) { try { base.Dispose(disposing); } catch (NullReferenceException) { } }
+#else
             if (disposing) base.Dispose(disposing);
+#endif
             else if (Resurrect)
             {
                 //in finalizer
