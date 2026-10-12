@@ -108,9 +108,61 @@ namespace FSO.HIT.Events
                 var aud = Content.Content.Get().Audio;
                 if (aud.MusicModes.TryGetValue((int)id, out Station))
                 {
-                    if (aud.StationPaths.ContainsKey(Station)) LoadStation(CleanPath(aud.StationPaths[Station]));
+                    if (HITVM.BaseMusicOnly) Station = BaseStation((int)id, Station);
+                    if (aud.StationPaths.ContainsKey(Station)) TryLoadStation(CleanPath(aud.StationPaths[Station]));
+                    // fall back to the normal music if the base game folder had nothing in it
+                    if (Sounds.Count == 0 && HITVM.BaseMusicOnly)
+                    {
+                        string original;
+                        if (aud.MusicModes.TryGetValue((int)id, out original) && original != Station && aud.StationPaths.ContainsKey(original))
+                        {
+                            Station = original;
+                            TryLoadStation(CleanPath(aud.StationPaths[original]));
+                        }
+                    }
+                    LogMusic((int)id);
                 }
             }
+        }
+
+        /// <summary>
+        /// SimsRedux: the base game music folder for a music mode. The neighbourhood uses the
+        /// original Nhood music (not Unleashed's NhoodUS), and every expansion pack mode uses the
+        /// base game neighbourhood, Buy or Build music.
+        /// </summary>
+        private static string BaseStation(int mode, string station)
+        {
+            switch (mode)
+            {
+                case 3: case 6: case 10: case 11: case 12: case 13: case 14: case 15: case 16:
+                    return "KNHD";
+                case 17: return "KBUI";
+                case 18: return "KBUY";
+            }
+            return station;
+        }
+
+        /// <summary>SimsRedux: LoadStation, but a missing folder just means no songs instead of a crash.</summary>
+        private void TryLoadStation(string path)
+        {
+            try { LoadStation(path); }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] No music in " + path + ": " + e.Message); }
+        }
+
+        private static HashSet<int> LoggedModes = new HashSet<int>();
+        /// <summary>SimsRedux: writes which songs each music mode uses to music_debug.log (once per mode).</summary>
+        private void LogMusic(int mode)
+        {
+            if (LoggedModes.Contains(mode)) return;
+            LoggedModes.Add(mode);
+            try
+            {
+                var lines = new List<string>();
+                lines.Add("Music mode " + mode + " -> " + Station + " (" + Sounds.Count + " songs)");
+                foreach (var s in Sounds) lines.Add("    " + s);
+                File.AppendAllLines(Path.Combine(Common.FSOEnvironment.UserDir, "music_debug.log"), lines);
+            }
+            catch { }
         }
 
         private string CleanPath(string path)

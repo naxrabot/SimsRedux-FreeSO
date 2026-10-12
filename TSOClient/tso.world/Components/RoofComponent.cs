@@ -140,6 +140,21 @@ namespace FSO.LotView.Components
                 {
                     RegenRoof((sbyte)(i + 1), device, indoorsMap);
                 }
+                else
+                {
+                    // SimsRedux: nothing indoors on this floor any more (walls removed or the lot
+                    // bulldozed), so take away the roof that was there instead of keeping it.
+                    RoofRects[i - 1] = new List<RoofRect>();
+                    var dg = Drawgroups[i - 1];
+                    if (dg != null)
+                    {
+                        dg.VertexBuffer?.Dispose();
+                        dg.IndexBuffer?.Dispose();
+                        dg.AdvVertexBuffer?.Dispose();
+                        dg.AdvIndexBuffer?.Dispose();
+                        Drawgroups[i - 1] = null;
+                    }
+                }
             }
 
             blueprint.SM64?.UpdateRoof();

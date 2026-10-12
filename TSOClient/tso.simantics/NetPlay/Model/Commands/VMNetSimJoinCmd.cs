@@ -22,6 +22,31 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Execute(VM vm)
         {
+            if (vm.TS1 && AvatarState.CustomGUID != 0)
+            {
+                // SimsRedux multiplayer: a friend visiting with their own Sim. The host has already
+                // added the Sim's character file and neighbour data to everyone's game, so it can
+                // be created like any other Sim. It appears next to the host's selected Sim.
+                if (vm.GetAvatarByPersist(ActorUID) != null) return true;
+                var group = vm.Context.CreateObjectInstance(AvatarState.CustomGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH);
+                var visitor = group?.BaseObject as VMAvatar;
+                if (visitor == null) return true;
+                var near = vm.GetObjectById(vm.GetGlobalValue(3)) ?? vm.Entities.FirstOrDefault(x => x is VMAvatar && x != visitor && x.Position != LotTilePos.OUT_OF_WORLD);
+                if (near != null) VMFindLocationFor.FindLocationFor(visitor, near, vm.Context, VMPlaceRequestFlags.Default);
+                if (visitor.Position == LotTilePos.OUT_OF_WORLD) visitor.SetPosition(LotTilePos.FromBigTile(2, 2, 1), Direction.NORTH, vm.Context);
+                visitor.PersistID = ActorUID;
+                // treat the friend's Sim like one of the household, not a visiting neighbour
+                // (visiting neighbours' own scripts make them walk off the lot and go home)
+                visitor.SetPersonData(VMPersonDataVariable.PersonType, 0);
+                if (vm.TS1State.CurrentFamily != null)
+                    visitor.SetPersonData(VMPersonDataVariable.TS1FamilyNumber, (short)vm.TS1State.CurrentFamily.ChunkID);
+                // never saved into the host's house: the Sim belongs to the friend's own game
+                visitor.SetValue(VMStackObjectVariable.MovementFlags,
+                    (short)(visitor.GetValue(VMStackObjectVariable.MovementFlags) | (short)VMMovementFlags.FSOExcludeUserSave));
+                vm.Context.ObjectQueries.RegisterAvatarPersist(visitor, ActorUID);
+                vm.SignalChatEvent(new VMChatEvent(visitor, VMChatEventType.Join, visitor.Name));
+                return true;
+            }
             if (vm.TS1)
             {
                 if (vm.TS1State.CurrentFamily == null) return true;

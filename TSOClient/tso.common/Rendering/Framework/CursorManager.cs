@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Graphics;
@@ -40,6 +41,22 @@ namespace FSO.Common.Rendering.Framework
         LiveObject4Star,
         LiveObject5Star,
         LiveObjectSpecial,
+
+        // SimsRedux: more of the original Sims 1 cursors
+        Pan,
+        Hand,
+        Help,
+        Water,
+        Hole,
+        Bulldoze,
+        SimsRaise,
+        SimsLower,
+        SimsLevel,
+        SimsDelete,
+        NoDrop,
+        MoveIn,
+        Finger,
+        LivePet,
     }
 
     /// <summary>
@@ -101,33 +118,91 @@ namespace FSO.Common.Rendering.Framework
                 { CursorType.SimsMove, "simsmove.cur" },
                 { CursorType.SimsPlace, "simsplace.cur" },
 
-                { CursorType.Hourglass, "hourglass.cur" }
+                { CursorType.Hourglass, "hourglass.cur" },
+
+                // SimsRedux
+                { CursorType.Pan, "pan.cur" },
+                { CursorType.Hand, "hand.cur" },
+                { CursorType.Help, "help.cur" },
+                { CursorType.Water, "water.cur" },
+                { CursorType.Hole, "hole.cur" },
+                { CursorType.Bulldoze, "bulldoze.cur" },
+                { CursorType.SimsRaise, "simsraise.cur" },
+                { CursorType.SimsLower, "simslower.cur" },
+                { CursorType.SimsLevel, "simslevel.cur" },
+                { CursorType.SimsDelete, "simsdelete.cur" },
+                { CursorType.NoDrop, "nodrop.cur" },
+                { CursorType.MoveIn, "movein.cur" },
+                { CursorType.Finger, "finger.cur" },
+                { CursorType.LivePet, "livepet.cur" },
             };
+        }
+
+        /// <summary>
+        /// SimsRedux: where to get a cursor file when it isn't a loose file on disk (The Sims 1
+        /// keeps its cursors inside UIGraphics.far). Gets the file name, returns its bytes or null.
+        /// </summary>
+        public static Func<string, byte[]> ExtraSource;
+
+        private Stream OpenCursor(string basepath, string curPath, string name)
+        {
+            var path = Path.Combine(basepath ?? "", curPath, name);
+            if (File.Exists(path)) return File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var bytes = ExtraSource?.Invoke(name);
+            return (bytes == null) ? null : new MemoryStream(bytes);
         }
 
         public void Init(string basepath, bool ts1)
         {
+            // SimsRedux: never crash over a missing cursor; skip it and keep the normal one
             var map = GenMap();
             var curPath = "UIGraphics/Shared/cursors/";
             if (!ts1) curPath = curPath.ToLowerInvariant();
             foreach (var item in map)
             {
-                m_CursorMap.Add(item.Key,
-                    LoadCustomCursor(
-                        Path.Combine(basepath, curPath, item.Value)
-                    ));
+                try
+                {
+                    using (var stream = OpenCursor(basepath, curPath, item.Value))
+                    {
+                        if (stream == null) continue;
+                        m_CursorMap[item.Key] = CurLoader.LoadMonoCursor(GD, stream);
+                    }
+                }
+                catch (Exception e)
+                {
+                    System.Console.WriteLine("[SimsRedux] Cursor " + item.Value + ": " + e.Message);
+                }
             }
 
-            var starMax = 5;
-            var stars = LoadUpgradeCursors(Path.Combine(basepath, curPath, "liveobjectavail.cur"), starMax);
-            for (int i=0; i<starMax; i++)
+            try
             {
-                m_CursorMap.Add(CursorType.LiveObject1Star + i, stars[i]);
+                var starMax = 5;
+                using (var stream = OpenCursor(basepath, curPath, "liveobjectavail.cur"))
+                {
+                    if (stream != null)
+                    {
+                        var stars = CurLoader.LoadUpgradeCursors(GD, stream, starMax);
+                        for (int i = 0; i < starMax; i++) m_CursorMap[CursorType.LiveObject1Star + i] = stars[i];
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                System.Console.WriteLine("[SimsRedux] Upgrade cursors: " + e.Message);
             }
 
-            m_CursorMap.Add(CursorType.IBeam, new CursorGroup(MouseCursor.IBeam));
-            //m_CursorMap.Add(CursorType.Hourglass, MouseCursor.Wait);
-            m_CursorMap.Add(CursorType.Normal, new CursorGroup(MouseCursor.Arrow));
+            m_CursorMap[CursorType.IBeam] = new CursorGroup(MouseCursor.IBeam);
+            // SimsRedux: the original Sims 1 arrow when we have it
+            CursorGroup? arrow = null;
+            try
+            {
+                using (var stream = OpenCursor(basepath, curPath, "arrow.cur"))
+                    if (stream != null) arrow = CurLoader.LoadMonoCursor(GD, stream);
+            }
+            catch { }
+            m_CursorMap[CursorType.Normal] = arrow ?? new CursorGroup(MouseCursor.Arrow);
+            CurrentCursor = (CursorType)(-1); // force the next SetCursor to apply
+            SetCursor(CursorType.Normal);
         }
 
         public CursorGroup GetCurrentGroup()

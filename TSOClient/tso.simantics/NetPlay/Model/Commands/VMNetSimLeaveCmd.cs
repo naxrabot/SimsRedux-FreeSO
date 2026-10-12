@@ -9,6 +9,18 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     {
         public override bool Execute(VM vm, VMAvatar sim)
         {
+            if (vm.TS1 && sim != null && !sim.Dead)
+            {
+                // SimsRedux multiplayer: a visiting friend left, so their Sim goes with them.
+                // (TS1 has no "leave lot" routine for a player's Sim like TSO does.)
+                // (only network players ever leave; the host's own id, 65537, never does)
+                if (sim.PersistID == ActorUID && sim.PersistID != 65537)
+                {
+                    vm.Context.ObjectQueries.RemoveAvatarPersist(sim.PersistID);
+                    sim.Delete(true, vm.Context);
+                }
+                return true;
+            }
             if (sim != null && !sim.Dead)
             {
                 // the user has left the lot with their sim still on it...

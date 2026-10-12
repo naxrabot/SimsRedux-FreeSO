@@ -40,6 +40,13 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            // SimsRedux multiplayer: friends can't take over other Sims, and nobody can take a Sim
+            // someone else is controlling.
+            if (FromNet) return false;
+            var target = vm.GetObjectById(TargetID);
+            // (online players get ids from 100001 up; family Sims can carry other leftover ids from
+            //  the save, and those must stay selectable or the player can't pick their Sim at all)
+            if (target != null && target.PersistID >= 100001 && target.PersistID != ActorUID) return false;
             return vm.TS1;
         }
 

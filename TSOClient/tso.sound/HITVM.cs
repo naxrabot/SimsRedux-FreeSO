@@ -13,6 +13,25 @@ namespace FSO.HIT
     public class HITVM
     {
         public static bool DISABLE_SOUND = false;
+
+        /// <summary>
+        /// SimsRedux: only play the original (base game) Sims 1 music for the neighbourhood,
+        /// Buy and Build modes. Expansion pack music (Downtown, Vacation, Studio Town, Magic Town,
+        /// Unleashed...) is swapped for the base game music. Radios and stereos are not affected.
+        /// </summary>
+        public static bool BaseMusicOnly = true;
+
+        private static readonly Dictionary<string, string> BaseMusicSwaps = new Dictionary<string, string>()
+        {
+            { "station_dtnhood", "bkground_nhood1" },
+            { "station_vacation", "bkground_nhood1" },
+            { "station_superstar", "bkground_nhood1" },
+            { "music_superstar_transition", "bkground_nhood1" },
+            { "music_magictown", "bkground_nhood1" },
+            { "music_magictown_credits", "bkground_nhood1" },
+            { "music_magictown_build", "bkground_build" },
+            { "music_magictown_buy", "bkground_buy1" },
+        };
         private static HITVM INSTANCE;
 
         public static HITVM Get()
@@ -160,6 +179,8 @@ namespace FSO.HIT
         {
             if (DISABLE_SOUND) return null;
             evt = evt.ToLowerInvariant();
+            string baseEvt;
+            if (BaseMusicOnly && BaseMusicSwaps.TryGetValue(evt, out baseEvt)) evt = baseEvt;
             if (evt.StartsWith("nc_")) NightclubMode = true;
             HITThread InterruptBlocker = null; //the thread we have to wait for to finish before we begin.
             if (ActiveEvents.ContainsKey(evt))

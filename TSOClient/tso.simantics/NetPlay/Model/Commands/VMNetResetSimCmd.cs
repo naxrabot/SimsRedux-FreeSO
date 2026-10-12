@@ -29,6 +29,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            // SimsRedux online: a friend can only reset their own Sim
+            if (FromNet && (caller == null || caller.ObjectID != ObjectID)) return false;
             return vm.GetObjectById(ObjectID) is VMAvatar;
         }
 

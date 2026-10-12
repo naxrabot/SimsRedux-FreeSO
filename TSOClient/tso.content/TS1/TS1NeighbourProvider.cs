@@ -94,6 +94,19 @@ namespace FSO.Content.TS1
                 }
             }
 
+            LoadFolder(userPath);
+        }
+
+        /// <summary>
+        /// SimsRedux: loads the neighbourhood (families, neighbours, zoning, Sims) from a folder.
+        /// Normally the player's own UserData; while visiting a friend online it's a copy of the
+        /// host's neighbourhood, so every player's game reads the same Sims and families.
+        /// </summary>
+        public void LoadFolder(string userPath)
+        {
+            DirtyAvatars.Clear();
+            ZoningDictionary.Clear();
+            FamilyForHouse.Clear();
             UserPath = userPath;
 
             MainResource = new IffFile(Path.Combine(UserPath, "Neighborhood.iff"));
@@ -148,9 +161,10 @@ namespace FSO.Content.TS1
         public void AddMissingNeighbors()
         {
             var objs = (TS1ObjectProvider)ContentManager.WorldObjects;
-            var missing = objs.PersonGUIDs.Where(x => !Neighbors.Entries.Any(y => y.GUID == x)).Select(x => objs.Get(x));
+            var missing = objs.PersonGUIDs.Where(x => !Neighbors.Entries.Any(y => y.GUID == x)).Select(x => objs.Get(x)).ToList();
             foreach (var obj in missing)
             {
+                if (obj == null) continue; // SimsRedux: a Sim whose character file isn't loaded (e.g. a friend's, after visiting online)
                 var id = Neighbors.GetFreeID();
                 Neighbors.AddNeighbor(new Neighbour()
                 {
@@ -170,10 +184,10 @@ namespace FSO.Content.TS1
             if (objs.Entries == null) return;
             if (clearLast)
             {
-                foreach (var obj in objs.Entries.Where(x => x.Value.Source == GameObjectSource.User))
+                foreach (var obj in objs.Entries.Where(x => x.Value.Source == GameObjectSource.User).ToList())
                 {
                     objs.RemoveObject((uint)obj.Key);
-                    objs.PersonGUIDs.Add((uint)obj.Key);
+                    objs.PersonGUIDs.Remove((uint)obj.Key); // SimsRedux: was Add, which left unloaded Sims in the list
                 }
             }
 
@@ -191,27 +205,41 @@ namespace FSO.Content.TS1
                     NextSim = userID + 1;
                 }
 
-                var file = new IffFile(filename);
-                file.MarkThrowaway();
+                RegisterCharacterFile(filename);
+            }
+        }
 
-                var objects = file.List<OBJD>();
-                if (objects != null)
+        /// <summary>
+        /// SimsRedux: makes the Sims in one character file (UserXXXXX.iff) available to the game.
+        /// Returns the GUIDs it found. Replaces any Sim already loaded with the same GUID.
+        /// </summary>
+        public List<uint> RegisterCharacterFile(string filename)
+        {
+            var found = new List<uint>();
+            var objs = (TS1ObjectProvider)ContentManager.WorldObjects;
+            var file = new IffFile(filename);
+            file.MarkThrowaway();
+
+            var objects = file.List<OBJD>();
+            if (objects != null)
+            {
+                foreach (var obj in objects)
                 {
-                    foreach (var obj in objects)
+                    if (objs.Entries.ContainsKey(obj.GUID)) objs.RemoveObject(obj.GUID);
+                    objs.Entries[obj.GUID] = new GameObjectReference(objs)
                     {
-                        objs.Entries[obj.GUID] = new GameObjectReference(objs)
-                        {
-                            FileName = filename,
-                            ID = obj.GUID,
-                            Name = obj.ChunkLabel,
-                            Source = GameObjectSource.User,
-                            Group = (short)obj.MasterID,
-                            SubIndex = obj.SubIndex
-                        };
-                        if (obj.ObjectType == OBJDType.Person) objs.PersonGUIDs.Add(obj.GUID);
-                    }
+                        FileName = filename,
+                        ID = obj.GUID,
+                        Name = obj.ChunkLabel,
+                        Source = GameObjectSource.User,
+                        Group = (short)obj.MasterID,
+                        SubIndex = obj.SubIndex
+                    };
+                    if (obj.ObjectType == OBJDType.Person) objs.PersonGUIDs.Add(obj.GUID);
+                    found.Add(obj.GUID);
                 }
             }
+            return found;
         }
 
         public void SaveNewNeighbour(GameObject obj)
@@ -357,6 +385,55 @@ namespace FSO.Content.TS1
                 MainResource.Write(stream);
 
             return true;
+        }
+
+        /// <summary>
+        /// SimsRedux: is this lot a community lot? (Lots missing from LotZoning.iff count as
+        /// community lots, except Downtown's, same as the rest of the game.)
+        /// </summary>
+        public bool IsCommunity(short houseID)
+        {
+            short zone;
+            if (!ZoningDictionary.TryGetValue(houseID, out zone))
+                zone = (short)((houseID >= 81 && houseID <= 89) ? 2 : 1);
+            return zone > 0;
+        }
+
+        /// <summary>
+        /// SimsRedux: rezones a lot (residential or community) and saves LotZoning.iff.
+        /// </summary>
+        public bool SetZone(short houseID, bool community)
+        {
+            ZoningDictionary[houseID] = (short)(community ? 1 : 0);
+            try
+            {
+                var path = Path.Combine(UserPath, "LotZoning.iff");
+                var iff = new IffFile(path);
+                var str = iff.Get<STR>(1);
+                if (str == null) return false;
+                var entry = houseID.ToString() + (community ? ", community" : ", residential");
+                bool found = false;
+                for (int i = 0; i < str.Length; i++)
+                {
+                    var split = str.GetString(i).Split(',');
+                    short id;
+                    if (split.Length > 0 && short.TryParse(split[0].Trim(), out id) && id == houseID)
+                    {
+                        str.SetString(i, entry);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) str.InsertString(str.Length, new STRItem(entry));
+                using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                    iff.Write(stream);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[SimsRedux] Couldn't save the lot zoning: " + e.Message);
+                return false;
+            }
         }
 
         public bool SaveHouse(int houseID, IffFile file)
