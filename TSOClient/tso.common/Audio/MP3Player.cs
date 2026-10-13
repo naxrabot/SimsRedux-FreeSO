@@ -95,6 +95,8 @@ namespace FSO.Common.Audio
         /// Starts decoding the MP3 file and prepares the DynamicSoundEffectInstance.
         /// Runs on a background task and manages buffers asynchronously.
         /// </summary>
+        private int _loadRetries;
+
         private void Start()
         {
             try
@@ -102,7 +104,15 @@ namespace FSO.Common.Audio
                 _cts = new CancellationTokenSource();
                 var token = _cts.Token;
 
-                _stream = new MP3Stream(FSOFile.Open(_path, FileMode.Open, FileAccess.Read, FileShare.Read));
+                Stream file;
+                try { file = FSOFile.Open(_path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+                catch (IOException e) when (e.Message.Contains("still loading") && _loadRetries++ < 120)
+                {
+                    // SimsRedux web: music arrives in the background; try again in a moment
+                    Task.Delay(1000).ContinueWith(t => { if (!_disposed) Start(); });
+                    return;
+                }
+                _stream = new MP3Stream(file);
                 _stream.DecodeFrames(1);
                 var freq = _stream.Frequency;
 
@@ -251,7 +261,7 @@ namespace FSO.Common.Audio
             }
 
             while (_bufferCount.CurrentCount > 0) _bufferCount.Wait(0);
-            try { _decoderTask?.Wait(50); } catch { }
+            if (!OperatingSystem.IsBrowser()) { try { _decoderTask?.Wait(50); } catch { } }
 
             GC.SuppressFinalize(this);
         }
@@ -287,7 +297,8 @@ namespace FSO.Common.Audio
         {
             if (_endOfStream && _bufferCount.CurrentCount == 0) return;
 
-            if (!_bufferCount.Wait(50))
+            // SimsRedux: browsers can't block the game's only thread, so don't wait there
+            if (!_bufferCount.Wait(OperatingSystem.IsBrowser() ? 0 : 50))
             {
                 _inst?.SubmitBuffer(_blank, 0, _blank.Length);
                 return;

@@ -378,6 +378,8 @@ namespace FSO.SimAntics.Engine
 
                     var simExcept = new VMSimanticsException(e.Message + StackTraceSimplify(e.StackTrace.Split('\n').FirstOrDefault(x => x.Contains(".cs")) ?? ""), context);
                     string exceptionStr = "A SimAntics Exception has occurred, and has been suppressed: \r\n\r\n" + simExcept.ToString() + "\r\n\r\nThe object will be reset. Please report this!";
+                    // SimsRedux web: show where in the code it happened, so one screenshot is enough
+                    if (OperatingSystem.IsBrowser()) exceptionStr += "\r\n\r\n" + string.Join("\r\n", (e.StackTrace ?? "").Split('\n').Take(4).Select(l => l.Trim().Replace("at FSO.", "").Replace("at Simitone.", "")));
                     VMDialogInfo info = new VMDialogInfo
                     {
                         Caller = null,
