@@ -730,19 +730,9 @@ namespace FSO.LotView.LMap
             return mat;
         }
 
-        public BlendState MaxBlend = new BlendState()
-        {
-            AlphaBlendFunction = BlendFunction.Max,
-            ColorBlendFunction = BlendFunction.Max,
-            ColorDestinationBlend = Blend.One,
-        };
+        public BlendState MaxBlend = FSO.Common.Utils.BlendStates.Max();
 
-        public BlendState MinBlend = new BlendState()
-        {
-            AlphaBlendFunction = BlendFunction.Min,
-            ColorBlendFunction = BlendFunction.Min,
-            ColorDestinationBlend = Blend.One,
-        };
+        public BlendState MinBlend = FSO.Common.Utils.BlendStates.Min();
 
         public BlendState AddBlendRed = new BlendState()
         {
@@ -752,21 +742,9 @@ namespace FSO.LotView.LMap
             ColorWriteChannels = ColorWriteChannels.Red | ColorWriteChannels.Alpha
         };
 
-        public BlendState MaxBlendRed = new BlendState()
-        {
-            AlphaBlendFunction = BlendFunction.Max,
-            ColorBlendFunction = BlendFunction.Max,
-            ColorDestinationBlend = Blend.One,
-            ColorWriteChannels = ColorWriteChannels.Red | ColorWriteChannels.Alpha
-        };
+        public BlendState MaxBlendRed = FSO.Common.Utils.BlendStates.Max(ColorWriteChannels.Red | ColorWriteChannels.Alpha);
 
-        public BlendState MaxBlendGreen = new BlendState()
-        {
-            AlphaBlendFunction = BlendFunction.Max,
-            ColorBlendFunction = BlendFunction.Max,
-            ColorDestinationBlend = Blend.One,
-            ColorWriteChannels = ColorWriteChannels.Green | ColorWriteChannels.Alpha
-        };
+        public BlendState MaxBlendGreen = FSO.Common.Utils.BlendStates.Max(ColorWriteChannels.Green | ColorWriteChannels.Alpha);
 
         public BlendState MulBlend = new BlendState()
         {

@@ -110,6 +110,12 @@ namespace FSO.HIT
 
         public bool NightclubMode;
 
+        private static int SoundFailures;
+        private static void SoundFailed(Exception e)
+        {
+            if (SoundFailures++ < 5) Console.WriteLine("[SimsRedux] a sound failed and was skipped: " + e.Message);
+        }
+
         public void Tick()
         {
             if (NightclubMode)
@@ -130,9 +136,13 @@ namespace FSO.HIT
 
             for (int i = 0; i < Sounds.Count; i++)
             {
-                if (!Sounds[i].Tick())
+                bool alive;
+                // SimsRedux: one broken sound (e.g. the browser's audio not ready yet) is dropped, not a crash
+                try { alive = Sounds[i].Tick(); }
+                catch (Exception e) { SoundFailed(e); alive = false; }
+                if (!alive)
                 {
-                    Sounds[i].Dispose();
+                    try { Sounds[i].Dispose(); } catch (Exception e) { SoundFailed(e); }
                     Sounds.RemoveAt(i--);
                 }
             }
@@ -140,7 +150,7 @@ namespace FSO.HIT
             foreach (var item in PlayQueue)
             {
                 item.started = true;
-                item.instance.Play();
+                try { item.instance.Play(); } catch (Exception e) { SoundFailed(e); }
             }
             if (PlayQueue.Count > 0) PlayQueue.Clear();
 

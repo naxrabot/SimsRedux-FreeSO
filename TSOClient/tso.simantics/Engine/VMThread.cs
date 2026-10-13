@@ -369,6 +369,7 @@ namespace FSO.SimAntics.Engine
 #endif
 
                 if (e is ThreadAbortException) throw e;
+                Console.WriteLine("[SimsRedux] SimAntics exception in " + Entity?.ToString() + ": " + e); // full details for the console
                 if (Stack.Count == 0) return;
                 var context = Stack[Stack.Count - 1];
                 bool Delete = ((Entity is VMGameObject) && (DialogCooldown > 30 * 20 - 10));
