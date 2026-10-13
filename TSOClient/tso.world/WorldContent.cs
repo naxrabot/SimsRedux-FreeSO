@@ -33,7 +33,7 @@ namespace FSO.LotView
             SSAA = ContentManager.Load<Effect>("Effects/SSAA");
             SpriteEffect = new Effects.SpriteEffect(ContentManager.Load<Effect>("Effects/SpriteEffects" + EffectSuffix));
             ParticleEffect = new LightMappedEffect(ContentManager.Load<Effect>("Effects/ParticleShader"));
-            AvatarEffect = new LightMappedEffect(ContentManager.Load<Effect>("Effects/Vitaboy" + EffectSuffix));
+            AvatarEffect = new LightMappedEffect(ContentManager.Load<Effect>("Effects/Vitaboy" + (SimpleAvatars ? "iOS" : EffectSuffix)));
 
             Files.RC.Utils.DepthTreatment.SpriteEffect = SpriteEffect;
 
@@ -71,6 +71,8 @@ namespace FSO.LotView
         public static LightMappedEffect ParticleEffect;
 
         public static LightMappedEffect AvatarEffect;
+        /// <summary>SimsRedux: draw Sims with the simpler (phone) shader even with full graphics - the web build needs this.</summary>
+        public static bool SimpleAvatars;
 
         private static VertexBuffer _TextureVerts;
         public static VertexBuffer GetTextureVerts(GraphicsDevice gd) 
