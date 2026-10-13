@@ -297,10 +297,15 @@ namespace FSO.SimAntics.NetPlay.Drivers
                 var caller = vm.GetAvatarByPersist(cmdQueue[i].Command.ActorUID);
                 try
                 {
-                    if (!cmdQueue[i].Command.Verify(vm, caller)) cmdQueue.RemoveAt(i--);
+                    if (!cmdQueue[i].Command.Verify(vm, caller))
+                    {
+                        Note(cmdQueue[i].Command.GetType().Name + " refused by Verify" + (caller == null ? " (no Sim for uid " + cmdQueue[i].Command.ActorUID + ")" : ""));
+                        cmdQueue.RemoveAt(i--);
+                    }
                 }
-                catch
+                catch (Exception e)
                 {
+                    Note(cmdQueue[i].Command.GetType().Name + " Verify crashed: " + e.Message);
                     //verification of a command threw an exception - remove. (and perhaps set a warning on sending client
                     cmdQueue.RemoveAt(i--);
                 }

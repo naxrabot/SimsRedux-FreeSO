@@ -8,6 +8,17 @@ namespace FSO.SimAntics.NetPlay
 {
     public abstract class VMNetDriver
     {
+        /// <summary>SimsRedux: the last few commands and what happened to them (shown by the web build's ?dbg=vm box).</summary>
+        public static readonly System.Collections.Generic.List<string> DebugLog = new System.Collections.Generic.List<string>();
+        public static void Note(string text)
+        {
+            lock (DebugLog)
+            {
+                DebugLog.Add(text);
+                if (DebugLog.Count > 12) DebugLog.RemoveAt(0);
+            }
+        }
+
         public IVMTSOGlobalLink GlobalLink;
         public abstract void SendCommand(VMNetCommandBodyAbstract cmd);
         public abstract void SendDirectCommand(uint pid, VMNetCommandBodyAbstract cmd);
@@ -75,8 +86,9 @@ namespace FSO.SimAntics.NetPlay
 
                 var caller = vm.GetAvatarByPersist(cmd.Command.ActorUID);
                 Executing = cmd;
-                cmd.Command.Execute(vm, caller);
+                var ok = cmd.Command.Execute(vm, caller);
                 Executing = null;
+                if (!(cmd.Command is VMStateSyncCmd)) Note(cmd.Command.GetType().Name.Replace("VMNet", "").Replace("Cmd", "") + (ok ? " done" : " FAILED") + (caller == null ? " (no Sim for uid " + cmd.Command.ActorUID + ")" : ""));
                 if (vm.FSOVAsyncLoading)
                 {
                     tick.Commands.Remove(cmd); //don't worry about modifying an enumerated collection - we are exiting anyways.
