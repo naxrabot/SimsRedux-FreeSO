@@ -30,7 +30,7 @@ namespace FSO.SimAntics.Engine.TSOTransaction
                 var obj2 = vm.GetObjectByPersist(uid2);
                 var finalAmount = amount;
 
-                new System.Threading.Thread(() =>
+                FSO.Common.Utils.FSOThreads.Start(() =>
                 {
                     //update client side budgets for avatars involved.
                     vm.SendCommand(new VMNetAsyncResponseCmd(thread, new VMTransferFundsState
@@ -47,7 +47,7 @@ namespace FSO.SimAntics.Engine.TSOTransaction
                     callback(result, finalAmount,
                         uid1, (obj1 == null) ? 0 : GetBudgetForFamily(vm, obj1),
                         uid2, (obj2 == null) ? 0 : GetBudgetForFamily(vm, obj2));
-                }).Start();
+                });
             }
         }
 
@@ -208,10 +208,10 @@ namespace FSO.SimAntics.Engine.TSOTransaction
 
         public void LoadPluginPersist(VM vm, uint objectPID, uint pluginID, VMAsyncPluginLoadCallback callback)
         {
-            new System.Threading.Thread(() =>
+            FSO.Common.Utils.FSOThreads.Start(() =>
             {
                 callback(null);
-            }).Start();
+            });
         }
 
         public void SavePluginPersist(VM vm, uint objectPID, uint pluginID, byte[] data)

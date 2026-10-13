@@ -32,7 +32,7 @@ namespace FSO.SimAntics.Engine.TSOTransaction
                 var obj2 = vm.GetObjectByPersist(uid2);
                 var finalAmount = amount;
 
-                new System.Threading.Thread(() =>
+                FSO.Common.Utils.FSOThreads.Start(() =>
                 {
                     //update client side budgets for avatars involved.
                     vm.SendCommand(new VMNetAsyncResponseCmd(thread, new VMTransferFundsState
@@ -49,7 +49,7 @@ namespace FSO.SimAntics.Engine.TSOTransaction
                     callback(result, finalAmount,
                         uid1, (obj1 == null) ? 0 : obj1.TSOState.Budget.Value,
                         uid2, (obj2 == null) ? 0 : obj2.TSOState.Budget.Value);
-                }).Start();
+                });
             }
         }
 
@@ -183,11 +183,11 @@ namespace FSO.SimAntics.Engine.TSOTransaction
             else if (vm.TSOState.Roommates.Contains(uid)) permissions = VMTSOAvatarPermissions.Roommate;
 
             //TODO!!!!!! This is a HACK to make sure SimJoin commands get sent AFTER the state sync.
-            new System.Threading.Thread(() =>
+            FSO.Common.Utils.FSOThreads.Start(() =>
             {
                 System.Threading.Thread.Sleep(100);
                 callback(uid, permissions);
-            }).Start();
+            });
         }
 
         public void LoadPluginPersist(VM vm, uint objectPID, uint pluginID, VMAsyncPluginLoadCallback callback)
@@ -195,11 +195,11 @@ namespace FSO.SimAntics.Engine.TSOTransaction
             if (Database == null) callback(null);
             var dat = Database.LoadPluginPersist(objectPID, pluginID);
 
-            new System.Threading.Thread(() =>
+            FSO.Common.Utils.FSOThreads.Start(() =>
             {
                 System.Threading.Thread.Sleep(100);
                 callback(dat);
-            }).Start();
+            });
         }
 
         public void SavePluginPersist(VM vm, uint objectPID, uint pluginID, byte[] data)
@@ -357,11 +357,11 @@ namespace FSO.SimAntics.Engine.TSOTransaction
         public void GetObjectGlobalCooldown(VM vm, uint objectGUID, uint avatarID, uint userID, TimeSpan cooldownLength, bool considerAccount, bool considerCategory, VMAsyncGetObjectCooldownCallback callback)
         {
             var time = vm.Context.Clock.UTCNow;
-            new System.Threading.Thread(() =>
+            FSO.Common.Utils.FSOThreads.Start(() =>
             {
                 System.Threading.Thread.Sleep(100);
                 callback(false, time + new TimeSpan(0, 3, 25));
-            }).Start();
+            });
         }
 
         public void GetAccountIDFromAvatar(uint avatarID, VMAsyncAccountUserIDFromAvatarCallback callback)

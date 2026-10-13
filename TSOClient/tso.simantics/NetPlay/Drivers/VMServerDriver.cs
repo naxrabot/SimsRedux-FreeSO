@@ -612,10 +612,10 @@ namespace FSO.SimAntics.NetPlay.Drivers
                 }
             }
             foreach (var client in badClients) {
-                new Thread(() =>
+                FSO.Common.Utils.FSOThreads.Start(() =>
                 {
                     DropClient(client);
-                }).Start();
+                });
             }
             SandboxBans.Add(cleanIP);
         }
