@@ -14,6 +14,9 @@ using FSO.SimAntics.Marshals.Threads;
 using FSO.SimAntics.Model.TSOPlatform;
 using FSO.SimAntics.NetPlay.EODs.Model;
 using System.Threading;
+using FSO.SimAntics.Engine.Primitives;
+using FSO.SimAntics.Engine.Utils;
+using FSO.SimAntics.Engine.Scopes;
 
 namespace FSO.SimAntics.Engine
 {
