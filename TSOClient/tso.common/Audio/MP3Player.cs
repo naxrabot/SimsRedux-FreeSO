@@ -113,6 +113,7 @@ namespace FSO.Common.Audio
                     return;
                 }
                 _stream = new MP3Stream(file);
+                Console.WriteLine("[SimsRedux] music: playing " + System.IO.Path.GetFileName(_path));
                 _stream.DecodeFrames(1);
                 var freq = _stream.Frequency;
 
@@ -177,8 +178,9 @@ namespace FSO.Common.Audio
                     catch (OperationCanceledException) { }
                 }, token);
             }
-            catch
+            catch (Exception e)
             {
+                Console.WriteLine("[SimsRedux] music: couldn't play " + _path + ": " + e.Message);
                 _endOfStream = true;
             }
         }
