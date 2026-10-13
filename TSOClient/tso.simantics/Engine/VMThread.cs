@@ -380,6 +380,7 @@ namespace FSO.SimAntics.Engine
                     string exceptionStr = "A SimAntics Exception has occurred, and has been suppressed: \r\n\r\n" + simExcept.ToString() + "\r\n\r\nThe object will be reset. Please report this!";
                     // SimsRedux web: show where in the code it happened, so one screenshot is enough
                     if (OperatingSystem.IsBrowser()) exceptionStr += "\r\n\r\n" + string.Join("\r\n", (e.StackTrace ?? "").Split('\n').Take(4).Select(l => l.Trim().Replace("at FSO.", "").Replace("at Simitone.", "")));
+                    exceptionStr += DescribeFailure(context); // SimsRedux: which values the failing line was reading
                     VMDialogInfo info = new VMDialogInfo
                     {
                         Caller = null,
@@ -403,6 +404,41 @@ namespace FSO.SimAntics.Engine
                 }
             }
 #endif
+        }
+
+        /// <summary>
+        /// SimsRedux: the browser's fast build can't say where in the C# code an error happened, so
+        /// for an expression line this works out which side failed and what it was reading
+        /// (e.g. "left: StackObjectAttributes[3] - FAILED: object not found").
+        /// </summary>
+        private string DescribeFailure(VMStackFrame context)
+        {
+            try
+            {
+                var instr = context.GetCurrentInstruction();
+                if (instr?.Operand is VMExpressionOperand op)
+                {
+                    string Side(VMVariableScope scope, short data)
+                    {
+                        try { return scope + "[" + data + "] = " + VMMemory.GetVariable(context, scope, data); }
+                        catch (Exception ex) { return scope + "[" + data + "] FAILED (" + ex.GetType().Name + ")"; }
+                    }
+                    var extra = "";
+                    if (op.LhsOwner == VMVariableScope.StackObjectAttributes || op.RhsOwner == VMVariableScope.StackObjectAttributes
+                        || op.LhsOwner.ToString().StartsWith("StackObject") || op.RhsOwner.ToString().StartsWith("StackObject"))
+                        extra = "\r\nstack object: " + (context.StackObject?.ToString() ?? "NONE (id " + context.StackObjectID + ")");
+                    if (op.LhsOwner == VMVariableScope.JobData || op.RhsOwner == VMVariableScope.JobData)
+                        extra += "\r\njob " + TempRegisters[0] + " level " + TempRegisters[1];
+                    return "\r\n\r\nline: " + op.LhsOwner + " " + op.Operator + " " + op.RhsOwner
+                        + "\r\nleft: " + Side(op.LhsOwner, op.LhsData)
+                        + "\r\nright: " + Side(op.RhsOwner, op.RhsData) + extra;
+                }
+                return instr == null ? "" : "\r\n\r\nprimitive " + instr.Opcode + " (" + instr.Operand?.GetType().Name + ")";
+            }
+            catch (Exception)
+            {
+                return "";
+            }
         }
 
         private string StackTraceSimplify(string st)
