@@ -495,7 +495,7 @@ namespace FSO.SimAntics
                 var com = commands[i];
                 var avaEnt = Context.VM.Entities.FirstOrDefault(x => x.PersistID == com.CallerUID);
                 if ((avaEnt == null || avaEnt is VMGameObject) && !transient && !Context.VM.TS1) return 0; //we need an avatar to run a command from net
-                var avatar = (transient)? null : (VMAvatar)avaEnt;
+                var avatar = (transient)? null : (avaEnt as VMAvatar); // SimsRedux: in TS1 the caller can be an object (or nobody)
                 lastAvatar = avatar;
                 var styleInd = -1;
                 var walls = Content.Content.Get().WorldWalls;

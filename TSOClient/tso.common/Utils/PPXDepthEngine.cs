@@ -1,4 +1,5 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace FSO.Common.Utils
@@ -40,6 +41,7 @@ namespace FSO.Common.Utils
 
         public static void SetPPXTarget(RenderTarget2D color, RenderTarget2D depth, bool clear, Color clearColor)
         {
+            color = Live(color); depth = Live(depth); // SimsRedux: never draw into a thrown-away target
             if (color == null && depth == null && Backbuffer != null) color = Backbuffer;
             ActiveColor = color;
             if (color == Backbuffer && depth == null && BackbufferDepth != null) depth = BackbufferDepth;
@@ -47,7 +49,7 @@ namespace FSO.Common.Utils
 
             //if (color != null && depth != null) depth.InheritDepthStencil(color);
             var gd = GD;
-            gd.SetRenderTarget(color); //can have null subresource when switching to 2d with supersampling enabled, which is odd since the texture is not disposed
+            SetTarget(gd, color); //can have null subresource when switching to 2d with supersampling enabled, which is odd since the texture is not disposed
             if (clear)
             {
                 StencilValue = 1;
@@ -55,7 +57,7 @@ namespace FSO.Common.Utils
                 gd.Clear(clearColor);// FSO.Common.Rendering.Framework.GameScreen.ClearColor);
                 if (depth != null)
                 {
-                    gd.SetRenderTarget(depth);
+                    SetTarget(gd, depth);
                     gd.Clear(Color.White);
                 }
             }
@@ -63,6 +65,27 @@ namespace FSO.Common.Utils
             {
                 if (depth != null) gd.SetRenderTargets(color, depth);
             }
+        }
+
+        /// <summary>SimsRedux: switch render target; in the browser a target that lost its picture falls back to the screen instead of crashing.</summary>
+        private static void SetTarget(GraphicsDevice gd, RenderTarget2D rt)
+        {
+#if WEB
+            try { gd.SetRenderTarget(Live(rt)); }
+            catch (NullReferenceException)
+            {
+                Console.WriteLine("[SimsRedux] graphics: a drawing target was lost; drawing to the screen this time");
+                gd.SetRenderTarget(null);
+            }
+#else
+            gd.SetRenderTarget(rt);
+#endif
+        }
+
+        /// <summary>SimsRedux: a render target that has been disposed (e.g. after the screen was resized) counts as none.</summary>
+        private static RenderTarget2D Live(RenderTarget2D rt)
+        {
+            return (rt != null && rt.IsDisposed) ? null : rt;
         }
 
         public static RenderTarget2D GetBackbuffer()
@@ -74,14 +97,14 @@ namespace FSO.Common.Utils
         public static void RenderPPXDepth(Effect effect, bool forceDepth,
             RenderPPXProcedureDelegate proc)
         {
-            var color = ActiveColor;
-            var depth = ActiveDepth;
+            var color = Live(ActiveColor);
+            var depth = Live(ActiveDepth);
             var gd = GD;
             if (FSOEnvironment.SoftwareDepth && depth != null)
             {
                 var oldDS = gd.DepthStencilState;
                 //completely special case.
-                gd.SetRenderTarget(color);
+                SetTarget(gd, color);
                 gd.DepthStencilState = new DepthStencilState
                 {
                     StencilEnable = true,
@@ -109,7 +132,7 @@ namespace FSO.Common.Utils
                 //unbind depth map since we are writing to it
                 effect.Parameters["depthMap"]?.SetValue((Texture2D)null);
                 effect.Parameters["depthOutMode"]?.SetValue(true);
-                gd.SetRenderTarget(depth);
+                SetTarget(gd, depth);
                 gd.DepthStencilState = new DepthStencilState
                 {
                     StencilEnable = true,
@@ -123,16 +146,16 @@ namespace FSO.Common.Utils
                 gd.DepthStencilState = oldDS;
                 StencilValue++; //can increment up to 254 times. Assume we're not going to be rendering that much between clears.
                 if (StencilValue > 255) StencilValue = 1;
-                gd.SetRenderTarget(color);
+                SetTarget(gd, color);
                 effect.Parameters["depthOutMode"]?.SetValue(false);
             }
             else if (!FSOEnvironment.UseMRT && depth != null)
             {
                 //draw color then draw depth
-                gd.SetRenderTarget(color);
+                SetTarget(gd, color);
                 proc(false);
                 effect.Parameters["depthOutMode"]?.SetValue(true);
-                gd.SetRenderTarget(depth);
+                SetTarget(gd, depth);
                 proc(true);
                 effect.Parameters["depthOutMode"]?.SetValue(false);
             }
