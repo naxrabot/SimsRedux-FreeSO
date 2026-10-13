@@ -197,7 +197,7 @@ namespace FSO.Content.TS1
             var files = FSODirectory.EnumerateFiles(path);
             foreach (var filename in files)
             {
-                if (Path.GetExtension(filename) != ".iff") return;
+                if (!string.Equals(Path.GetExtension(filename), ".iff", StringComparison.OrdinalIgnoreCase)) continue; // SimsRedux: skip other files (was: stop reading the folder)
 
                 int userID;
                 var name = Path.GetFileName(filename);
