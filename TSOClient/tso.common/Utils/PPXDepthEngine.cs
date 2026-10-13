@@ -158,6 +158,9 @@ namespace FSO.Common.Utils
                 SetTarget(gd, depth);
                 proc(true);
                 effect.Parameters["depthOutMode"]?.SetValue(false);
+                // SimsRedux: go back to the colour target - otherwise everything drawn next (Sims, moving objects)
+                // lands on the hidden depth picture. The software-depth path above already does this.
+                SetTarget(gd, color);
             }
             else
             {
