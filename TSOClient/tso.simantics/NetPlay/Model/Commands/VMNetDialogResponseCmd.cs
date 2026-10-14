@@ -29,6 +29,14 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             return true;
         }
 
+        public override bool Verify(VM vm, VMAvatar caller)
+        {
+            // SimsRedux online: a visiting player only answers questions about their own Sim -
+            // other Sims' questions (the lot's family, NPCs) are answered by the lot itself
+            if (FromNet && vm.TS1 && (caller == null || vm.GlobalBlockingDialog != caller)) return false;
+            return true;
+        }
+
         #region VMSerializable Members
         public override void SerializeInto(BinaryWriter writer)
         {
