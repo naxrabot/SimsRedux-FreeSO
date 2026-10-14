@@ -925,7 +925,10 @@ namespace FSO.SimAntics
             GlobalState = input.GlobalState;
             if (TS1)
             {
-                ((VMTS1LotState)input.PlatformState).CurrentFamily = TS1State.CurrentFamily;
+                // keep the family object this game already has (single player reloads) - but a lot that
+                // arrived over the network brings its own family (money and all), so keep that one
+                if (TS1State?.CurrentFamily != null || ((VMTS1LotState)input.PlatformState).CurrentFamily == null)
+                    ((VMTS1LotState)input.PlatformState).CurrentFamily = TS1State?.CurrentFamily;
             }
             var lastPlatformState = PlatformState;
             PlatformState = input.PlatformState;
