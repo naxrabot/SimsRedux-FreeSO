@@ -18,6 +18,12 @@ namespace FSO.LotView.Components
         private JunctionFlags[] UpJunctions;
         private JunctionFlags[] DownJunctions;
         private WallCuts[] Cuts;
+        /// <summary>
+        /// SimsRedux: tiles whose wall has a door and is cut down right now (cutaway / walls down), as
+        /// (level &lt;&lt; 16) | (y &lt;&lt; 8) | x. The game hides those doors too, so they don't stand up alone.
+        /// </summary>
+        public HashSet<int> CutDoorTiles = new HashSet<int>();
+        private HashSet<int> NextCutDoorTiles = new HashSet<int>();
 
         private static int NEAR_YOFF = 1;
         private static int MED_YOFF = 1;
@@ -119,6 +125,7 @@ namespace FSO.LotView.Components
             var wallContent = Content.Content.Get().WorldWalls;
             var floorContent = Content.Content.Get().WorldFloors;
 
+            NextCutDoorTiles = new HashSet<int>();
             //draw walls
             for (sbyte level = 1; level <= world.Level; level++)
             {
@@ -152,6 +159,10 @@ namespace FSO.LotView.Components
                                 if (myCuts.TRCut == WallCut.DownRightUpLeft) myCuts.TRCut = WallCut.DownLeftUpRight;
                                 else if (myCuts.TRCut == WallCut.DownLeftUpRight) myCuts.TRCut = WallCut.DownRightUpLeft;
                             }
+
+                            if (((comp.Segments & WallSegments.TopLeft) == WallSegments.TopLeft && myCuts.TLCut > 0 && comp.TopLeftDoor)
+                                || ((comp.Segments & WallSegments.TopRight) == WallSegments.TopRight && myCuts.TRCut > 0 && comp.TopRightDoor))
+                                NextCutDoorTiles.Add((level << 16) | (y << 8) | x);
 
                             if ((comp.Segments & WallSegments.TopLeft) == WallSegments.TopLeft && !(myCuts.TLCut > 0 && comp.TopLeftDoor))
                             {
@@ -448,12 +459,12 @@ namespace FSO.LotView.Components
                                     case WallCut.Down:
                                         styleID = comp.TopRightStyle;
                                         down = true; break;
+                                    // SimsRedux: the slanted cut pictures are for straight walls - on a
+                                    // diagonal they hid the whole wall at some angles. Cut diagonals go down.
                                     case WallCut.DownLeftUpRight:
-                                        styleID = 7;
-                                        overlayID = 252; break;
                                     case WallCut.DownRightUpLeft:
-                                        styleID = 8;
-                                        overlayID = 253; break;
+                                        styleID = comp.TopRightStyle;
+                                        down = true; break;
                                     default:
                                         if (comp.TopRightStyle != 1) styleID = comp.TopRightStyle;
                                         else if (comp.ObjSetTRStyle != 0) styleID = comp.ObjSetTRStyle; //use custom style set by object if no cut
@@ -496,12 +507,12 @@ namespace FSO.LotView.Components
                                     case WallCut.Down:
                                         styleID = comp.TopRightStyle;
                                         down = true; break;
+                                    // SimsRedux: the slanted cut pictures are for straight walls - on a
+                                    // diagonal they hid the whole wall at some angles. Cut diagonals go down.
                                     case WallCut.DownLeftUpRight:
-                                        styleID = 7;
-                                        overlayID = 252; break;
                                     case WallCut.DownRightUpLeft:
-                                        styleID = 8;
-                                        overlayID = 253; break;
+                                        styleID = comp.TopRightStyle;
+                                        down = true; break;
                                     default:
                                         if (comp.TopRightStyle != 1) styleID = comp.TopRightStyle;
                                         else if (comp.ObjSetTRStyle != 0) styleID = comp.ObjSetTRStyle; //use custom style set by object if no cut
@@ -588,6 +599,7 @@ namespace FSO.LotView.Components
                 }
             }
             timer.Stop();
+            CutDoorTiles = NextCutDoorTiles;
             //System.Diagnostics.Debug.WriteLine("Drawing walls took " + timer.ElapsedMilliseconds.ToString() + " ms");
         }
 
