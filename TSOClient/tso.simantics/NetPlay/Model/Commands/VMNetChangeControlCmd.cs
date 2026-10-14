@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using FSO.SimAntics.Model;
 
 namespace FSO.SimAntics.NetPlay.Model.Commands
 {
@@ -42,8 +43,15 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             // SimsRedux multiplayer: friends can't take over other Sims, and nobody can take a Sim
             // someone else is controlling.
-            if (FromNet) return false;
             var target = vm.GetObjectById(TargetID);
+            if (FromNet)
+            {
+                // the family's owner may switch between their own family's Sims (never anyone else's)
+                if (!vm.ReduxFamilyControl.TryGetValue(ActorUID, out var family)) return false;
+                var ava = target as VMAvatar;
+                if (ava == null || ava.IsPet || ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != family) return false;
+                if ((ava.GetValue(VMStackObjectVariable.MovementFlags) & (short)VMMovementFlags.FSOExcludeUserSave) != 0) return false; // a visitor
+            }
             // (online players get ids from 100001 up; family Sims can carry other leftover ids from
             //  the save, and those must stay selectable or the player can't pick their Sim at all)
             if (target != null && target.PersistID >= 100001 && target.PersistID != ActorUID) return false;

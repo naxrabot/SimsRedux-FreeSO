@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using FSO.SimAntics.Model;
 
 namespace FSO.SimAntics.NetPlay.Model.Commands
 {
@@ -17,7 +18,13 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 if (sim.PersistID == ActorUID && sim.PersistID != 65537)
                 {
                     vm.Context.ObjectQueries.RemoveAvatarPersist(sim.PersistID);
-                    sim.Delete(true, vm.Context);
+                    bool visitor = (sim.GetValue(VMStackObjectVariable.MovementFlags) & (short)VMMovementFlags.FSOExcludeUserSave) != 0;
+                    if (visitor) sim.Delete(true, vm.Context);
+                    else
+                    {
+                        // the family's owner left their own home: their Sim stays, just nobody's directing it
+                        sim.PersistID = (uint)sim.ObjectID;
+                    }
                 }
                 return true;
             }

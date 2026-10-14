@@ -251,6 +251,11 @@ namespace FSO.SimAntics
         private int GameTickRate = 60;
         private int GameTickNum = 0;
         public int SpeedMultiplier = 1;
+        /// <summary>
+        /// SimsRedux online (host only): players who own the family living on this lot, by player id,
+        /// with that family's number. They may switch between their own family's Sims.
+        /// </summary>
+        public Dictionary<uint, short> ReduxFamilyControl = new Dictionary<uint, short>();
         public int LastSpeedMultiplier;
         private int LastFrameSpeed = 1;
         private float Fraction;

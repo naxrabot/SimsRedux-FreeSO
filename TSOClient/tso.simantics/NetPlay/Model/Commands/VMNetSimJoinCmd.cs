@@ -51,7 +51,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             {
                 if (vm.TS1State.CurrentFamily == null) return true;
                 var gameState = Content.Content.Get().Neighborhood.GameState;
-                var control = vm.Entities.FirstOrDefault(x => x is VMAvatar && !((VMAvatar)x).IsPet && ((VMAvatar)x).GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == vm.TS1State.CurrentFamily?.ChunkID);
+                // (never a visiting player's Sim, or one another player is already controlling)
+                var control = vm.Entities.FirstOrDefault(x => x is VMAvatar && !((VMAvatar)x).IsPet && ((VMAvatar)x).GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == vm.TS1State.CurrentFamily?.ChunkID
+                    && (x.PersistID < 100001 || x.PersistID == ActorUID)
+                    && (x.GetValue(VMStackObjectVariable.MovementFlags) & (short)VMMovementFlags.FSOExcludeUserSave) == 0);
                 // SimsRedux: on the family's own home lot, never bring in a stand-in Sim. A family
                 // that's just moving in walks onto the lot a moment later, and the game then selects
                 // one of them. (The stand-in is for Downtown and other trips, where the travelling
