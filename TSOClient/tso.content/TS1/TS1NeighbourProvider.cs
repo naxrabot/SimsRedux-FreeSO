@@ -178,7 +178,7 @@ namespace FSO.Content.TS1
         }
 
         /// <summary>SimsRedux: the folder a brand-new Neighbourhood 1 is copied from.</summary>
-        public static string FreshSource()
+        public string FreshSource()
         {
             var game = Path.Combine(ContentManager.TS1BasePath, "UserData/");
             if (HasFamiliesInHouses(game)) return game;
