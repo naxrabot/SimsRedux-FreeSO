@@ -64,7 +64,9 @@ namespace FSO.Content.TS1
                 // rather than the player's own Sims 1 save, so a new game is always a fresh game.
                 var template = Path.Combine(ContentManager.TS1BasePath, "TemplateUserData/");
                 bool usedTemplate = false;
-                if (TemplateIsUsable(template)) { source = template; usedTemplate = true; }
+                // SimsRedux: Neighbourhood 1 starts with the game's own starting families (the Goths,
+                // Newbies, Pleasants...) when the game's UserData has them; otherwise the blank template
+                if (TemplateIsUsable(template) && !(id == 0 && HasFamiliesInHouses(source))) { source = template; usedTemplate = true; }
                 var destination = userPath;
 
                 //quick and dirty copy.
@@ -157,6 +159,31 @@ namespace FSO.Content.TS1
             {
                 return false;
             }
+        }
+
+        /// <summary>SimsRedux: does this neighbourhood folder have any family living in a house?</summary>
+        public static bool HasFamiliesInHouses(string folder)
+        {
+            try
+            {
+                var nbhd = Path.Combine(folder, "Neighborhood.iff");
+                if (!FSOFile.Exists(nbhd)) return false;
+                var iff = new IffFile(nbhd);
+                return (iff.List<FAMI>() ?? new List<FAMI>()).Any(f => f.HouseNumber > 0);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>SimsRedux: the folder a brand-new Neighbourhood 1 is copied from.</summary>
+        public static string FreshSource()
+        {
+            var game = Path.Combine(ContentManager.TS1BasePath, "UserData/");
+            if (HasFamiliesInHouses(game)) return game;
+            var template = Path.Combine(ContentManager.TS1BasePath, "TemplateUserData/");
+            return TemplateIsUsable(template) ? template : game;
         }
 
         public void AddMissingNeighbors()
