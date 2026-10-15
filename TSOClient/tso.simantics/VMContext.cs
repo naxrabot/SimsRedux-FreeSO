@@ -1474,7 +1474,7 @@ namespace FSO.SimAntics
                     vmObject.GhostImage = ghostImage;
                     if (!ghostImage) VM.AddEntity(vmObject);
 
-                    if (UseWorld && Blueprint != null) Blueprint.AddAvatar((AvatarComponent)vmObject.WorldUI); // SimsRedux: (online, a lot may still be loading)
+                    if (UseWorld && Blueprint != null && vmObject.WorldUI is AvatarComponent avc) Blueprint.AddAvatar(avc); // SimsRedux: (online, a lot may still be loading)
 
                     vmObject.MainParam = MainParam;
                     vmObject.MainStackOBJ = MainStackOBJ;

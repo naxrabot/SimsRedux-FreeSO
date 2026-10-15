@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using FSO.LotView.Model;
@@ -28,7 +28,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 // added the Sim's character file and neighbour data to everyone's game, so it can
                 // be created like any other Sim. It appears next to the host's selected Sim.
                 if (vm.GetAvatarByPersist(ActorUID) != null) return true;
-                var group = vm.Context.CreateObjectInstance(AvatarState.CustomGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH);
+                VMMultitileGroup group;
+                // (a player's game must never stop over a visitor's Sim: if it can't be made here,
+                //  it's left out and appears with the lot's next refresh)
+                try { group = vm.Context.CreateObjectInstance(AvatarState.CustomGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] couldn't make a visiting Sim (" + AvatarState.CustomGUID.ToString("X8") + "): " + e); return true; }
                 var visitor = group?.BaseObject as VMAvatar;
                 if (visitor == null) return true;
                 var near = vm.GetObjectById(vm.GetGlobalValue(3)) ?? vm.Entities.FirstOrDefault(x => x is VMAvatar && x != visitor && x.Position != LotTilePos.OUT_OF_WORLD);

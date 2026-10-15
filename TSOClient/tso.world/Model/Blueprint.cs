@@ -1,4 +1,4 @@
-﻿using FSO.Common;
+using FSO.Common;
 using FSO.LotView.Components;
 using FSO.LotView.Effects;
 using FSO.LotView.LMap;
@@ -309,6 +309,8 @@ namespace FSO.LotView.Model
         }
 
         public void AddAvatar(AvatarComponent avatar){
+            if (avatar == null) return;
+            if (Avatars == null) Avatars = new List<AvatarComponent>();
             this.Avatars.Add(avatar);
         }
 
