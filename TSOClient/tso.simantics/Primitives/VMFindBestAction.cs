@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.SimAntics.Engine;
@@ -45,6 +45,15 @@ namespace FSO.SimAntics.Primitives
 
     public class VMFindBestAction : VMPrimitiveHandler
     {
+        /// <summary>
+        /// SimsRedux: how smart Sims are on their own (single player; online lots always use Smartest so
+        /// every player's game - and the server - makes the same choices).
+        ///   0 = the original Sims 1 brain, 1 = Smarter, 2 = Smartest (Sims 3/4-style)
+        /// </summary>
+        public static int ReduxLevel = 2;
+
+        private static readonly VMMotive[] PhysicalMotives = { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene };
+
         public static VMPersonDataVariable[] VaryByTypes = new VMPersonDataVariable[]
         {
             VMPersonDataVariable.UnusedAndDoNotUse, //0
@@ -128,6 +137,10 @@ namespace FSO.SimAntics.Primitives
                 .ToArray();
 
             float baseHappy = happyParts.Sum();
+
+            // === SIMSREDUX: SMARTER BRAIN - what matters right now ===
+            int level = context.VM.ReduxNoPause ? 2 : ReduxLevel;
+            var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
 
             List<VMPieMenuInteraction> validActions = new List<VMPieMenuInteraction>();
             foreach (var iobj in ents)
@@ -240,6 +253,7 @@ namespace FSO.SimAntics.Primitives
                                     {
                                         personalityMul = 1 - personalityMul;
                                     }
+                                    if (brain != null) personalityMul = brain.Personality(personalityMul, (VMMotive)motiveI);
                                 } else
                                 {
                                     personalityMul *= 2;
@@ -257,6 +271,9 @@ namespace FSO.SimAntics.Primitives
                             entry.AttenuationValue : attenTable[entry.AttenuationCode];
 
                         score = score / (1 + atten * distance);
+
+                        // SimsRedux: the smarter brain weighs it (urgent needs first, time of day, work, nearby)
+                        if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance);
 
                         if (score > minScore)
                         {
@@ -278,7 +295,14 @@ namespace FSO.SimAntics.Primitives
             sorted = TakeTopActions(sorted, 4);
             var selection = sorted.FirstOrDefault();
             if (selection == null) return VMPrimitiveExitCode.GOTO_FALSE;
-            if (!selection.Entry.AutoFirst)
+            // SimsRedux: no silly picks - only choices close to the best one are in the draw, and when a
+            // need is urgent the Sim simply does the best thing for it
+            if (brain != null)
+            {
+                var best = selection.Score;
+                sorted = sorted.Where(x => x.Score >= best * (level >= 2 ? 0.5f : 0.3f)).ToList();
+            }
+            if (!selection.Entry.AutoFirst && !(brain != null && brain.Urgent))
             {
                 // weighted random selection
                 //var slice = sorted.Take(Math.Min(4, sorted.Count)).ToList();
@@ -325,6 +349,127 @@ namespace FSO.SimAntics.Primitives
                 }
             }
             return result;
+        }
+    }
+
+    /// <summary>
+    /// SimsRedux: the smarter brain (roadmap: Autonomy improvements). It doesn't replace Sims 1's own
+    /// scoring - it weighs each choice the way a Sims 3/4 Sim would:
+    ///  - needs first: a need near red (hunger, bladder, energy, hygiene) pushes everything else aside
+    ///  - deal with needs before they go red
+    ///  - sleep at night, don't nap in the middle of the day, wind down late at night
+    ///  - before the carpool: eat, use the bathroom, wash - don't start sleeping or long fun
+    ///  - prefer the closer object for the same job
+    ///  - personality matters more; everyone tidies up a bit, not only Neat Sims
+    /// Everything here comes from the lot's own state (needs, clock, job, personality), so every
+    /// player's game and the server make exactly the same choice.
+    /// </summary>
+    public class ReduxBrain
+    {
+        private readonly VMAvatar Sim;
+        private readonly int Level;
+        private readonly int Hour;
+        private readonly short[] Needs = new short[16];
+        /// <summary>A physical need is close to red: the Sim does the best thing for it, no dawdling.</summary>
+        public bool Urgent;
+        private readonly bool Night, LateNight, Daytime, BeforeWork;
+
+        public ReduxBrain(VM vm, VMAvatar sim, int level)
+        {
+            Sim = sim;
+            Level = level;
+            Hour = vm.Context.Clock.Hours;
+            for (int i = 0; i < 16; i++) Needs[i] = sim.GetMotiveData((VMMotive)i);
+            foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene })
+                if (Needs[(int)m] < -40) Urgent = true;
+            Night = Hour >= 22 || Hour < 6;
+            LateNight = Hour >= 23 || Hour < 5;
+            Daytime = Hour >= 8 && Hour < 20;
+
+            // a job (and the hour the carpool comes): get ready in the 2 hours before
+            try
+            {
+                var job = sim.GetPersonData(VMPersonDataVariable.JobType);
+                if (job > 0 && !sim.IsChild)
+                {
+                    var lvl = Content.Content.Get().Jobs?.GetJobLevel(job, sim.GetPersonData(VMPersonDataVariable.JobPromotionLevel));
+                    if (lvl != null)
+                    {
+                        var start = lvl.StartTime % 24;
+                        var until = (start - Hour + 24) % 24;
+                        BeforeWork = until >= 1 && until <= 2;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Personality counts for more (Sims 3/4 traits); cleaning is something everyone does a bit.</summary>
+        public float Personality(float mul, VMMotive motive)
+        {
+            if (Level < 2) return mul;
+            mul = 0.25f + mul * 1.5f; // stronger both ways
+            if (motive == VMMotive.Room) mul = Math.Max(mul, 0.6f); // everyone tidies up, not only Neat Sims
+            return mul;
+        }
+
+        private bool Ads(TTABInteraction entry, VMPieMenuInteraction first, VMMotive m)
+        {
+            if (entry.MotiveEntries == null || (int)m >= entry.MotiveEntries.Length) return false;
+            var e = entry.MotiveEntries[(int)m];
+            short min = e.EffectRangeMinimum, max = e.EffectRangeDelta, v;
+            if (first.MotiveAdChanges != null)
+            {
+                if (first.MotiveAdChanges.TryGetValue((0 << 16) | (int)m, out v)) min = v;
+                if (first.MotiveAdChanges.TryGetValue((1 << 16) | (int)m, out v)) max = v;
+            }
+            return (max + min) > 0;
+        }
+
+        /// <summary>How much more (or less) appealing this choice is right now.</summary>
+        public float Weigh(TTABInteraction entry, VMPieMenuInteraction first, TTABMotiveEntry[] ads, float distance)
+        {
+            float w = 1;
+            bool helpsPhysical = false, onlyFunSocial = true;
+            foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room })
+                if (Ads(entry, first, m)) onlyFunSocial = false;
+
+            // 1. needs first: the lower a need, the more what fixes it matters
+            foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene })
+            {
+                if (!Ads(entry, first, m)) continue;
+                var v = Needs[(int)m];
+                if (m == VMMotive.Energy && Daytime && v > -50) continue; // (sleep is handled with the time of day below)
+                helpsPhysical = true;
+                if (v < -70) w *= 8;
+                else if (v < -40) w *= 4;
+                else if (v < 0) w *= 1.6f;          // deal with it before it goes red
+                else if (v < 30 && Level >= 2) w *= 1.15f;
+            }
+            if (Urgent && !helpsPhysical) w *= 0.2f;  // the bladder is bursting - the TV can wait
+
+            // 2. the time of day (Smartest)
+            if (Level >= 2)
+            {
+                bool sleepy = Ads(entry, first, VMMotive.Energy);
+                var energy = Needs[(int)VMMotive.Energy];
+                if (sleepy)
+                {
+                    if (Night && energy < 60) w *= energy < 0 ? 3 : 1.8f;          // bedtime
+                    else if (Daytime && energy > -50) w *= 0.3f;                    // no naps unless exhausted
+                }
+                if (LateNight && onlyFunSocial && energy < 40) w *= 0.5f;           // wind down
+                if (BeforeWork)
+                {
+                    if (Ads(entry, first, VMMotive.Hunger) || Ads(entry, first, VMMotive.Hygiene) || Ads(entry, first, VMMotive.Bladder)) w *= 2;
+                    if (sleepy && energy > -60) w *= 0.2f;                          // don't fall asleep before the carpool
+                    if (onlyFunSocial) w *= 0.6f;
+                }
+            }
+
+            // 3. the closer object for the same job
+            if (Level >= 2) w /= (1 + 0.02f * distance);
+            return w;
         }
     }
 
