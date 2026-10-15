@@ -72,6 +72,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
             // (online players get ids from 100001 up; family Sims can carry other leftover ids from
             //  the save, and those must stay selectable or the player can't pick their Sim at all)
+            // SimsRedux online town: a Sim a family's owner is controlling right now is theirs - nothing
+            // on the server (its own copy of the game included) may take it away from them
+            if (!FromNet && target != null && target.PersistID != ActorUID && vm.ReduxFamilyControl.ContainsKey(target.PersistID)
+                && !vm.ReduxFamilyControl.ContainsKey(ActorUID)) return false;
             // (the server itself may hand over a Sim still carrying the id of a player who has left)
             if (FromNet && target != null && target.PersistID >= 100001 && target.PersistID != ActorUID) return false;
             return vm.TS1;
