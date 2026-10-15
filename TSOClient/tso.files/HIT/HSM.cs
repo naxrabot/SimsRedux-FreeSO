@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -39,10 +39,14 @@ namespace FSO.Files.HIT
             while (!io.EndOfStream)
             {
                 string line = io.ReadLine();
-                string[] Values = line.Split(' ');
+                // SimsRedux: skip blank or odd lines (some downloaded objects ship an empty .hsm)
+                string[] Values = (line ?? "").Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (Values.Length < 2) continue;
+                int value;
+                if (!int.TryParse(Values[1], out value)) continue;
 
                 var name = Values[0].ToLowerInvariant();
-                if (!Constants.ContainsKey(name)) Constants.Add(name, Convert.ToInt32(Values[1])); //the repeats are just labels for locations (usually called gotit)
+                if (!Constants.ContainsKey(name)) Constants.Add(name, value); //the repeats are just labels for locations (usually called gotit)
             }
 
             io.Close();

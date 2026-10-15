@@ -161,9 +161,19 @@ namespace FSO.Content.TS1
                 var cFile = ContentManager.TS1Path(file); // (SimsRedux: also the shipped mods' sounds)
                 var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
 
-                var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
-                var hit = new HITFile(PathCaseTools.Insensitive(bPath + ".hit"));
-                var hot = new Hot(cFile, hsm);
+                HSM hsm; HITFile hit; Hot hot;
+                try
+                {
+                    hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
+                    hit = new HITFile(PathCaseTools.Insensitive(bPath + ".hit"));
+                    hot = new Hot(cFile, hsm);
+                }
+                catch (Exception e)
+                {
+                    // SimsRedux: one broken sound set (e.g. from a downloaded object) mustn't stop the game
+                    Console.WriteLine("[SimsRedux] Skipped the sounds in " + file + ": " + e.Message);
+                    continue;
+                }
 
                 var group = new HITResourceGroup() { hsm = hsm, hit = hit, hot = hot };
 
