@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System.Linq;
+using System.IO;
 using FSO.SimAntics.Model;
 
 namespace FSO.SimAntics.NetPlay.Model.Commands
@@ -17,8 +18,29 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             // - block assuming control of npcs (this is enforced by simitone ui)
             // - multiplayer handling of "selected sim" global
 
+            // SimsRedux: the server's "everyone in the family comes home" (nobody of the owner's
+            // family is on their lot): missing family members walk in at the mailbox, on every game at once
+            if (TargetID == EveryoneHome)
+            {
+                if (!vm.TS1 || vm.TS1State.CurrentFamily == null) return false;
+                vm.TS1State.CurrentFamily.SelectWholeFamily();
+                vm.TS1State.VerifyFamily(vm);
+                return true;
+            }
+
             var target = vm.GetObjectById(TargetID);
             if (target == null || target is VMGameObject) return false;
+
+            // SimsRedux: a family Sim who is "away" (off the lot) comes back in at the mailbox first,
+            // so the player (and their camera) never ends up with a Sim nowhere
+            if (vm.TS1 && target.Position == FSO.LotView.Model.LotTilePos.OUT_OF_WORLD)
+            {
+                var mailbox = vm.Entities.FirstOrDefault(x => x.Object.OBJ.GUID == 0xEF121974 || x.Object.OBJ.GUID == 0x1D95C9B0)
+                    ?? vm.Entities.FirstOrDefault(x => x is VMGameObject && x.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD);
+                if (mailbox != null) FSO.SimAntics.Primitives.VMFindLocationFor.FindLocationFor(target, mailbox, vm.Context, VMPlaceRequestFlags.Default);
+                if (target.Position == FSO.LotView.Model.LotTilePos.OUT_OF_WORLD) return false;
+                vm.Scheduler.RescheduleInterrupt(target);
+            }
 
             if (caller != null && caller.PersistID == ActorUID)
             {
@@ -27,6 +49,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 caller.PersistID = 0;
             }
 
+            // (a leftover id from an earlier visit is forgotten, so it can't point at this Sim any more)
+            if (target.PersistID != 0 && target.PersistID != ActorUID) vm.Context.ObjectQueries.RemoveAvatarPersist(target.PersistID);
             target.PersistID = ActorUID;
             vm.Context.ObjectQueries.RegisterAvatarPersist((VMAvatar)target, target.PersistID);
             vm.SetGlobalValue(3, target.ObjectID);
@@ -39,8 +63,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             return true;
         }
 
+        /// <summary>SimsRedux: TargetID meaning "the lot's whole family comes home" (only the server sends it).</summary>
+        public const short EveryoneHome = -2;
+
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            if (TargetID == EveryoneHome) return vm.TS1 && !FromNet;
             // SimsRedux multiplayer: friends can't take over other Sims, and nobody can take a Sim
             // someone else is controlling.
             var target = vm.GetObjectById(TargetID);
@@ -54,7 +82,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
             // (online players get ids from 100001 up; family Sims can carry other leftover ids from
             //  the save, and those must stay selectable or the player can't pick their Sim at all)
-            if (target != null && target.PersistID >= 100001 && target.PersistID != ActorUID) return false;
+            // (the server itself may hand over a Sim still carrying the id of a player who has left)
+            if (FromNet && target != null && target.PersistID >= 100001 && target.PersistID != ActorUID) return false;
             return vm.TS1;
         }
 

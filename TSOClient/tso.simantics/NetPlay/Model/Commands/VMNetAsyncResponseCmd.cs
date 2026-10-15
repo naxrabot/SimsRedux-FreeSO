@@ -64,6 +64,15 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                             if (!vm.TS1) obj.TSOState.Budget.Value = state.Budget2;
                         }
                     }
+
+                    // SimsRedux multiplayer: in TS1 only the server charges the family (players' games
+                    // have no money link), so a player's game takes the family's new money from here -
+                    // straight away, instead of waiting for the server's next full refresh of the lot
+                    if (vm.TS1 && vm.GlobalLink == null && vm.TS1State?.CurrentFamily != null)
+                    {
+                        if (obj1 is VMAvatar && state.Budget1 != uint.MaxValue) vm.TS1State.CurrentFamily.Budget = (int)state.Budget1;
+                        else if (obj2 is VMAvatar && state.Budget2 != uint.MaxValue) vm.TS1State.CurrentFamily.Budget = (int)state.Budget2;
+                    }
                 }
             }
 

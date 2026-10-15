@@ -76,6 +76,8 @@ namespace FSO.SimAntics.Utils
         }
         private static void ExecuteBudget(VM vm, VMAvatar caller, VMCheatContext context, out bool result)
         {
+            // (online, only the server's game holds the money - players' games hear the result from it)
+            if (vm.GlobalLink == null) { result = true; return; }
             var amount = context.Amount * (context.Repetitions + 1);
             vm.GlobalLink.PerformTransaction(vm, false, uint.MaxValue, caller.PersistID, amount,
                 (bool success, int transferAmount, uint uid1, uint budget1, uint uid2, uint budget2) =>
