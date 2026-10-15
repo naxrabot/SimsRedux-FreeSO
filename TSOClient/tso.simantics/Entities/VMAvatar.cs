@@ -226,7 +226,7 @@ namespace FSO.SimAntics
         /// (part of the lot's state, so every player's game remembers the same). 4 entries of
         /// [object id &lt;&lt; 16 | interaction, the game minute it was chosen, the need it was for + 1 (0 = fun/other)].
         /// </summary>
-        public int[] BrainMemory = new int[12];
+        public int[] BrainMemory = new int[14]; // 4 x (object/interaction, time, need) + the plate they're eating (id, time)
 
         public VMAvatar(GameObject obj)
             : base(obj)
@@ -1289,7 +1289,7 @@ namespace FSO.SimAntics
             }
 
             SkinTone = input.SkinTone;
-            if (input.BrainMemory != null && input.BrainMemory.Length == BrainMemory.Length) BrainMemory = (int[])input.BrainMemory.Clone();
+            if (input.BrainMemory != null) Array.Copy(input.BrainMemory, BrainMemory, Math.Min(input.BrainMemory.Length, BrainMemory.Length)); // (older saves had 12)
 
             if (UseWorld)
             {

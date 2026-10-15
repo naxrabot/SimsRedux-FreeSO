@@ -407,7 +407,21 @@ namespace FSO.SimAntics.Primitives
                 var ln = sim.BrainMemory[2];
                 if (ln >= 1 && ln <= 16) LastNeed = (VMMotive)(ln - 1); // (100+ are phone calls, not needs)
             }
-            // stage 3: fires on the lot, and Sims who are asleep (be quiet near them)
+            // stage 3: fires on the lot, Sims who are asleep (be quiet near them), doors (don't hang about in them),
+            // and whose plate is whose (a Sim eating from a plate claims it for a while, even if they get up)
+            foreach (var e in vm.Entities)
+            {
+                if (e is VMGameObject && e.Position != LotTilePos.OUT_OF_WORLD && IsDoor(e)) Doors.Add(e.Position);
+                if (e is VMAvatar eater && eater.BrainMemory != null && eater.BrainMemory.Length >= 14 && eater.Thread?.Queue != null && eater.Thread.Queue.Count > 0)
+                {
+                    var q = eater.Thread.Queue[0];
+                    if (q.Callee != null && q.Callee != eater && IsPlate(q.Callee) && (q.Name ?? "").IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        eater.BrainMemory[12] = q.Callee.ObjectID;
+                        eater.BrainMemory[13] = Now;
+                    }
+                }
+            }
             foreach (var e in vm.Entities)
             {
                 if (e is VMGameObject && e.Position != LotTilePos.OUT_OF_WORLD && IsFire(e)) Fires.Add(e.Position);
@@ -454,6 +468,32 @@ namespace FSO.SimAntics.Primitives
 
         private readonly List<LotTilePos> Fires = new List<LotTilePos>();
         private readonly List<VMAvatar> Sleepers = new List<VMAvatar>();
+        private readonly List<LotTilePos> Doors = new List<LotTilePos>();
+
+        private static string Label(VMEntity e) { return e?.Object?.OBJ?.ChunkLabel ?? ""; }
+        private static bool IsDoor(VMEntity e)
+        {
+            var l = Label(e);
+            return l.IndexOf("door", StringComparison.OrdinalIgnoreCase) >= 0 && l.IndexOf("doorbell", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+        /// <summary>A single plate of food (not the serving dish a group meal is shared from).</summary>
+        private static bool IsPlate(VMEntity e)
+        {
+            var l = Label(e);
+            return l.IndexOf("plate", StringComparison.OrdinalIgnoreCase) >= 0 && l.IndexOf("serving", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+        /// <summary>Someone else is (or was just) eating from this plate.</summary>
+        private bool SomeoneElsesPlate(VM vm, VMEntity plate)
+        {
+            foreach (var e in vm.Context.ObjectQueries.Avatars)
+            {
+                var a = e as VMAvatar; var m = a?.BrainMemory;
+                if (a == null || a == Sim || m == null || m.Length < 14 || m[12] != plate.ObjectID) continue;
+                var ago = Now - m[13]; if (ago < 0) ago += 30 * 1440;
+                if (ago <= 120) return true;
+            }
+            return false;
+        }
         /// <summary>Set when FindChore picked a phone call (100 = repairman, 101 = fire department), so it isn't made twice.</summary>
         public int ChoreCode;
 
@@ -664,6 +704,14 @@ namespace FSO.SimAntics.Primitives
             // stage 3 - manners: don't wake anyone. Socials with a sleeping Sim are off, and loud fun
             // (TV, stereo, games) near someone asleep is much less appealing
             if (target is VMAvatar ta && ta.GetMotiveData(VMMotive.SleepState) != 0) w *= 0.02f;
+
+            // stage 3 - manners: don't eat someone else's plate (they're coming back for it)
+            if (IsPlate(target) && SomeoneElsesPlate(Sim.Thread.Context.VM, target)) w *= 0.01f;
+
+            // stage 3 - manners: don't stop for a chat with someone standing in a doorway (it blocks the way)
+            if (target is VMAvatar inDoor)
+                foreach (var d in Doors)
+                    if (Tiles(d, inDoor.Position) < 1.2f) { w *= 0.3f; break; }
 
             // stage 2 - finish what they start: still hungry after the plate, still tired after a nap -
             // go back to it (the same object first) instead of wandering off to something else
