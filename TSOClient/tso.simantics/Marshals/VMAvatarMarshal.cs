@@ -1,4 +1,4 @@
-﻿using FSO.SimAntics.Entities;
+using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
 using FSO.SimAntics.NetPlay.Model;
 using FSO.Vitaboy;
@@ -32,6 +32,8 @@ namespace FSO.SimAntics.Marshals
         public VMOutfitReference BodyOutfit;
         public VMOutfitReference HeadOutfit;
         public AppearanceType SkinTone;
+        /// <summary>SimsRedux (version 40): the smarter brain's memory of the Sim's last few choices.</summary>
+        public int[] BrainMemory = new int[0];
 
         public VMAvatarMarshal() { }
         public VMAvatarMarshal(int version, bool ts1) : base(version, ts1) { }
@@ -92,6 +94,13 @@ namespace FSO.SimAntics.Marshals
             BodyOutfit = new VMOutfitReference(reader);
             HeadOutfit = new VMOutfitReference(reader);
             SkinTone = (AppearanceType)reader.ReadByte();
+            if (Version > 39)
+            {
+                var n = reader.ReadInt32();
+                if (n < 0 || n > 64) throw new System.Exception("bad brain memory");
+                BrainMemory = new int[n];
+                for (int i = 0; i < n; i++) BrainMemory[i] = reader.ReadInt32();
+            }
         }
         public override void SerializeInto(BinaryWriter writer)
         {
@@ -132,6 +141,9 @@ namespace FSO.SimAntics.Marshals
             if (HeadOutfit == null) writer.Write((ulong)0);
             else HeadOutfit.SerializeInto(writer);
             writer.Write((byte)SkinTone);
+            var mem = BrainMemory ?? new int[0];
+            writer.Write(mem.Length);
+            foreach (var m in mem) writer.Write(m);
         }
     }
 }

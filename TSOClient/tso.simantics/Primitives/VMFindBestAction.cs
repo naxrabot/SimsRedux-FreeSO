@@ -140,6 +140,10 @@ namespace FSO.SimAntics.Primitives
 
             // === SIMSREDUX: SMARTER BRAIN - what matters right now ===
             int level = context.VM.ReduxNoPause ? 2 : ReduxLevel;
+            // Off (single player): the player's own family does nothing on their own; visitors still do
+            if (level < 0 && context.VM.TS1 && !caller.IsPet && !visitor && context.VM.TS1State?.CurrentFamily != null
+                && caller.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == context.VM.TS1State.CurrentFamily.ChunkID)
+                return VMPrimitiveExitCode.GOTO_FALSE;
             var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
 
             List<VMPieMenuInteraction> validActions = new List<VMPieMenuInteraction>();
@@ -273,7 +277,7 @@ namespace FSO.SimAntics.Primitives
                         score = score / (1 + atten * distance);
 
                         // SimsRedux: the smarter brain weighs it (urgent needs first, time of day, work, nearby)
-                        if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance);
+                        if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance, obj.ObjectID, (int)id);
 
                         if (score > minScore)
                         {
@@ -302,7 +306,15 @@ namespace FSO.SimAntics.Primitives
                 var best = selection.Score;
                 sorted = sorted.Where(x => x.Score >= best * (level >= 2 ? 0.5f : 0.3f)).ToList();
             }
-            if (!selection.Entry.AutoFirst && !(brain != null && brain.Urgent))
+            // SimsRedux stage 2: chores when the Sim is doing fine - pay the bills, repair what's broken
+            // (with the Mechanical skill for it), the Sims 4 way
+            bool chore = false;
+            if (brain != null && level >= 2 && !visitor)
+            {
+                var c = brain.FindChore(context, ents);
+                if (c != null) { selection = c; chore = true; }
+            }
+            if (!chore && !selection.Entry.AutoFirst && !(brain != null && brain.Urgent))
             {
                 // weighted random selection
                 //var slice = sorted.Take(Math.Min(4, sorted.Count)).ToList();
@@ -327,6 +339,7 @@ namespace FSO.SimAntics.Primitives
             {
                 qaction.Priority = (short)VMQueuePriority.Autonomous;
                 context.Caller.Thread.EnqueueAction(qaction);
+                brain?.Remember(selection);
                 context.StackObject = selection.Callee;
                 return VMPrimitiveExitCode.GOTO_TRUE;
             } else
@@ -382,6 +395,16 @@ namespace FSO.SimAntics.Primitives
             for (int i = 0; i < 16; i++) Needs[i] = sim.GetMotiveData((VMMotive)i);
             foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene })
                 if (Needs[(int)m] < -40) Urgent = true;
+            Now = vm.Context.Clock.DayOfMonth * 1440 + Hour * 60 + vm.Context.Clock.Minutes;
+            NeedsFine = Needs[(int)VMMotive.Hunger] > 0 && Needs[(int)VMMotive.Bladder] > 0 && Needs[(int)VMMotive.Energy] > -20 && Needs[(int)VMMotive.Hygiene] > -20;
+            // the last thing they chose: still working on it?
+            if (Level >= 2 && sim.BrainMemory != null && sim.BrainMemory.Length >= 12 && sim.BrainMemory[1] != 0)
+            {
+                LastAgo = Now - sim.BrainMemory[1];
+                if (LastAgo < 0) LastAgo += 30 * 1440; // (the month wrapped)
+                LastObject = sim.BrainMemory[0] >> 16;
+                LastNeed = (VMMotive)(sim.BrainMemory[2] - 1);
+            }
             Night = Hour >= 22 || Hour < 6;
             LateNight = Hour >= 23 || Hour < 5;
             Daytime = Hour >= 8 && Hour < 20;
@@ -413,6 +436,70 @@ namespace FSO.SimAntics.Primitives
             return mul;
         }
 
+        // ---------- stage 2: memory ----------
+
+        private readonly int Now; // game minutes (day of month * 1440 + time of day)
+        private static readonly VMMotive[] MemoryNeeds = { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room, VMMotive.Social, VMMotive.Fun };
+        private VMMotive LastNeed = (VMMotive)(-1);
+        private int LastObject = -1, LastAgo = int.MaxValue;
+        private bool NeedsFine;
+
+        private int Entry(int i, int part) { var m = Sim.BrainMemory; return (m == null || m.Length < 12) ? 0 : m[i * 3 + part]; }
+
+        /// <summary>What the Sim chose: it goes to the top of their memory (the oldest is forgotten).</summary>
+        public void Remember(VMPieMenuInteraction chosen)
+        {
+            var m = Sim.BrainMemory;
+            if (m == null || m.Length < 12 || chosen?.Callee == null) return;
+            for (int i = 11; i >= 3; i--) m[i] = m[i - 3];
+            m[0] = (chosen.Callee.ObjectID << 16) | (chosen.ID & 0xFFFF);
+            m[1] = Now;
+            // the need it was mainly for: the lowest need it helps with (or 0 = fun / other)
+            int need = 0; short lowest = short.MaxValue;
+            if (chosen.Entry != null)
+                foreach (var mo in MemoryNeeds)
+                    if (mo != VMMotive.Fun && mo != VMMotive.Social && Ads(chosen.Entry, chosen, mo) && Needs[(int)mo] < lowest) { lowest = Needs[(int)mo]; need = (int)mo + 1; }
+            m[2] = need;
+        }
+
+        /// <summary>A chore worth doing now (bills to pay, something broken it can fix), or null.</summary>
+        public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents)
+        {
+            if (Urgent || !NeedsFine) return null;
+            var family = context.VM.TS1State?.CurrentFamily;
+            if (family == null || Sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != family.ChunkID) return null;
+            bool handy = Sim.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200;
+            VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
+            var done = new HashSet<short>();
+            foreach (var iobj in ents)
+            {
+                if (iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
+                var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
+                if (!done.Add(obj.ObjectID) || obj.TreeTable == null || obj.GetFlag(VMEntityFlags.Occupied)) continue;
+                var ttas = obj.TreeTableStrings;
+                foreach (var ia in obj.TreeTable.Interactions)
+                {
+                    var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
+                    bool bills = name.IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool repair = handy && name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase);
+                    if (!bills && !repair) continue;
+                    var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
+                    if (action == null) continue;
+                    Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
+                    var avail = Sim.Thread.CheckAction(action, true);
+                    if (avail == null) continue; // not available right now (no bills, nothing broken)
+                    var p = obj.Position;
+                    var d = (float)Math.Sqrt(Math.Pow(Sim.Position.x - p.x, 2) + Math.Pow(Sim.Position.y - p.y, 2)) / 16f + (bills ? 0 : 5);
+                    if (d < bestDist)
+                    {
+                        bestDist = d;
+                        best = new VMPieMenuInteraction { Name = name, ID = (byte)ia.TTAIndex, Entry = ia, Global = false, Callee = obj, Score = 1 };
+                    }
+                }
+            }
+            return best;
+        }
+
         private bool Ads(TTABInteraction entry, VMPieMenuInteraction first, VMMotive m)
         {
             if (entry.MotiveEntries == null || (int)m >= entry.MotiveEntries.Length) return false;
@@ -427,9 +514,41 @@ namespace FSO.SimAntics.Primitives
         }
 
         /// <summary>How much more (or less) appealing this choice is right now.</summary>
-        public float Weigh(TTABInteraction entry, VMPieMenuInteraction first, TTABMotiveEntry[] ads, float distance)
+        public float Weigh(TTABInteraction entry, VMPieMenuInteraction first, TTABMotiveEntry[] ads, float distance, short objectID, int interaction)
         {
             float w = 1;
+
+            // stage 2 - finish what they start: still hungry after the plate, still tired after a nap -
+            // go back to it (the same object first) instead of wandering off to something else
+            if (Level >= 2 && LastNeed >= 0 && LastAgo <= 60 && Needs[(int)LastNeed] < 60)
+            {
+                if (Ads(entry, first, LastNeed)) w *= (objectID == LastObject) ? 2.5f : 1.3f;
+                else if (!Urgent) w *= 0.7f;
+            }
+
+            // stage 2 - no back-and-forth: the same fun thing over and over, or bouncing between two
+            // objects for the same need, gets less appealing
+            if (Level >= 2)
+            {
+                int key = (objectID << 16) | (interaction & 0xFFFF);
+                for (int i = 0; i < 4; i++)
+                {
+                    var stamp = Entry(i, 1);
+                    if (stamp == 0) continue;
+                    var ago = Now - stamp; if (ago < 0) ago += 30 * 1440;
+                    if (Entry(i, 0) == key && Entry(i, 2) == 0 && ago <= 90) w *= 0.5f;              // the same fun again
+                    if (i == 1 && (Entry(1, 0) >> 16) == objectID && (Entry(0, 0) >> 16) != objectID
+                        && Entry(0, 2) == Entry(1, 2) && Entry(0, 2) != 0 && ago <= 30) w *= 0.5f;  // ping-pong
+                }
+            }
+
+            // stage 2 - safety: with very low Cooking skill, a snack beats cooking a full meal (fires)
+            if (Level >= 2 && Sim.GetPersonData(VMPersonDataVariable.CookingSkill) < 200 && Needs[(int)VMMotive.Hunger] > -60)
+            {
+                var n = first.Name ?? "";
+                if (n.IndexOf("Breakfast", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Lunch", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Dinner", StringComparison.OrdinalIgnoreCase) >= 0 || n.StartsWith("Cook", StringComparison.OrdinalIgnoreCase)) w *= 0.5f;
+            }
             bool helpsPhysical = false, onlyFunSocial = true;
             foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room })
                 if (Ads(entry, first, m)) onlyFunSocial = false;

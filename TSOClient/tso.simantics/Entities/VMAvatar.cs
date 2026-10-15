@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.LotView.Components;
@@ -220,6 +220,13 @@ namespace FSO.SimAntics
                 return age < 18;
             }
         }
+
+        /// <summary>
+        /// SimsRedux: what the smarter brain remembers about this Sim's last few choices of their own
+        /// (part of the lot's state, so every player's game remembers the same). 4 entries of
+        /// [object id &lt;&lt; 16 | interaction, the game minute it was chosen, the need it was for + 1 (0 = fun/other)].
+        /// </summary>
+        public int[] BrainMemory = new int[12];
 
         public VMAvatar(GameObject obj)
             : base(obj)
@@ -1232,7 +1239,8 @@ namespace FSO.SimAntics
                 BoundAppearances = BoundAppearances.ToArray(),
                 BodyOutfit = BodyOutfit,
                 HeadOutfit = HeadOutfit,
-                SkinTone = SkinTone
+                SkinTone = SkinTone,
+                BrainMemory = (int[])BrainMemory.Clone()
             };
             SaveEnt(gameObj);
             return gameObj;
@@ -1281,6 +1289,7 @@ namespace FSO.SimAntics
             }
 
             SkinTone = input.SkinTone;
+            if (input.BrainMemory != null && input.BrainMemory.Length == BrainMemory.Length) BrainMemory = (int[])input.BrainMemory.Clone();
 
             if (UseWorld)
             {
