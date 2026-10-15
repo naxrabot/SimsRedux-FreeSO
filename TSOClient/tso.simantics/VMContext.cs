@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.LotView;
@@ -1439,7 +1439,7 @@ namespace FSO.SimAntics
                             var worldObject = MakeObjectComponent(subObjDefinition);
                             var vmObject = new VMGameObject(subObjDefinition, worldObject);
                             vmObject.GhostImage = ghostImage;
-                            if (UseWorld) Blueprint.AddObject(worldObject);
+                            if (UseWorld && Blueprint != null) Blueprint.AddObject(worldObject); // SimsRedux: (online, a lot may still be loading)
 
                             vmObject.MasterDefinition = objDefinition.OBJ;
                             vmObject.UseTreeTableOf(objDefinition);
@@ -1474,7 +1474,7 @@ namespace FSO.SimAntics
                     vmObject.GhostImage = ghostImage;
                     if (!ghostImage) VM.AddEntity(vmObject);
 
-                    if (UseWorld) Blueprint.AddAvatar((AvatarComponent)vmObject.WorldUI);
+                    if (UseWorld && Blueprint != null) Blueprint.AddAvatar((AvatarComponent)vmObject.WorldUI); // SimsRedux: (online, a lot may still be loading)
 
                     vmObject.MainParam = MainParam;
                     vmObject.MainStackOBJ = MainStackOBJ;
