@@ -1,4 +1,4 @@
-﻿using FSO.SimAntics.Primitives;
+using FSO.SimAntics.Primitives;
 using System.IO;
 
 namespace FSO.SimAntics.NetPlay.Model.Commands
@@ -33,7 +33,17 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             // SimsRedux online: a visiting player only answers questions about their own Sim -
             // other Sims' questions (the lot's family, NPCs) are answered by the lot itself
-            if (FromNet && vm.TS1 && (caller == null || vm.GlobalBlockingDialog != caller)) return false;
+            if (FromNet && vm.TS1)
+            {
+                var asker = vm.GlobalBlockingDialog;
+                if (asker == null) return false;
+                if (caller != null && asker == caller) return true;
+                // 2C: a family's owner is at home - they answer for their family and the house itself
+                // (the carpool, the phone...), just never for another player's Sim
+                if (vm.ReduxFamilyControl.ContainsKey(ActorUID))
+                    return !(asker is VMAvatar) || asker.PersistID < 100001 || asker.PersistID == ActorUID;
+                return false;
+            }
             return true;
         }
 

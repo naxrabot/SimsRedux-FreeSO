@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using FSO.Files.HIT;
@@ -493,7 +493,10 @@ namespace FSO.HIT
             Paused = true;
             foreach (var note in Notes)
             {
-                if (note.instance.State != SoundState.Stopped) note.instance.Pause();
+                // SimsRedux: a sound that has already gone (the browser drops finished sounds) is skipped,
+                // instead of stopping the whole game when it pauses or carries on
+                try { if (note.instance != null && note.instance.State != SoundState.Stopped) note.instance.Pause(); }
+                catch (System.Exception) { }
             }
         }
 
@@ -502,7 +505,10 @@ namespace FSO.HIT
             Paused = false;
             foreach (var note in Notes)
             {
-                if (note.instance.State != SoundState.Stopped) note.instance.Resume();
+                // SimsRedux: a sound that has already gone (the browser drops finished sounds) is skipped,
+                // instead of stopping the whole game when it pauses or carries on
+                try { if (note.instance != null && note.instance.State != SoundState.Stopped) note.instance.Resume(); }
+                catch (System.Exception) { }
             }
         }
     }
