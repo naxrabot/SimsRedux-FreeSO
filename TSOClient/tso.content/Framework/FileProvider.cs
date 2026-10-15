@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using FSO.Common.Content;
 using System.Text.RegularExpressions;
@@ -88,7 +88,7 @@ namespace FSO.Content.Framework
                         }
                     }
                     EntriesByName[name] = file;
-                    Items.Add(new FileContentReference<T>(name, Path.Combine(basePath, file), this));
+                    Items.Add(new FileContentReference<T>(name, UseTS1 ? ContentManager.TS1Path(file) : Path.Combine(basePath, file), this));
                 }
             }
         }
@@ -110,7 +110,7 @@ namespace FSO.Content.Framework
 
                 if (EntriesByName.ContainsKey(name))
                 {
-                    var fullPath = UseContent? ("Content/"+EntriesByName[name]):(UseTS1?Path.Combine(ContentManager.TS1BasePath, EntriesByName[name]):ContentManager.GetPath(EntriesByName[name]));
+                    var fullPath = UseContent? ("Content/"+EntriesByName[name]):(UseTS1?ContentManager.TS1Path(EntriesByName[name]):ContentManager.GetPath(EntriesByName[name]));
                     using (var reader = FSOFile.OpenRead(fullPath))
                     {
                         T item;
@@ -129,7 +129,7 @@ namespace FSO.Content.Framework
         {
             if (EntriesByName.ContainsKey(name))
             {
-                var fullPath = UseContent ? ("Content/" + EntriesByName[name]) : (UseTS1 ? Path.Combine(ContentManager.TS1BasePath, EntriesByName[name]) : ContentManager.GetPath(EntriesByName[name]));
+                var fullPath = UseContent ? ("Content/" + EntriesByName[name]) : (UseTS1 ? ContentManager.TS1Path(EntriesByName[name]) : ContentManager.GetPath(EntriesByName[name]));
                 using (var reader = FSOFile.OpenRead(fullPath))
                 {
                     T item;

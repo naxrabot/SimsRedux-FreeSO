@@ -1,29 +1,36 @@
-﻿using FSO.SimAntics.Model;
+using FSO.SimAntics.Model;
 using System.IO;
 
 namespace FSO.SimAntics.Entities
 {
     public class VMTS1MotiveDecay : VMIMotiveDecay
     {
+        // SimsRedux: "Slower Motives" (Mod The Sims) built in - per hour, awake/asleep:
+        //   Energy 11.25 -> 10 used, 22.5 -> 30 regained asleep (17, 18)  · Hygiene 5.1/2.4 -> 3/1.5
+        //   Bladder 9 / 6 per hour, and eating fills it 10% of the food (was 30%)
+        //   Comfort active/normal/lazy 12/15/18 -> 6/9/12
+        // (the numbers below are per 2 game minutes: per hour / 30)
         public static float[] Constants = new float[]
         {
             180, //energy span 0
             16, //wake hours 1
             7, //wake hour 2
             0.01f, //energy drift 3
-            0.3f, //hunger to bladder 4
+            0.1f, //hunger to bladder 4 (was 0.3)
             0.0021f, //hunger decrement ratio 5
             0.055f, //social decrement base 6
             0.000125f, //social decrement multiplier 7
             0.25f, //ent dec awake 8
             1f, //ent mult asleep 9
-            0.17f, //hyg decrement awake 10
-            0.08f, //hyg decrement asleep 11
+            0.1f, //hyg decrement awake 10 (was 0.17)
+            0.05f, //hyg decrement asleep 11 (was 0.08)
             0.3f, //blad decrement awake 12
-            0.15f, //blad decrement asleep 13
-            0.4f, //comfort decrement active 14
-            0.6f, //comfort decrement lazy 15
-            0.5f, //comfort decrement 16
+            0.2f, //blad decrement asleep 13 (was 0.15)
+            0.2f, //comfort decrement active 14 (was 0.4)
+            0.4f, //comfort decrement lazy 15 (was 0.6)
+            0.3f, //comfort decrement 16 (was 0.5)
+            160, //energy span used while awake 17 (was the 180 above: 10 an hour instead of 11.25)
+            240, //energy span regained while asleep 18 (was the 180 above: 30 an hour instead of 22.5)
         };
 
         public static VMMotive[] DecrementMotives = new VMMotive[]
@@ -94,7 +101,7 @@ namespace FSO.SimAntics.Entities
                             }
                         } else
                         {
-                            frac = (ToFixed1000(Constants[0]) / (30 * (int)Constants[1]));
+                            frac = (ToFixed1000(Constants[17]) / (30 * (int)Constants[1]));
                         }
                         //energy span over wake hours. small energy drift applied if asleep during the day.
                        

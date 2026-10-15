@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using FSO.Files.FAR3;
 using Microsoft.Xna.Framework.Graphics;
@@ -77,6 +77,41 @@ namespace FSO.Content
         public string BasePath;
         public string[] AllFiles;
         public string[] TS1AllFiles;
+
+        /// <summary>
+        /// SimsRedux: mods that ship with the game (Content/redux/mods/), so every player - and the
+        /// server - has exactly the same objects. They join the game's own file list under this tag
+        /// ("~redux-mods/Downloads/x.iff" acts like the game's Downloads folder; "Overrides/" files
+        /// replace the game's own objects of the same name). The folder's manifest.txt lists them.
+        /// </summary>
+        public const string ReduxModTag = "~redux-mods/";
+        public static string ReduxModsDir { get { return Path.Combine(FSOEnvironment.ContentDir, "redux/mods/"); } }
+
+        /// <summary>A file from the game's file list as a real path (the game's folder, or the shipped mods).</summary>
+        public string TS1Path(string file)
+        {
+            if (file != null && file.StartsWith(ReduxModTag)) return Path.Combine(ReduxModsDir, file.Substring(ReduxModTag.Length));
+            return Path.Combine(TS1BasePath, file);
+        }
+
+        private static void AddReduxMods(List<string> files)
+        {
+            try
+            {
+                var manifest = Path.Combine(ReduxModsDir, "manifest.txt");
+                if (!FSO.Common.IO.FSOFile.Exists(manifest)) return;
+                int n = 0;
+                foreach (var line in FSO.Common.IO.FSOFile.ReadAllText(manifest).Split('\n'))
+                {
+                    var f = line.Trim().Replace('\\', '/');
+                    if (f.Length == 0 || f.StartsWith("#")) continue;
+                    files.Add(ReduxModTag + f);
+                    n++;
+                }
+                System.Console.WriteLine("[SimsRedux] " + n + " mod files added");
+            }
+            catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] Couldn't add the mods: " + e.Message); }
+        }
         public string[] ContentFiles;
         private GraphicsDevice Device;
         public ContentMode Mode;
@@ -262,6 +297,7 @@ namespace FSO.Content
             if (TS1)
             {
                 _ScanFiles(TS1BasePath, ts1AllFiles, TS1BasePath);
+                AddReduxMods(ts1AllFiles); // SimsRedux: the mods that ship with the game
                 TS1AllFiles = ts1AllFiles.ToArray();
             }
 

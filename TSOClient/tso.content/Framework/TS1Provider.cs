@@ -1,4 +1,4 @@
-﻿using FSO.Common.Content;
+using FSO.Common.Content;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,10 +13,14 @@ namespace FSO.Content.Framework
         private Content Manager;
         private Dictionary<string, string[]> BareFoldersByExtension = new Dictionary<string, string[]>()
         {
-            { ".bmp", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/" } },
+            // SimsRedux: Downloads also for heads/bodies (.bmp, .skn), floors (.flr) and object sounds (.wav),
+            // like the original game
+            { ".bmp", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } },
             { ".cmx", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } }, // downloads for animations
-            { ".skn", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/" } },
+            { ".skn", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } },
             { ".iff", new string[] { "Downloads/" } },
+            { ".flr", new string[] { "Downloads/" } },
+            { ".wav", new string[] { "Downloads/" } },
 
             { ".bcf", new string[] { "Downloads/" } }, //for animations
             { ".cfp", new string[] { "Downloads/" } }
@@ -68,12 +72,29 @@ namespace FSO.Content.Framework
                 }
             }
 
-            if (entries == null) return result;
-            foreach (var entry in entries)
+            if (entries != null)
             {
-                var name = Path.GetFileName(entry.FarEntry.Filename.ToLowerInvariant().Replace('\\', '/'));
-                if (name.Contains(exclude)) continue;
-                result[name] = entry;
+                foreach (var entry in entries)
+                {
+                    var name = Path.GetFileName(entry.FarEntry.Filename.ToLowerInvariant().Replace('\\', '/'));
+                    if (name.Contains(exclude)) continue;
+                    result[name] = entry;
+                }
+            }
+
+            // SimsRedux: shipped mods that replace the game's own files of the same name (they win over
+            // the game's archives, like a loose file in the original game's expansion folders)
+            {
+                var regexStr = Regex.Escape(Content.ReduxModTag + "Overrides/") + ".*\\" + ext;
+                FileProvider<object> provider;
+                if (!FileProvidersByRegex.TryGetValue(regexStr, out provider))
+                {
+                    provider = new FileProvider<object>(Manager, null, new Regex(regexStr, RegexOptions.IgnoreCase));
+                    provider.UseTS1 = true;
+                    provider.Init();
+                    FileProvidersByRegex[regexStr] = provider;
+                }
+                foreach (var entry in provider.List()) result[entry.ToString()] = entry;
             }
 
             /*

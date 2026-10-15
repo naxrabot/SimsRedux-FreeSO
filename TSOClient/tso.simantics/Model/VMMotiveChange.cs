@@ -1,4 +1,4 @@
-﻿using FSO.SimAntics.NetPlay.Model;
+using FSO.SimAntics.NetPlay.Model;
 using System;
 using System.IO;
 using FSO.Files;
@@ -51,7 +51,7 @@ namespace FSO.SimAntics.Model
             {
                 if (type == VMMotive.Energy && rate > 0)
                 {
-                    rate *= (int)VMTS1MotiveDecay.Constants[0] / (24 - (int)VMTS1MotiveDecay.Constants[1]);
+                    rate *= (int)VMTS1MotiveDecay.Constants[18] / (24 - (int)VMTS1MotiveDecay.Constants[1]);
                 }
                 return rate;
             } else

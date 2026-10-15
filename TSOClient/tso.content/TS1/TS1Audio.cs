@@ -1,4 +1,4 @@
-﻿using FSO.Content.Interfaces;
+using FSO.Content.Interfaces;
 using FSO.Files.HIT;
 using System;
 using System.Collections.Generic;
@@ -158,7 +158,7 @@ namespace FSO.Content.TS1
             foreach (var file in matchedFiles)
             {
                 //load associated HIT, HSM
-                var cFile = Path.Combine(ContentManager.TS1BasePath, file);
+                var cFile = ContentManager.TS1Path(file); // (SimsRedux: also the shipped mods' sounds)
                 var bPath = cFile.Substring(0, cFile.Length - 4); //path without .hot extension
 
                 var hsm = new HSM(PathCaseTools.Insensitive(bPath + ".hsm"));
