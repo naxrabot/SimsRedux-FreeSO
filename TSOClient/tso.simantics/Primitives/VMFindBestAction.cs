@@ -277,7 +277,7 @@ namespace FSO.SimAntics.Primitives
                         score = score / (1 + atten * distance);
 
                         // SimsRedux: the smarter brain weighs it (urgent needs first, time of day, work, nearby)
-                        if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance, obj.ObjectID, (int)id);
+                        if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
 
                         if (score > minScore)
                         {
@@ -340,6 +340,7 @@ namespace FSO.SimAntics.Primitives
                 qaction.Priority = (short)VMQueuePriority.Autonomous;
                 context.Caller.Thread.EnqueueAction(qaction);
                 brain?.Remember(selection);
+                if (brain != null && brain.ChoreCode != 0) brain.MarkCall(brain.ChoreCode);
                 context.StackObject = selection.Callee;
                 return VMPrimitiveExitCode.GOTO_TRUE;
             } else
@@ -403,7 +404,14 @@ namespace FSO.SimAntics.Primitives
                 LastAgo = Now - sim.BrainMemory[1];
                 if (LastAgo < 0) LastAgo += 30 * 1440; // (the month wrapped)
                 LastObject = sim.BrainMemory[0] >> 16;
-                LastNeed = (VMMotive)(sim.BrainMemory[2] - 1);
+                var ln = sim.BrainMemory[2];
+                if (ln >= 1 && ln <= 16) LastNeed = (VMMotive)(ln - 1); // (100+ are phone calls, not needs)
+            }
+            // stage 3: fires on the lot, and Sims who are asleep (be quiet near them)
+            foreach (var e in vm.Entities)
+            {
+                if (e is VMGameObject && e.Position != LotTilePos.OUT_OF_WORLD && IsFire(e)) Fires.Add(e.Position);
+                else if (e is VMAvatar a && a != sim && a.Position != LotTilePos.OUT_OF_WORLD && a.GetMotiveData(VMMotive.SleepState) != 0) Sleepers.Add(a);
             }
             Night = Hour >= 22 || Hour < 6;
             LateNight = Hour >= 23 || Hour < 5;
@@ -444,6 +452,84 @@ namespace FSO.SimAntics.Primitives
         private int LastObject = -1, LastAgo = int.MaxValue;
         private bool NeedsFine;
 
+        private readonly List<LotTilePos> Fires = new List<LotTilePos>();
+        private readonly List<VMAvatar> Sleepers = new List<VMAvatar>();
+        /// <summary>Set when FindChore picked a phone call (100 = repairman, 101 = fire department), so it isn't made twice.</summary>
+        public int ChoreCode;
+
+        private static bool IsFire(VMEntity e)
+        {
+            if (e.Object?.OBJ == null) return false;
+            if (e.Object.OBJ.GUID == VMBurn.FIRE_GUID) return true;
+            var label = e.Object.OBJ.ChunkLabel ?? "";
+            return label.Equals("fire", StringComparison.OrdinalIgnoreCase) || label.StartsWith("fire -", StringComparison.OrdinalIgnoreCase)
+                || label.Equals("fire1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static float Tiles(LotTilePos a, LotTilePos b)
+        {
+            if (a.Level != b.Level) return 1000;
+            return (float)Math.Sqrt(Math.Pow(a.x - b.x, 2) + Math.Pow(a.y - b.y, 2)) / 16f;
+        }
+
+        /// <summary>The phone call is in this Sim's memory, so nobody in the family calls again while help is on the way.</summary>
+        public void MarkCall(int code) { var m = Sim.BrainMemory; if (m != null && m.Length >= 12) m[2] = code; }
+
+        /// <summary>Did anyone in the family make this call in the last few hours?</summary>
+        private static bool CalledRecently(VM vm, int code, int now, int window)
+        {
+            foreach (var e in vm.Context.ObjectQueries.Avatars)
+            {
+                var a = e as VMAvatar; var m = a?.BrainMemory;
+                if (m == null || m.Length < 12) continue;
+                for (int i = 0; i < 4; i++)
+                {
+                    if (m[i * 3 + 2] != code) continue;
+                    var ago = now - m[i * 3 + 1]; if (ago < 0) ago += 30 * 1440;
+                    if (ago <= window) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>A phone service (by words in its menu name), as a choice the Sim can make, or null.</summary>
+        private VMPieMenuInteraction PhoneService(VMStackFrame context, List<VMEntity> ents, Func<string, bool> wanted)
+        {
+            var done = new HashSet<short>();
+            VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
+            foreach (var iobj in context.VM.Entities)
+            {
+                if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
+                var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
+                if (!done.Add(obj.ObjectID) || obj.TreeTable == null || obj.GetFlag(VMEntityFlags.Occupied)) continue;
+                var label = obj.Object?.OBJ?.ChunkLabel ?? "";
+                if (label.IndexOf("phone", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var ttas = obj.TreeTableStrings;
+                foreach (var ia in obj.TreeTable.Interactions)
+                {
+                    var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
+                    if (action == null) continue;
+                    Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
+                    var avail = Sim.Thread.CheckAction(action, false);
+                    if (avail == null) continue;
+                    var baseName = ttas?.GetString((int)ia.TTAIndex) ?? "";
+                    var options = (avail.Count > 0) ? avail : new List<VMPieMenuInteraction> { new VMPieMenuInteraction { Name = baseName } };
+                    foreach (var opt in options)
+                    {
+                        var name = opt.Name ?? baseName;
+                        if (!wanted(name) && !wanted(baseName + "/" + name)) continue;
+                        var d = Tiles(Sim.Position, obj.Position);
+                        if (d < bestDist)
+                        {
+                            bestDist = d;
+                            best = new VMPieMenuInteraction { Name = name, ID = (byte)ia.TTAIndex, Param0 = opt.Param0, Entry = ia, Global = false, Callee = obj, Score = 1 };
+                        }
+                    }
+                }
+            }
+            return best;
+        }
+
         private int Entry(int i, int part) { var m = Sim.BrainMemory; return (m == null || m.Length < 12) ? 0 : m[i * 3 + part]; }
 
         /// <summary>What the Sim chose: it goes to the top of their memory (the oldest is forgotten).</summary>
@@ -465,9 +551,18 @@ namespace FSO.SimAntics.Primitives
         /// <summary>A chore worth doing now (bills to pay, something broken it can fix), or null.</summary>
         public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents)
         {
-            if (Urgent || !NeedsFine) return null;
             var family = context.VM.TS1State?.CurrentFamily;
             if (family == null || Sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != family.ChunkID) return null;
+
+            // stage 3 - a fire: the nearest grown-up calls the fire department (once), before anything else
+            if (Fires.Count > 0 && !Sim.IsChild && !CalledRecently(context.VM, 101, Now, 60))
+            {
+                var call = PhoneService(context, ents, n => n.IndexOf("Fire Dep", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Firem", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Fire Brigade", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.EndsWith("/Fire", StringComparison.OrdinalIgnoreCase));
+                if (call != null) { ChoreCode = 101; return call; }
+            }
+            if (Urgent || !NeedsFine) return null;
             bool handy = Sim.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200;
             VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
             var done = new HashSet<short>();
@@ -497,7 +592,50 @@ namespace FSO.SimAntics.Primitives
                     }
                 }
             }
-            return best;
+            if (best != null) return best;
+
+            // stage 3 - something is broken and nobody in the family here can fix it: call the repairman (once)
+            if (!Sim.IsChild && !CalledRecently(context.VM, 100, Now, 6 * 60) && !SomeoneHandy(context.VM, family.ChunkID) && SomethingBroken(context))
+            {
+                var call = PhoneService(context, ents, n => n.IndexOf("Repairman", StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Repair Man", StringComparison.OrdinalIgnoreCase) >= 0 || n.EndsWith("/Repair", StringComparison.OrdinalIgnoreCase));
+                if (call != null) { ChoreCode = 100; return call; }
+            }
+            return null;
+        }
+
+        private static bool SomeoneHandy(VM vm, int family)
+        {
+            foreach (var e in vm.Context.ObjectQueries.Avatars)
+            {
+                var a = e as VMAvatar;
+                if (a == null || a.IsPet || a.Position == LotTilePos.OUT_OF_WORLD) continue;
+                if (a.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family && a.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Is anything on the lot waiting to be repaired? (its Repair interaction is available)</summary>
+        private bool SomethingBroken(VMStackFrame context)
+        {
+            var done = new HashSet<short>();
+            foreach (var iobj in context.VM.Entities)
+            {
+                if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
+                var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
+                if (!done.Add(obj.ObjectID) || obj.TreeTable == null) continue;
+                var ttas = obj.TreeTableStrings;
+                foreach (var ia in obj.TreeTable.Interactions)
+                {
+                    var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
+                    if (!name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase)) continue;
+                    var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
+                    if (action == null) continue;
+                    Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
+                    if (Sim.Thread.CheckAction(action, false) != null) return true;
+                }
+            }
+            return false;
         }
 
         private bool Ads(TTABInteraction entry, VMPieMenuInteraction first, VMMotive m)
@@ -514,12 +652,31 @@ namespace FSO.SimAntics.Primitives
         }
 
         /// <summary>How much more (or less) appealing this choice is right now.</summary>
-        public float Weigh(TTABInteraction entry, VMPieMenuInteraction first, TTABMotiveEntry[] ads, float distance, short objectID, int interaction)
+        public float Weigh(TTABInteraction entry, VMPieMenuInteraction first, TTABMotiveEntry[] ads, float distance, VMEntity target, int interaction)
         {
             float w = 1;
+            short objectID = target.ObjectID;
+
+            // stage 3 - stay away from a fire (only what's well clear of it is worth doing)
+            foreach (var f in Fires)
+                if (Tiles(f, target.Position) < 4) { w *= 0.05f; break; }
+
+            // stage 3 - manners: don't wake anyone. Socials with a sleeping Sim are off, and loud fun
+            // (TV, stereo, games) near someone asleep is much less appealing
+            if (target is VMAvatar ta && ta.GetMotiveData(VMMotive.SleepState) != 0) w *= 0.02f;
 
             // stage 2 - finish what they start: still hungry after the plate, still tired after a nap -
             // go back to it (the same object first) instead of wandering off to something else
+            if (Sleepers.Count > 0 && !(target is VMAvatar))
+            {
+                bool funOnly = true;
+                foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room })
+                    if (Ads(entry, first, m)) { funOnly = false; break; }
+                if (funOnly)
+                    foreach (var z in Sleepers)
+                        if (Tiles(z.Position, target.Position) < 6) { w *= 0.3f; break; }
+            }
+
             if (Level >= 2 && LastNeed >= 0 && LastAgo <= 60 && Needs[(int)LastNeed] < 60)
             {
                 if (Ads(entry, first, LastNeed)) w *= (objectID == LastObject) ? 2.5f : 1.3f;
