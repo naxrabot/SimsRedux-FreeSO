@@ -31,17 +31,6 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var target = vm.GetObjectById(TargetID);
             if (target == null || target is VMGameObject) return false;
 
-            // SimsRedux: a family Sim who is "away" (off the lot) comes back in at the mailbox first,
-            // so the player (and their camera) never ends up with a Sim nowhere
-            if (vm.TS1 && target.Position == FSO.LotView.Model.LotTilePos.OUT_OF_WORLD)
-            {
-                var mailbox = vm.Entities.FirstOrDefault(x => x.Object.OBJ.GUID == 0xEF121974 || x.Object.OBJ.GUID == 0x1D95C9B0)
-                    ?? vm.Entities.FirstOrDefault(x => x is VMGameObject && x.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD);
-                if (mailbox != null) FSO.SimAntics.Primitives.VMFindLocationFor.FindLocationFor(target, mailbox, vm.Context, VMPlaceRequestFlags.Default);
-                if (target.Position == FSO.LotView.Model.LotTilePos.OUT_OF_WORLD) return false;
-                vm.Scheduler.RescheduleInterrupt(target);
-            }
-
             if (caller != null && caller.PersistID == ActorUID)
             {
                 //relinquish previous control
@@ -55,7 +44,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             vm.Context.ObjectQueries.RegisterAvatarPersist((VMAvatar)target, target.PersistID);
             vm.SetGlobalValue(3, target.ObjectID);
 
-            if (VM.UseWorld)
+            // (a Sim who is away - at work, say - isn't on the lot: there's nothing to look at)
+            if (VM.UseWorld && target.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD)
             {
                 vm.Context.World.CenterTo(target.WorldUI);
             }

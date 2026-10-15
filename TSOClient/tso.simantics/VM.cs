@@ -1,4 +1,4 @@
-﻿#define VM_DESYNC_DEBUG
+#define VM_DESYNC_DEBUG
 
 using System;
 using System.Collections.Generic;
@@ -289,8 +289,9 @@ namespace FSO.SimAntics
                     allSounds.AddRange(ent.SoundThreads.Select(x => x.Sound));
                 }
 
-                if (SpeedMultiplier < 1 && SpeedMultiplier > -2 && LastFrameSpeed >= 1) allSounds.ForEach((x) => x.Pause()); 
-                else if (SpeedMultiplier >= 1 && LastFrameSpeed < 1) allSounds.ForEach((x) => x.Resume());
+                // SimsRedux: one broken sound (the browser drops some) must never stop the game
+                if (SpeedMultiplier < 1 && SpeedMultiplier > -2 && LastFrameSpeed >= 1) allSounds.ForEach((x) => { try { x?.Pause(); } catch (Exception) { } });
+                else if (SpeedMultiplier >= 1 && LastFrameSpeed < 1) allSounds.ForEach((x) => { try { x?.Resume(); } catch (Exception) { } });
                 LastFrameSpeed = SpeedMultiplier;
             }
 

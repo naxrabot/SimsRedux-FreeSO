@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 
 namespace FSO.SimAntics.NetPlay.Model.Commands
 {
@@ -8,6 +8,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public int Minutes;
         public int Seconds;
         public long UTCStart;
+        /// <summary>SimsRedux: the day too (0 = leave the day as it is).</summary>
+        public int DayOfMonth;
 
         public override bool Execute(VM vm)
         {
@@ -17,6 +19,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             clock.MinuteFractions = (Seconds * clock.TicksPerMinute) / 60;
             clock.UTCStart = UTCStart;
             clock.Ticks = 0;
+            if (DayOfMonth > 0) clock.DayOfMonth = DayOfMonth;
             return true;
         }
 
@@ -32,6 +35,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             Minutes = reader.ReadInt32();
             Seconds = reader.ReadInt32();
             UTCStart = reader.ReadInt64();
+            DayOfMonth = reader.ReadInt32();
         }
 
         public override void SerializeInto(BinaryWriter writer)
@@ -41,6 +45,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             writer.Write(Minutes);
             writer.Write(Seconds);
             writer.Write(UTCStart);
+            writer.Write(DayOfMonth);
         }
     }
 }

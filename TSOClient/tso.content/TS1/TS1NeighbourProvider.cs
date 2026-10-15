@@ -392,7 +392,135 @@ namespace FSO.Content.TS1
             DirtyAvatars.Add(guid);
         }
 
+        /// <summary>
+        /// SimsRedux online town: set by a lot on the dedicated server. Several lots (each its own
+        /// program) share the town's Neighborhood.iff, so a lot may only write what's its own: this
+        /// says which neighbours (Sims) and families those are right now. Everything else is taken
+        /// from the file as it is on disk at the moment of saving, so lots never undo each other.
+        /// </summary>
+        public Func<Tuple<HashSet<short>, HashSet<int>>> SharedTownOwnership;
+
         public bool SaveNeighbourhood(bool withSims)
+        {
+            var shared = SharedTownOwnership;
+            if (shared == null) return WriteNeighbourhood(withSims);
+
+            Tuple<HashSet<short>, HashSet<int>> mine;
+            try { mine = shared(); }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] couldn't tell which Sims are this lot's: " + e.Message); mine = null; }
+            using (var townLock = LockTownFile())
+            {
+                if (townLock == null) Console.WriteLine("[SimsRedux] the town file stayed busy - saving anyway");
+                if (mine != null)
+                {
+                    try { PullOthersFromDisk(mine.Item1, mine.Item2); }
+                    catch (Exception e) { Console.WriteLine("[SimsRedux] couldn't read the town's latest neighbourhood: " + e.Message); }
+                }
+                // written next to it first, then swapped in, so nobody ever reads half a file
+                var path = Path.Combine(UserPath, "Neighborhood.iff");
+                var temp = path + ".saving";
+                if (withSims) WriteDirtyAvatars();
+                using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+                    MainResource.Write(stream);
+                File.Copy(temp, path, true);
+                try { File.Delete(temp); } catch { }
+                return true;
+            }
+        }
+
+        /// <summary>Only one lot at a time reads-and-writes the town's neighbourhood (a lock file next to it).</summary>
+        private IDisposable LockTownFile()
+        {
+            var path = Path.Combine(UserPath, "Neighborhood.lock");
+            var until = DateTime.UtcNow.AddSeconds(15);
+            while (true)
+            {
+                try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+                catch (IOException)
+                {
+                    if (DateTime.UtcNow > until) return null;
+                    System.Threading.Thread.Sleep(50);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Everything that isn't this lot's (other families, other Sims, their things) is brought up to
+        /// date from the town file on disk - another lot may have changed it since this one opened.
+        /// </summary>
+        private void PullOthersFromDisk(HashSet<short> myNeighbours, HashSet<int> myFamilies)
+        {
+            var path = Path.Combine(UserPath, "Neighborhood.iff");
+            if (!File.Exists(path)) return;
+            var disk = new IffFile(path);
+
+            foreach (var df in disk.List<FAMI>() ?? new List<FAMI>())
+            {
+                if (myFamilies.Contains(df.ChunkID)) continue;
+                var fam = MainResource.Get<FAMI>(df.ChunkID);
+                if (fam == null)
+                {
+                    // a family that arrived in the town on another lot
+                    MainResource.AddChunk(df);
+                    var dname = disk.Get<FAMs>(df.ChunkID);
+                    if (dname != null && MainResource.Get<FAMs>(df.ChunkID) == null) MainResource.AddChunk(dname);
+                    continue;
+                }
+                fam.HouseNumber = df.HouseNumber;
+                fam.FamilyNumber = df.FamilyNumber;
+                fam.Budget = df.Budget;
+                fam.ValueInArch = df.ValueInArch;
+                fam.FamilyFriends = df.FamilyFriends;
+                fam.Unknown = df.Unknown;
+                fam.FamilyGUIDs = df.FamilyGUIDs;
+            }
+            FamilyForHouse = new Dictionary<short, FAMI>();
+            foreach (var fam in MainResource.List<FAMI>() ?? new List<FAMI>())
+                FamilyForHouse[(short)fam.HouseNumber] = fam;
+
+            var dn = disk.List<NBRS>()?.FirstOrDefault();
+            if (dn != null && Neighbors != null)
+            {
+                foreach (var d in dn.Entries)
+                {
+                    if (myNeighbours.Contains(d.NeighbourID)) continue;
+                    if (Neighbors.NeighbourByID.TryGetValue(d.NeighbourID, out var n))
+                    {
+                        // (what a visiting Sim thinks of this lot's Sims was made here: that part stays)
+                        var keep = n.Relationships?.Where(kv => myNeighbours.Contains((short)kv.Key)).ToList();
+                        n.Name = d.Name;
+                        n.PersonMode = d.PersonMode;
+                        n.PersonData = d.PersonData;
+                        n.Relationships = (d.Relationships == null) ? null : new Dictionary<int, List<short>>(d.Relationships);
+                        if (keep != null && n.Relationships != null) foreach (var kv in keep) n.Relationships[kv.Key] = kv.Value;
+                    }
+                    else Neighbors.AddNeighbor(d);
+                }
+            }
+
+            var dg = disk.List<NGBH>()?.FirstOrDefault();
+            if (dg != null && Neighborhood != null)
+            {
+                foreach (var kv in dg.InventoryByID)
+                    if (!myNeighbours.Contains(kv.Key)) Neighborhood.InventoryByID[kv.Key] = kv.Value;
+            }
+        }
+
+        private void WriteDirtyAvatars()
+        {
+            foreach (var ava in DirtyAvatars)
+            {
+                var obj = ContentManager.WorldObjects.Get(ava);
+                if (obj != null)
+                {
+                    using (var stream = FSOFile.Open(obj.Resource.Name, FileMode.Create))
+                        obj.Resource.MainIff.Write(stream);
+                }
+            }
+            DirtyAvatars.Clear();
+        }
+
+        private bool WriteNeighbourhood(bool withSims)
         {
             //todo: save iffs for dirty avatars. 
             if (withSims)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.SimAntics.NetPlay.Model;
@@ -447,6 +447,12 @@ namespace FSO.SimAntics.NetPlay.Drivers
                 {
                     //does client have an avatar? did they have one before?
                     if (vm.GetAvatarByPersist(client.Key) != null) { client.Value.HadAvatar = true; }
+                    else if (client.Value.HadAvatar && vm.ReduxFamilyControl.ContainsKey(client.Key))
+                    {
+                        // SimsRedux: a family's owner at home whose Sim went (at work, moved out of
+                        // the family...) isn't thrown out - they're handed another of their family
+                        client.Value.HadAvatar = false;
+                    }
                     else if (client.Value.HadAvatar)
                     {
                         //something removed this avatar. They have disconnected.
