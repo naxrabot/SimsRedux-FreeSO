@@ -28,7 +28,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 // added the Sim's character file and neighbour data to everyone's game, so it can
                 // be created like any other Sim. It appears next to the host's selected Sim.
                 if (vm.GetAvatarByPersist(ActorUID) != null) return true;
-                VMMultitileGroup group;
+                FSO.SimAntics.Entities.VMMultitileGroup group;
                 // (a player's game must never stop over a visitor's Sim: if it can't be made here,
                 //  it's left out and appears with the lot's next refresh)
                 try { group = vm.Context.CreateObjectInstance(AvatarState.CustomGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH); }
