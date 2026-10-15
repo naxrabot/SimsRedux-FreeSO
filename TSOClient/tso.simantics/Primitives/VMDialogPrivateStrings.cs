@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using FSO.SimAntics.Engine;
 using FSO.Files.Utils;
@@ -47,8 +47,11 @@ namespace FSO.SimAntics.Primitives
                     if (context.VM.TS1)
                     {
                         context.VM.GlobalBlockingDialog = context.Caller;
-                        context.VM.LastSpeedMultiplier = context.VM.SpeedMultiplier;
-                        context.VM.SpeedMultiplier = -2;
+                        if (!context.VM.ReduxNoPause)
+                        {
+                            context.VM.LastSpeedMultiplier = context.VM.SpeedMultiplier;
+                            context.VM.SpeedMultiplier = -2;
+                        }
                     }
                     return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                 }

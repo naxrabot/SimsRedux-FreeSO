@@ -256,6 +256,11 @@ namespace FSO.SimAntics
         /// with that family's number. They may switch between their own family's Sims.
         /// </summary>
         public Dictionary<uint, short> ReduxFamilyControl = new Dictionary<uint, short>();
+        /// <summary>
+        /// SimsRedux online: the lot never pauses (set on the server and on every player's game alike).
+        /// A question only holds up the Sim it's about; everyone else carries on, as in The Sims Online.
+        /// </summary>
+        public bool ReduxNoPause;
         public int LastSpeedMultiplier;
         private int LastFrameSpeed = 1;
         private float Fraction;

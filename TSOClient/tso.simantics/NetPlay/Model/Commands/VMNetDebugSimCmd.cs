@@ -30,8 +30,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     if (vm.GlobalBlockingDialog == sim)
                     {
                         vm.GlobalBlockingDialog = null;
-                        vm.SpeedMultiplier = vm.LastSpeedMultiplier;
-                        vm.LastSpeedMultiplier = 0;
+                        if (!vm.ReduxNoPause) // (online lots were never paused)
+                        {
+                            vm.SpeedMultiplier = vm.LastSpeedMultiplier;
+                            vm.LastSpeedMultiplier = 0;
+                        }
                     }
                     sim.Thread.BlockingState = null;
                     sim.Reset(vm.Context);

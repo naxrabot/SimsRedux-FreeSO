@@ -16,8 +16,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (vm.TS1)
             {
                 owner = vm.GlobalBlockingDialog;
-                vm.SpeedMultiplier = vm.LastSpeedMultiplier;
-                vm.LastSpeedMultiplier = 0;
+                if (!vm.ReduxNoPause) // (online lots were never paused)
+                {
+                    vm.SpeedMultiplier = vm.LastSpeedMultiplier;
+                    vm.LastSpeedMultiplier = 0;
+                }
                 vm.GlobalBlockingDialog = null;
             }
             if (owner == null ||
