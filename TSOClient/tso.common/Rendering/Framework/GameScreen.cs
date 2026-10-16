@@ -114,10 +114,12 @@ namespace FSO.Common.Rendering.Framework
                 // tools that ask (never as a held button: taps are handled by the touch code above)
                 if (!FSOEnvironment.SoftwareDepth)
                     State.KeyboardState = hasFocus ? Keyboard.GetState() : new KeyboardState();
+                // (held down = the left button, so sliders and the like can be dragged with a finger)
                 var first = State.MouseStates.FirstOrDefault(x => !x.Dead) ?? State.MouseStates.FirstOrDefault();
                 if (first != null)
                     State.MouseState = new MouseState(first.MouseState.X, first.MouseState.Y, State.MouseState.ScrollWheelValue,
-                        ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+                        (!first.Dead && first.MouseState.LeftButton == ButtonState.Pressed) ? ButtonState.Pressed : ButtonState.Released,
+                        ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
             }
             else
             {
