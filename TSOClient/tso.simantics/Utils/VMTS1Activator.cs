@@ -69,6 +69,17 @@ namespace FSO.SimAntics.Utils
             if (vm == null || !vm.TS1 || vm.Context == null) return 0;
             var controllers = Content.Content.Get().WorldObjects.ControllerObjects;
             if (controllers == null || controllers.Count == 0) return 0;
+            // the ones that misbehave here are left out, and taken off lots an earlier version saved them into
+            foreach (var ent in vm.Entities.ToList())
+            {
+                if (ent?.Object?.OBJ == null || ent.Dead || !Skipped(ent.Object.OBJ.ChunkLabel)) continue;
+                try
+                {
+                    ent.Delete(true, vm.Context);
+                    Console.WriteLine("[SimsRedux] removed the global object " + ent.Object.OBJ.ChunkLabel);
+                }
+                catch { }
+            }
             var present = new HashSet<uint>();
             foreach (var ent in vm.Entities)
             {
@@ -79,6 +90,7 @@ namespace FSO.SimAntics.Utils
             {
                 var guid = (uint)controller.ID;
                 if (present.Contains(guid)) continue;
+                if (Skipped(controller.Name)) continue;
                 try
                 {
                     var group = vm.Context.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, Direction.NORTH);
@@ -93,6 +105,16 @@ namespace FSO.SimAntics.Utils
                 }
             }
             return made;
+        }
+
+        /// <summary>
+        /// SimsRedux: global objects never added by EnsureGlobalSimObjects. "Controller - Insanity" spins in
+        /// an endless loop in this engine (a SimAntics error on every lot).
+        /// </summary>
+        private static bool Skipped(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            return name.IndexOf("Insanity", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public Blueprint LoadFromIff(IffFile iff)
