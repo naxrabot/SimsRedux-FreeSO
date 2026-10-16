@@ -105,6 +105,17 @@ namespace FSO.SimAntics.Primitives
                 return VMPrimitiveExitCode.GOTO_TRUE;
             }
 
+            // SimsRedux: the player is always in charge. While anything the player ordered is still
+            // waiting in this Sim's queue (even behind the action that's running now), the Sim never
+            // adds a choice of their own - their own ideas only come once the player's list is empty.
+            if (context.VM.TS1 && context.Caller is VMAvatar && !((VMAvatar)context.Caller).IsPet)
+            {
+                var th = context.Caller.Thread;
+                for (int i = th.ActiveQueueBlock + 1; i < th.Queue.Count; i++)
+                    if (th.Queue[i].Priority >= (short)VMQueuePriority.UserDriven && th.Queue[i].Mode == VMQueueMode.Normal)
+                        return VMPrimitiveExitCode.GOTO_FALSE;
+            }
+
             var ents = new List<VMEntity>(context.VM.Context.ObjectQueries.WithAutonomy);
             var processed = new HashSet<short>();
             var caller = (VMAvatar)context.Caller;
@@ -138,11 +149,19 @@ namespace FSO.SimAntics.Primitives
 
             // === SIMSREDUX: SMARTER BRAIN - what matters right now ===
             int level = context.VM.ReduxNoPause ? 2 : ReduxLevel;
+            // (a Sim of the family living here - not a visitor, NPC or pet)
+            bool familySim = context.VM.TS1 && !caller.IsPet && !visitor && context.VM.TS1State?.CurrentFamily != null
+                && caller.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == context.VM.TS1State.CurrentFamily.ChunkID;
             // Off (single player): the player's own family does nothing on their own; visitors still do
-            if (level < 0 && context.VM.TS1 && !caller.IsPet && !visitor && context.VM.TS1State?.CurrentFamily != null
-                && caller.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == context.VM.TS1State.CurrentFamily.ChunkID)
+            if (level < 0 && familySim)
                 return VMPrimitiveExitCode.GOTO_FALSE;
             var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
+
+            // SimsRedux: something to do when nothing is *needed*. Sims 1 only scores a choice by how much it
+            // raises a need, so with every need in the flat top part of its curve (most of the day, with the
+            // slower motives built in) nothing scores at all and the Sim just stands there. These are the
+            // fun / social / tidying / skill choices to fall back on then (family Sims only).
+            List<VMPieMenuInteraction> idleChoices = (brain != null && familySim) ? new List<VMPieMenuInteraction>() : null;
 
             List<VMPieMenuInteraction> validActions = new List<VMPieMenuInteraction>();
             foreach (var iobj in ents)
@@ -214,6 +233,7 @@ namespace FSO.SimAntics.Primitives
                         // calculate score for this tree.
                         // start with the base happy value, and modify it for each motive changed.
                         float score = baseHappy;
+                        float idleAppeal = 0; bool needsAd = false; // SimsRedux: for idleChoices (see above)
                         for (int i = 0; i < advertisements.Length; i++)
                         {
                             var motiveI = advertisements[i].MotiveIndex;
@@ -262,6 +282,19 @@ namespace FSO.SimAntics.Primitives
                                 }
                             }
 
+                            // SimsRedux: how much this offers someone with nothing they need (raw ad strength).
+                            // Anything for a physical need (eating, sleeping, the bathroom, washing) is left
+                            // to the normal scoring - no eating when full, no naps when rested.
+                            if (idleChoices != null && max > 0)
+                            {
+                                var mo = (VMMotive)motiveI;
+                                bool skillAd = personality >= 13 && personality < VaryByTypes.Length;
+                                float mul = skillAd ? Math.Max(personalityMul, 0.5f) : personalityMul; // (skill-building even at skill 0)
+                                if (mo == VMMotive.Fun || mo == VMMotive.Social || mo == VMMotive.Room || mo == VMMotive.Mood) idleAppeal += max * mul;
+                                else if (mo == VMMotive.Comfort) idleAppeal += max * mul * 0.3f;
+                                else needsAd = true;
+                            }
+
                             // then add the new contribution for this motive.
                             score += interactionCurve[weightInd].GetPoint(myMotive + (max * personalityMul) / 1000f) * weights[weightInd];
                         }
@@ -286,6 +319,19 @@ namespace FSO.SimAntics.Primitives
                                 validActions.Add(first);
                             }
                         }
+                        else if (idleChoices != null && !needsAd && idleAppeal > 0)
+                        {
+                            // SimsRedux: not needed right now - keep it as something to do if nothing else is
+                            // (same manners as everything else: not near a fire, not next to sleepers...)
+                            float idle = idleAppeal / 1000f / (1 + 0.1f * distance);
+                            idle *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
+                            if (idle > minScore)
+                            {
+                                first.Score = idle;
+                                first.Callee = obj;
+                                idleChoices.Add(first);
+                            }
+                        }
                     }
                     //if (attenScore != 0) attenScore += (int)context.VM.Context.NextRandom(31) - 15;
                     
@@ -296,22 +342,30 @@ namespace FSO.SimAntics.Primitives
             List<VMPieMenuInteraction> sorted = validActions.OrderByDescending(x => x.Score).ToList();
             sorted = TakeTopActions(sorted, 4);
             var selection = sorted.FirstOrDefault();
-            if (selection == null) return VMPrimitiveExitCode.GOTO_FALSE;
+            // SimsRedux: nothing is needed - do something anyway (fun, a chat, tidying up, a skill)
+            if (selection == null && idleChoices != null && idleChoices.Count > 0)
+            {
+                sorted = TakeTopActions(idleChoices.OrderByDescending(x => x.Score).ToList(), 4);
+                selection = sorted.FirstOrDefault();
+            }
             // SimsRedux: no silly picks - only choices close to the best one are in the draw, and when a
             // need is urgent the Sim simply does the best thing for it
-            if (brain != null)
+            if (brain != null && selection != null)
             {
                 var best = selection.Score;
                 sorted = sorted.Where(x => x.Score >= best * (level >= 2 ? 0.5f : 0.3f)).ToList();
             }
             // SimsRedux stage 2: chores when the Sim is doing fine - pay the bills, repair what's broken
-            // (with the Mechanical skill for it), the Sims 4 way
+            // (with the Mechanical skill for it), the Sims 4 way. (Looked at even when nothing else scored:
+            // a Sim with every need fine is exactly the one who should be paying the bills or calling
+            // the fire department.)
             bool chore = false;
             if (brain != null && level >= 2 && !visitor)
             {
                 var c = brain.FindChore(context, ents);
                 if (c != null) { selection = c; chore = true; }
             }
+            if (selection == null) return VMPrimitiveExitCode.GOTO_FALSE;
             if (!chore && !selection.Entry.AutoFirst && !(brain != null && brain.Urgent))
             {
                 // weighted random selection
@@ -346,6 +400,83 @@ namespace FSO.SimAntics.Primitives
                 return VMPrimitiveExitCode.GOTO_FALSE;
             }
             
+        }
+
+        /// <summary>
+        /// SimsRedux: game minutes a family Sim stands idle (nothing at all in their queue) before they pick
+        /// something to do themselves. The Sim the player is controlling waits a little longer, so the player
+        /// has time to give the next order. Online every Sim waits the same (no "selected Sim" there).
+        /// </summary>
+        public const int IdleMinutes = 2, IdleMinutesSelected = 5, IdleMinutesOnline = 4;
+
+        private static readonly VMFindBestAction IdleFinder = new VMFindBestAction();
+
+        /// <summary>
+        /// SimsRedux: the idle safety net, called from VMAvatar.Tick. However often (or rarely) the Sims 1
+        /// person code gets round to free will (rarely, or never for the Sim you control) - a family Sim with an
+        /// empty queue for a few game minutes looks for something to do, exactly as if the person code had
+        /// asked (same scoring, same Autonomous priority, so any order from the player interrupts it).
+        /// Only lot state is used (queue, needs, game clock, BrainMemory[16..17]), so it runs the same on
+        /// the server and every player's game. Visitors, NPCs and pets are left to the original game, and
+        /// the Off setting turns it off.
+        /// </summary>
+        public static void ReduxIdleCheck(VMAvatar sim)
+        {
+            var thread = sim?.Thread;
+            var vm = thread?.Context?.VM;
+            if (vm == null || !vm.TS1 || sim.Dead || sim.IsPet) return;
+            var mem = sim.BrainMemory;
+            if (mem == null || mem.Length < 18) return;
+            int level = vm.ReduxNoPause ? 2 : ReduxLevel;
+            var family = vm.TS1State?.CurrentFamily;
+
+            bool idle = level >= 0 && family != null
+                && sim.GetPersonData(VMPersonDataVariable.PersonType) != 1                        // not a visitor/NPC
+                && sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family.ChunkID      // the family living here
+                && sim.GetPersonData(VMPersonDataVariable.IsGhost) == 0
+                && thread.Queue.Count == 0                                                        // nothing queued at all
+                && thread.BlockingState == null && thread.Stack.Count > 0 && !thread.Stack[thread.Stack.Count - 1].ActionTree
+                && sim.Position != LotTilePos.OUT_OF_WORLD && sim.Container == null              // here (not at work, not carried)
+                && sim.GetMotiveData(VMMotive.SleepState) == 0
+                && vm.GlobalBlockingDialog == null;
+            if (!idle) { mem[16] = 0; mem[17] = 0; return; }
+
+            var clock = vm.Context.Clock;
+            int now = clock.DayOfMonth * 1440 + clock.Hours * 60 + clock.Minutes;
+            if (mem[17] == 0) { mem[16] = now; mem[17] = 1; return; } // just became idle: start counting
+            var ago = now - mem[16]; if (ago < 0) ago += 30 * 1440;
+            int wait = vm.ReduxNoPause ? IdleMinutesOnline : ((vm.GetGlobalValue(3) == sim.ObjectID) ? IdleMinutesSelected : IdleMinutes);
+            if (ago < wait) return;
+
+            mem[16] = now; // (if nothing comes of it, try again a few minutes later)
+            var frame = new VMStackFrame
+            {
+                Thread = thread,
+                Caller = sim,
+                Callee = sim,
+                CodeOwner = sim.Object,
+                Args = new short[4],
+                Locals = new short[0]
+            };
+            // the interactions' check trees share this Sim's temp registers; the person code didn't ask for
+            // this search, so put its temps back exactly as they were afterwards
+            var temps = (short[])thread.TempRegisters.Clone();
+            var tempXL = (int[])thread.TempXL.Clone();
+            var hide = sim.ObjectData[(int)VMStackObjectVariable.HideInteraction];
+            try
+            {
+                IdleFinder.Execute(frame, null);
+            }
+            catch (Exception)
+            {
+                // a broken object's check tree must never take the whole lot down (same on every machine)
+            }
+            finally
+            {
+                Array.Copy(temps, thread.TempRegisters, Math.Min(temps.Length, thread.TempRegisters.Length));
+                Array.Copy(tempXL, thread.TempXL, Math.Min(tempXL.Length, thread.TempXL.Length));
+                sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = hide;
+            }
         }
 
         private List<VMPieMenuInteraction> TakeTopActions(List<VMPieMenuInteraction> list, int count)
