@@ -357,6 +357,21 @@ namespace FSO.Client.UI.Controls
 
         private bool IsFocused;
         private string QueuedChange;
+
+        /// <summary>SimsRedux: true if the player can't type in this box.</summary>
+        public bool IsReadOnly { get { return m_IsReadOnly; } }
+
+        /// <summary>
+        /// SimsRedux website (touch): the whole text from the phone's own keyboard. Put in on the
+        /// next update, with the cursor at the end.
+        /// </summary>
+        public void SetTextFromKeyboard(string text)
+        {
+            if (m_IsReadOnly) return;
+            text = text ?? "";
+            if (text.Length > MaxChars) text = text.Substring(0, MaxChars);
+            lock (this) QueuedChange = text;
+        }
         public void OnFocusChanged(FocusEvent newFocus)
         {
             IsFocused = newFocus == FocusEvent.FocusIn;
@@ -411,6 +426,7 @@ namespace FSO.Client.UI.Controls
                 {
                     CurrentText = QueuedChange;
                     QueuedChange = null;
+                    SelectionToEnd();
                     if (OnChange != null) OnChange(this);
                 }
             }
