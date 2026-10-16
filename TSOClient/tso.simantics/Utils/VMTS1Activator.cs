@@ -55,6 +55,46 @@ namespace FSO.SimAntics.Utils
             HouseNumber = hn;
         }
 
+        /// <summary>
+        /// SimsRedux: Sims 1 makes sure every "global sim object" (the hidden objects flagged Global in
+        /// their OBJD: the phone line, the go-downtown/vacation/studio/magic-town objects and the other
+        /// lot-wide controllers) exists on every lot it loads. This old loader made them all fresh; the
+        /// new one (VMTS1ActivatorNew, and lots saved by this game) only has the ones that happened to
+        /// be saved in the house, so a house saved before an expansion pack (or a lot saved without
+        /// them) is missing that expansion's controllers. This adds the missing ones (never a second
+        /// copy). Returns how many were made.
+        /// </summary>
+        public static int EnsureGlobalSimObjects(VM vm)
+        {
+            if (vm == null || !vm.TS1 || vm.Context == null) return 0;
+            var controllers = Content.Content.Get().WorldObjects.ControllerObjects;
+            if (controllers == null || controllers.Count == 0) return 0;
+            var present = new HashSet<uint>();
+            foreach (var ent in vm.Entities)
+            {
+                if (ent?.Object?.OBJ != null) present.Add(ent.Object.OBJ.GUID);
+            }
+            int made = 0;
+            foreach (var controller in controllers.ToList())
+            {
+                var guid = (uint)controller.ID;
+                if (present.Contains(guid)) continue;
+                try
+                {
+                    var group = vm.Context.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, Direction.NORTH);
+                    if (group == null) continue;
+                    made++;
+                    foreach (var obj in group.Objects) if (obj?.Object?.OBJ != null) present.Add(obj.Object.OBJ.GUID);
+                    Console.WriteLine("[SimsRedux] added the missing global object " + (controller.Name ?? "") + " (" + guid.ToString("X8") + ")");
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("[SimsRedux] couldn't add global object " + guid.ToString("X8") + ": " + e.Message);
+                }
+            }
+            return made;
+        }
+
         public Blueprint LoadFromIff(IffFile iff)
         {
             var simi = iff.Get<SIMI>(1);

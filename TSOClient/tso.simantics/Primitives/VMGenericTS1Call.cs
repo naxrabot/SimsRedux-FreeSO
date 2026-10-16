@@ -155,6 +155,10 @@ namespace FSO.SimAntics.Primitives
                     context.VM.SendCommand(new VMNetChangeControlCmd() { TargetID = control.ObjectID });
                     crossDataDT.ActiveFamily.SelectOneMember(crossDataDT.DowntownSimGUID);
                     context.VM.TS1State.ActivateFamily(context.VM, crossDataDT.ActiveFamily);
+                    // SimsRedux: the travelling Sim belongs to the active family. They were made before the
+                    // family was active, so they came out as a visitor (person type 1) - and a visitor's own
+                    // Sim only sees interactions open to visitors (not the shop staff's, for one).
+                    ((VMAvatar)control).SetPersonData(VMPersonDataVariable.PersonType, 0);
 
                     context.Thread.TempRegisters[0] = context.VM.GetGlobalValue(3);
                     if (VM.UseWorld) context.VM.Context.World.CenterTo((AvatarComponent)(context.VM.GetObjectById(context.VM.GetGlobalValue(3))?.WorldUI));
@@ -251,6 +255,7 @@ namespace FSO.SimAntics.Primitives
                         context.VM.SendCommand(new VMNetChangeControlCmd() { TargetID = control2.ObjectID });
                         crossData2.ActiveFamily.SelectOneMember(crossData2.DowntownSimGUID);
                         context.VM.TS1State.ActivateFamily(context.VM, crossData2.ActiveFamily);
+                        ((VMAvatar)control2).SetPersonData(VMPersonDataVariable.PersonType, 0); // SimsRedux: (as above)
 
                         context.Thread.TempRegisters[0] = context.VM.GetGlobalValue(3);
                     }
