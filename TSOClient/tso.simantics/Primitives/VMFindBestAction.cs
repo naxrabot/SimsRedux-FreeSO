@@ -620,6 +620,7 @@ namespace FSO.SimAntics.Primitives
                     bool bills = name.IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool repair = handy && name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase);
                     if (!bills && !repair) continue;
+                    if (GivenUp(obj.ObjectID, ia.TTAIndex)) continue; // tried it again and again: leave it for a while
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
                     if (action == null) continue;
                     Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
@@ -634,7 +635,13 @@ namespace FSO.SimAntics.Primitives
                     }
                 }
             }
-            if (best != null) return best;
+            if (best != null)
+            {
+                // the same chore picked twice already in the last 2 hours and it's still waiting (they can't
+                // get to it, or keep being pulled away): give up on it for 3 hours instead of looping
+                if (TriesRecently(best.Callee.ObjectID, best.ID, 120) >= 2) { GiveUp(best.Callee.ObjectID, best.ID); return null; }
+                return best;
+            }
 
             // stage 3 - something is broken and nobody in the family here can fix it: call the repairman (once)
             if (!Sim.IsChild && !CalledRecently(context.VM, 100, Now, 6 * 60) && !SomeoneHandy(context.VM, family.ChunkID) && SomethingBroken(context))
@@ -644,6 +651,42 @@ namespace FSO.SimAntics.Primitives
                 if (call != null) { ChoreCode = 100; return call; }
             }
             return null;
+        }
+
+        // SimsRedux: chores a Sim keeps failing. BrainMemory[14] = the chore (object << 16 | interaction),
+        // [15] = when they gave up on it (game minutes). Game time only, so every machine agrees.
+        private const int GiveUpMinutes = 180;
+
+        private static int ChoreKey(short objectID, uint tta) { return (objectID << 16) | ((int)tta & 0xFFFF); }
+
+        private int TriesRecently(short objectID, uint tta, int window)
+        {
+            var m = Sim.BrainMemory;
+            if (m == null || m.Length < 12) return 0;
+            int key = ChoreKey(objectID, tta), n = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                if (m[i * 3] != key || m[i * 3 + 1] == 0) continue;
+                var ago = Now - m[i * 3 + 1]; if (ago < 0) ago += 30 * 1440;
+                if (ago <= window) n++;
+            }
+            return n;
+        }
+
+        private bool GivenUp(short objectID, uint tta)
+        {
+            var m = Sim.BrainMemory;
+            if (m == null || m.Length < 16 || m[14] != ChoreKey(objectID, tta)) return false;
+            var ago = Now - m[15]; if (ago < 0) ago += 30 * 1440;
+            return ago < GiveUpMinutes;
+        }
+
+        private void GiveUp(short objectID, uint tta)
+        {
+            var m = Sim.BrainMemory;
+            if (m == null || m.Length < 16) return;
+            m[14] = ChoreKey(objectID, tta);
+            m[15] = Now;
         }
 
         private static bool SomeoneHandy(VM vm, int family)
