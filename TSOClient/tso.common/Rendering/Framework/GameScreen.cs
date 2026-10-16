@@ -97,6 +97,16 @@ namespace FSO.Common.Rendering.Framework
                         miss.Dead = true;
                     }
                 }
+
+                // SimsRedux (touch controls on the website): a keyboard attached to a tablet still types
+                // and works the shortcuts, and the first finger counts as "where the mouse is" for the
+                // tools that ask (never as a held button: taps are handled by the touch code above)
+                if (!FSOEnvironment.SoftwareDepth)
+                    State.KeyboardState = hasFocus ? Keyboard.GetState() : new KeyboardState();
+                var first = State.MouseStates.FirstOrDefault(x => !x.Dead) ?? State.MouseStates.FirstOrDefault();
+                if (first != null)
+                    State.MouseState = new MouseState(first.MouseState.X, first.MouseState.Y, State.MouseState.ScrollWheelValue,
+                        ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
             }
             else
             {
