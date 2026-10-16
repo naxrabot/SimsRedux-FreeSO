@@ -60,22 +60,33 @@ namespace FSO.Common.Rendering.Framework
             if (touchMode)
             {
                 if (FSOEnvironment.SoftwareDepth) State.KeyboardState = new KeyboardState();
-                TouchCollection touches = TouchPanel.GetState();
+                // SimsRedux website: the page reads the fingers itself (already in the game's pixels);
+                // elsewhere the engine's touch panel
+                var fingers = new List<KeyValuePair<int, Vector2>>();
+                if (FSO.Common.Rendering.Framework.IO.WebTouchInput.Enabled)
+                    fingers = FSO.Common.Rendering.Framework.IO.WebTouchInput.Take();
+                else
+                {
+                    TouchCollection touches = TouchPanel.GetState();
+                    foreach (var touch in touches)
+                        fingers.Add(new KeyValuePair<int, Vector2>(touch.Id,
+                            new Vector2(touch.Position.X * FSOEnvironment.InputScaleX, touch.Position.Y * FSOEnvironment.InputScaleY)));
+                }
 
                 var missing = new HashSet<MultiMouse>(State.MouseStates);
                 //relate touches to their last virtual mouse
-                foreach (var touch in touches)
+                foreach (var touch in fingers)
                 {
-                    var mouse = State.MouseStates.FirstOrDefault(x => x.ID == touch.Id);
+                    var mouse = State.MouseStates.FirstOrDefault(x => x.ID == touch.Key);
                     if (mouse == null)
                     {
-                        mouse = new MultiMouse { ID = touch.Id };
+                        mouse = new MultiMouse { ID = touch.Key };
                         State.MouseStates.Add(mouse);
                     }
                     missing.Remove(mouse);
 
                     mouse.MouseState = new MouseState(
-                        (int)(touch.Position.X * FSOEnvironment.InputScaleX), (int)(touch.Position.Y * FSOEnvironment.InputScaleY), 0,
+                        (int)touch.Value.X, (int)touch.Value.Y, 0,
                         ButtonState.Pressed,
                         ButtonState.Released,
                         ButtonState.Released,
