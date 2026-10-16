@@ -114,7 +114,8 @@ namespace FSO.SimAntics.Utils
         private static bool Skipped(string name)
         {
             if (string.IsNullOrEmpty(name)) return false;
-            return name.IndexOf("Insanity", StringComparison.OrdinalIgnoreCase) >= 0;
+            return name.IndexOf("Insanity", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Trolley", StringComparison.OrdinalIgnoreCase) >= 0; // (Old Town's trolley piled up in front of every lot)
         }
 
         public Blueprint LoadFromIff(IffFile iff)
