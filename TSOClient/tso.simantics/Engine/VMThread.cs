@@ -631,7 +631,7 @@ namespace FSO.SimAntics.Engine
         /// <summary>SimsRedux: also write each step's operand (its settings) into the trace.</summary>
         public static bool TraceOperands;
 
-        private static string DescribeOperand(object operand)
+        public static string DescribeOperand(object operand)
         {
             if (operand == null) return "";
             try
