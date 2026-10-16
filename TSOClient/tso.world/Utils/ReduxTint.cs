@@ -18,12 +18,34 @@ namespace FSO.LotView.Utils
     ///   bits 20-25 how similar a colour must be, in steps of 2 degrees (only-one-colour mode)
     ///   bits 26-31 strength / saturation, 0-63 (whole-object mode)
     ///
+    /// Mode 3 (colour picker, whole object) uses the same bits differently:
+    ///   bits 2-10  hue (0-359), bits 11-19 brightness (0-510, 255 = unchanged: darker below, lighter above),
+    ///   bits 20-25 how colourful (0-63: 0 = grey/white/black), bits 26-31 strength (how much of the new colour)
+    ///
     /// Recoloured sprite pictures are made on the CPU from the original Sims 1 pixels and cached,
     /// so it works without any new shaders.
     /// </summary>
     public static class ReduxTint
     {
-        public const int ModeNone = 0, ModeWhole = 1, ModeRange = 2;
+        public const int ModeNone = 0, ModeWhole = 1, ModeRange = 2, ModeColour = 3;
+
+        /// <summary>Mode 3: hue 0-359, colourful 0-1, brightness -1 (darker) to +1 (lighter), strength 0-1.</summary>
+        public static uint PackColour(int hue, float colourful, float brightness, float strength)
+        {
+            uint h = (uint)(((hue % 360) + 360) % 360);
+            uint b = (uint)Math.Max(0, Math.Min(510, (int)Math.Round((brightness + 1) * 255)));
+            uint c = (uint)Math.Max(0, Math.Min(63, (int)Math.Round(colourful * 63)));
+            uint st = (uint)Math.Max(0, Math.Min(63, (int)Math.Round(strength * 63)));
+            return 3u | (h << 2) | (b << 11) | (c << 20) | (st << 26);
+        }
+
+        public static void UnpackColour(uint tint, out int hue, out float colourful, out float brightness, out float strength)
+        {
+            hue = (int)((tint >> 2) & 511) % 360;
+            brightness = ((tint >> 11) & 511) / 255f - 1;
+            colourful = ((tint >> 20) & 63) / 63f;
+            strength = ((tint >> 26) & 63) / 63f;
+        }
 
         public static uint Pack(int mode, int toHue, int fromHue, int range, float strength)
         {
@@ -49,6 +71,21 @@ namespace FSO.LotView.Utils
         public static Color Apply(Color c, uint tint)
         {
             if (tint == 0 || c.A == 0) return c;
+            if ((tint & 3) == ModeColour)
+            {
+                int hue; float colourful, bright, str;
+                UnpackColour(tint, out hue, out colourful, out bright, out str);
+                float h0, s0, v0;
+                ToHSV(c, out h0, out s0, out v0);
+                // the new colour, as strongly as asked (light and dark parts are kept)
+                float s1 = s0 + (colourful - s0) * str;
+                if (colourful > 0.02f) s1 = Math.Max(s1, colourful * str * 0.85f);
+                // lighter or darker (white and black are possible)
+                float v1 = bright >= 0 ? v0 + (1 - v0) * bright : v0 * (1 + bright);
+                var res = FromHSV(hue, s1, v1);
+                res.A = c.A;
+                return res;
+            }
             int mode, toHue, fromHue, range; float strength;
             Unpack(tint, out mode, out toHue, out fromHue, out range, out strength);
 
