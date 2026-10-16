@@ -87,30 +87,48 @@ namespace FSO.Content
         public const string ReduxModTag = "~redux-mods/";
         public static string ReduxModsDir { get { return Path.Combine(FSOEnvironment.ContentDir, "redux/mods/"); } }
 
+        /// <summary>
+        /// SimsRedux: content made with the Sims Redux Creator (Content/redux/creator/, listed in its
+        /// manifest.txt). It's only loaded while it's being tried out on the Test server: the game sets
+        /// this before the content loads (Test server, a Test lot worker, or the "creatorcontent" setting).
+        /// </summary>
+        public static bool ReduxCreatorContent;
+        public const string ReduxCreatorTag = "~redux-creator/";
+        public static string ReduxCreatorDir { get { return Path.Combine(FSOEnvironment.ContentDir, "redux/creator/"); } }
+
         /// <summary>A file from the game's file list as a real path (the game's folder, or the shipped mods).</summary>
         public string TS1Path(string file)
         {
             if (file != null && file.StartsWith(ReduxModTag)) return Path.Combine(ReduxModsDir, file.Substring(ReduxModTag.Length));
+            if (file != null && file.StartsWith(ReduxCreatorTag)) return Path.Combine(ReduxCreatorDir, file.Substring(ReduxCreatorTag.Length));
             return Path.Combine(TS1BasePath, file);
         }
 
         private static void AddReduxMods(List<string> files)
         {
+            AddManifest(files, ReduxModsDir, ReduxModTag, "mod");
+            if (ReduxCreatorContent) AddManifest(files, ReduxCreatorDir, ReduxCreatorTag, "creator");
+        }
+
+        /// <summary>SimsRedux: adds the files a folder's manifest.txt lists (one per line, # = comment) to the game's file list.</summary>
+        private static void AddManifest(List<string> files, string dir, string tag, string what)
+        {
             try
             {
-                var manifest = Path.Combine(ReduxModsDir, "manifest.txt");
+                var manifest = Path.Combine(dir, "manifest.txt");
                 if (!FSO.Common.IO.FSOFile.Exists(manifest)) return;
                 int n = 0;
                 foreach (var line in FSO.Common.IO.FSOFile.ReadAllText(manifest).Split('\n'))
                 {
                     var f = line.Trim().Replace('\\', '/');
                     if (f.Length == 0 || f.StartsWith("#")) continue;
-                    files.Add(ReduxModTag + f);
+                    if (f.Contains("..")) continue; // (stays inside its folder)
+                    files.Add(tag + f);
                     n++;
                 }
-                System.Console.WriteLine("[SimsRedux] " + n + " mod files added");
+                System.Console.WriteLine("[SimsRedux] " + n + " " + what + " files added");
             }
-            catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] Couldn't add the mods: " + e.Message); }
+            catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] Couldn't add the " + what + " files: " + e.Message); }
         }
         public string[] ContentFiles;
         private GraphicsDevice Device;

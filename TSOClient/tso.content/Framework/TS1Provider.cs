@@ -20,6 +20,7 @@ namespace FSO.Content.Framework
             { ".skn", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } },
             { ".iff", new string[] { "Downloads/" } },
             { ".flr", new string[] { "Downloads/" } },
+            { ".wll", new string[] { "Downloads/" } }, // SimsRedux: custom walls (the creator's too)
             { ".wav", new string[] { "Downloads/" } },
 
             { ".bcf", new string[] { "Downloads/" } }, //for animations
