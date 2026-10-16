@@ -21,6 +21,11 @@ namespace FSO.Common
         public static int GLVer = 3;
         public static float UIZoomFactor = 1f;
         public static float DPIScaleFactor = 1;
+        /// <summary>
+        /// SimsRedux website: the game can be drawn bigger than the page (so menus fit on a phone) and
+        /// shrunk to fit; touches and the mouse arrive in page points and are multiplied by this.
+        /// </summary>
+        public static float InputScaleX = 1, InputScaleY = 1;
         public static bool SoftwareKeyboard = false;
         public static bool NoSound = false;
         public static int RefreshRate = 60;

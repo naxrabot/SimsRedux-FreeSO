@@ -75,7 +75,7 @@ namespace FSO.Common.Rendering.Framework
                     missing.Remove(mouse);
 
                     mouse.MouseState = new MouseState(
-                        (int)touch.Position.X, (int)touch.Position.Y, 0,
+                        (int)(touch.Position.X * FSOEnvironment.InputScaleX), (int)(touch.Position.Y * FSOEnvironment.InputScaleY), 0,
                         ButtonState.Pressed,
                         ButtonState.Released,
                         ButtonState.Released,
@@ -115,6 +115,13 @@ namespace FSO.Common.Rendering.Framework
                 {
                     State.MouseState = Mouse.GetState();
                     State.KeyboardState = Keyboard.GetState();
+                    if (FSOEnvironment.InputScaleX != 1 || FSOEnvironment.InputScaleY != 1)
+                    {
+                        // SimsRedux website: the page is showing the game shrunk to fit
+                        var ms = State.MouseState;
+                        State.MouseState = new MouseState((int)(ms.X * FSOEnvironment.InputScaleX), (int)(ms.Y * FSOEnvironment.InputScaleY), ms.ScrollWheelValue,
+                            ms.LeftButton, ms.MiddleButton, ms.RightButton, ms.XButton1, ms.XButton2);
+                    }
                 }
                 else
                 {
