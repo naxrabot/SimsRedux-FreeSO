@@ -63,6 +63,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ResetSim, typeof(VMNetResetSimCmd) }, // SimsRedux
             { VMCommandType.SetSpeed, typeof(VMNetSetSpeedCmd) }, // SimsRedux
             { VMCommandType.DebugSim, typeof(VMNetDebugSimCmd) }, // SimsRedux
+            { VMCommandType.ReduxTownie, typeof(VMNetReduxTownieCmd) }, // SimsRedux
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -182,6 +183,7 @@ namespace FSO.SimAntics.NetPlay.Model
         TintObject = 50,
         ResetSim = 51,
         SetSpeed = 52,
-        DebugSim = 53
+        DebugSim = 53,
+        ReduxTownie = 54
     }
 }
