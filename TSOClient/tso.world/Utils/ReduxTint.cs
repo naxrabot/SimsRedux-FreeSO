@@ -112,6 +112,86 @@ namespace FSO.LotView.Utils
             return result;
         }
 
+        /// <summary>
+        /// SimsRedux: the colour tint on the object's own main colour only - a bookshelf's wood, not
+        /// the books on it; a sofa's fabric, not its cushions in another colour. The picture's main
+        /// colour is the one most of it is (by hue, or white/grey/black for a mostly plain object);
+        /// pixels near it take the new colour, others less the further they are, details keep theirs.
+        /// </summary>
+        public static Color[] ApplyMain(Color[] src, uint tint)
+        {
+            var px = new Color[src.Length];
+            var hist = new float[36];
+            int chroma = 0, plain = 0;
+            for (int i = 0; i < src.Length; i++)
+            {
+                var c = src[i];
+                if (c.A < 128) continue;
+                float h, s, v;
+                ToHSV(c, out h, out s, out v);
+                if (v < 0.12f) continue; // (deep shadow says nothing about the colour)
+                if (s >= 0.18f) { hist[((int)(h / 10) % 36 + 36) % 36] += s; chroma++; }
+                else plain++;
+            }
+            bool plainMain = plain > chroma;
+            // the main hue: the strongest 30 degree band, then the average hue inside it
+            float main = 0, mainS = 0.5f;
+            if (!plainMain)
+            {
+                int best = 0; float bestW = -1;
+                for (int i = 0; i < 36; i++)
+                {
+                    var wsum = hist[(i + 35) % 36] + hist[i] * 2 + hist[(i + 1) % 36];
+                    if (wsum > bestW) { bestW = wsum; best = i; }
+                }
+                float sx = 0, sy = 0;
+                for (int d = -2; d <= 2; d++)
+                {
+                    int b = (best + d + 36) % 36;
+                    double a = (b * 10 + 5) * Math.PI / 180;
+                    sx += (float)Math.Cos(a) * hist[b]; sy += (float)Math.Sin(a) * hist[b];
+                }
+                main = (float)(Math.Atan2(sy, sx) * 180 / Math.PI);
+                if (main < 0) main += 360;
+                // how colourful the main colour usually is (so a red book on a brown shelf isn't mistaken for it)
+                var sHist = new int[20];
+                int sCount = 0;
+                for (int i = 0; i < src.Length; i++)
+                {
+                    var c = src[i];
+                    if (c.A < 128) continue;
+                    float h, s, v;
+                    ToHSV(c, out h, out s, out v);
+                    if (v < 0.12f || s < 0.18f || Math.Abs(HueDiff(h, main)) > 12) continue;
+                    sHist[Math.Min(19, (int)(s * 20))]++; sCount++;
+                }
+                for (int b = 0, seen = 0; b < 20; b++) { seen += sHist[b]; if (seen * 2 >= sCount) { mainS = (b + 0.5f) / 20f; break; } }
+            }
+            for (int i = 0; i < src.Length; i++)
+            {
+                var c = src[i];
+                if (c.A == 0) { px[i] = c; continue; }
+                float h, s, v;
+                ToHSV(c, out h, out s, out v);
+                float w;
+                if (v < 0.12f) w = 1; // shadows go with the body
+                else if (plainMain) w = s < 0.22f ? 1 : (s < 0.36f ? (0.36f - s) / 0.14f : 0); // a white / grey / black object: its plain parts
+                else
+                {
+                    var d = Math.Abs(HueDiff(h, main));
+                    float hw = d <= 14 ? 1 : (d >= 30 ? 0 : (30 - d) / 16f);
+                    var ds = Math.Abs(s - mainS);
+                    float sw = ds <= 0.16f ? 1 : (ds >= 0.32f ? 0 : (0.32f - ds) / 0.16f);
+                    w = s >= 0.18f ? hw * sw : (s <= 0.08f ? 0 : hw * (s - 0.08f) / 0.10f); // (white pages, grey bits keep theirs)
+                }
+                if (w <= 0) { px[i] = c; continue; }
+                var t = Apply(c, tint);
+                px[i] = w >= 1 ? t : new Color(
+                    (byte)(c.R + (t.R - c.R) * w), (byte)(c.G + (t.G - c.G) * w), (byte)(c.B + (t.B - c.B) * w), c.A);
+            }
+            return px;
+        }
+
         private static float HueDiff(float h, float target)
         {
             var d = h - target;
@@ -205,8 +285,8 @@ namespace FSO.LotView.Utils
                     if (!any) { pending = true; return original; } // still loading
                 }
 
-                var px = new Color[w * h];
-                for (int i = 0; i < px.Length; i++) px[i] = Apply(src[i], tint);
+                var px = ((tint & 3) == ModeColour) ? ApplyMain(src, tint) : new Color[w * h];
+                if ((tint & 3) != ModeColour) for (int i = 0; i < px.Length; i++) px[i] = Apply(src[i], tint);
 
                 result = new Texture2D(gd, w, h, false, SurfaceFormat.Color);
                 result.SetData(px);
