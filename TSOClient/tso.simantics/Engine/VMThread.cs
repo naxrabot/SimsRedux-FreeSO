@@ -628,6 +628,28 @@ namespace FSO.SimAntics.Engine
         public static VMEntity TraceEntity;
         public static List<string> TraceLog = new List<string>();
         public static HashSet<VMRoutine> TraceRoutines = new HashSet<VMRoutine>();
+        /// <summary>SimsRedux: also write each step's operand (its settings) into the trace.</summary>
+        public static bool TraceOperands;
+
+        private static string DescribeOperand(object operand)
+        {
+            if (operand == null) return "";
+            try
+            {
+                var parts = new List<string>();
+                foreach (var f in operand.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                    parts.Add(f.Name + "=" + f.GetValue(operand));
+                foreach (var p in operand.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                {
+                    if (!p.CanRead || p.GetIndexParameters().Length > 0) continue;
+                    var v = p.GetValue(operand);
+                    if (v is System.Collections.IEnumerable && !(v is string)) continue;
+                    parts.Add(p.Name + "=" + v);
+                }
+                return operand.GetType().Name + "{" + string.Join(" ", parts) + "}";
+            }
+            catch { return operand.GetType().Name; }
+        }
 
         private void HandleResult(VMStackFrame frame, VMInstruction instruction, VMPrimitiveExitCode result)
         {
@@ -640,7 +662,8 @@ namespace FSO.SimAntics.Engine
                         + " op " + (instruction?.Opcode.ToString() ?? "-") + " -> " + result
                         + "  temps " + t[0] + "," + t[1] + "," + t[2] + "," + t[3]
                         + "  locals " + string.Join(",", frame.Locals ?? new short[0])
-                        + "  args " + string.Join(",", frame.Args ?? new short[0]));
+                        + "  args " + string.Join(",", frame.Args ?? new short[0])
+                        + (TraceOperands ? "  " + DescribeOperand(instruction?.Operand) : ""));
                     TraceRoutines.Add(frame.Routine);
                 }
                 catch { }
