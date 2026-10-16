@@ -221,6 +221,31 @@ namespace FSO.LotView.Utils
             }
         }
 
+        /// <summary>
+        /// SimsRedux: throw away the recoloured pictures made for these tints (the Tint window's
+        /// previews while the sliders moved - nothing shows them any more).
+        /// </summary>
+        public static void Forget(ICollection<uint> tints)
+        {
+            if (tints == null || tints.Count == 0) return;
+            try
+            {
+                foreach (var byTint in Cache.Values)
+                {
+                    foreach (var t in tints)
+                    {
+                        Texture2D tex;
+                        if (byTint.TryGetValue(t, out tex))
+                        {
+                            byTint.Remove(t);
+                            try { if (tex != null && !tex.IsDisposed) tex.Dispose(); } catch { }
+                        }
+                    }
+                }
+            }
+            catch (Exception e) { Log("forget failed: " + e.Message); }
+        }
+
         /// <summary>Forget recoloured pictures whose originals are gone.</summary>
         private static void Clean()
         {

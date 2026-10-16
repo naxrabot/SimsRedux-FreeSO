@@ -524,8 +524,13 @@ namespace FSO.Content.TS1
         {
             if (withSims) WriteDirtyAvatars();
 
-            using (var stream = FSOFile.Open(Path.Combine(UserPath, "Neighborhood.iff"), FileMode.Create, FileAccess.Write, FileShare.None))
+            // SimsRedux: written next to it first, then swapped in - a save cut short (the game closed,
+            // the lot stopped) leaves the last good neighbourhood instead of half a file
+            var path = Path.Combine(UserPath, "Neighborhood.iff");
+            var temp = path + ".saving";
+            using (var stream = FSOFile.Open(temp, FileMode.Create, FileAccess.Write, FileShare.None))
                 MainResource.Write(stream);
+            FSOFile.Move(temp, path, true);
 
             return true;
         }

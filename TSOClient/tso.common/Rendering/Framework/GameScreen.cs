@@ -133,6 +133,19 @@ namespace FSO.Common.Rendering.Framework
                         State.MouseState = new MouseState((int)(ms.X * FSOEnvironment.InputScaleX), (int)(ms.Y * FSOEnvironment.InputScaleY), ms.ScrollWheelValue,
                             ms.LeftButton, ms.MiddleButton, ms.RightButton, ms.XButton1, ms.XButton2);
                     }
+                    // SimsRedux website, PC controls on a touch screen (a tablet with a mouse, a touch
+                    // laptop): a finger is a left click held for as long as it's down - and a quick tap
+                    // still counts for a frame (the browser's own click would come and go between frames)
+                    if (FSO.Common.Rendering.Framework.IO.WebTouchInput.Enabled)
+                    {
+                        var fingers = FSO.Common.Rendering.Framework.IO.WebTouchInput.Take();
+                        if (fingers.Count > 0)
+                        {
+                            var p = fingers[0].Value;
+                            State.MouseState = new MouseState((int)p.X, (int)p.Y, State.MouseState.ScrollWheelValue,
+                                ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+                        }
+                    }
                 }
                 else
                 {

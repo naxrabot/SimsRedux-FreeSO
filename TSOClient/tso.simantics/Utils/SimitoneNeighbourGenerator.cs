@@ -65,7 +65,10 @@ namespace FSO.SimAntics.Utils
             bodyStrings.SetString(2, "");
         }
 
-        public static FAMI CreateFamily(string name, int count, SimTemplateCreateInfo[] infos)
+        public static FAMI CreateFamily(string name, int count, SimTemplateCreateInfo[] infos) { return CreateFamily(name, count, infos, true); }
+
+        /// <summary>SimsRedux: save = false leaves saving the neighbourhood to the caller (making many families at once).</summary>
+        public static FAMI CreateFamily(string name, int count, SimTemplateCreateInfo[] infos, bool save)
         {
             var fami = CreateFamily(name, count);
             for (int i=0; i<count; i++)
@@ -76,7 +79,7 @@ namespace FSO.SimAntics.Utils
                 PrepareTemplatePerson(guid, info);
                 AddNeighbor(guid, 9, info.MakePersonData());
             }
-            Content.Content.Get().Neighborhood.SaveNeighbourhood(true);
+            if (save) Content.Content.Get().Neighborhood.SaveNeighbourhood(true);
             return fami;
         }
 
@@ -114,7 +117,7 @@ namespace FSO.SimAntics.Utils
                 AddedByPatch = true,
 
                 FamilyGUIDs = guids,
-                FamilyNumber = families.Max(x => x.FamilyNumber) + 1,
+                FamilyNumber = (families.Count > 0 ? families.Max(x => x.FamilyNumber) : 0) + 1,
                 Unknown = 24,
                 Budget = 20000,
             };

@@ -29,7 +29,17 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var obj = vm.GetObjectById(ObjectID);
             if (obj == null || !(obj is VMGameObject)) return false;
             if (!vm.TS1 && caller == null) return false;
-            return obj.IsUserMovable(vm.Context, true) == VMPlacementError.Success;
+            if (vm.Context.Cheats.MoveObjects) return true;
+            // SimsRedux: a colour can change on anything players may move, even with a Sim using it or
+            // something sitting on it (moving/selling checks are stricter than a lick of paint needs)
+            foreach (var part in obj.MultitileGroup.Objects)
+            {
+                if (part is VMAvatar) return false;
+                var flags = (VMMovementFlags)part.GetValue(VMStackObjectVariable.MovementFlags);
+                if ((flags & VMMovementFlags.PlayersCanMove) == 0) return false;
+                if (vm.Context.IsUserOutOfBounds(part.Position)) return false;
+            }
+            return true;
         }
 
         public override void SerializeInto(BinaryWriter writer)

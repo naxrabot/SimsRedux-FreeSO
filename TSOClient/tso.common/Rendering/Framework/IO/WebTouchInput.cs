@@ -29,8 +29,6 @@ namespace FSO.Common.Rendering.Framework.IO
             lock (Lock)
             {
                 Enabled = true;
-                // on PC controls the touch is a click (the browser turns it into the mouse): nothing kept here
-                if (!FSOEnvironment.SoftwareKeyboard) { Fingers.Clear(); return; }
                 Finger f;
                 if (!Fingers.TryGetValue(id, out f))
                 {
