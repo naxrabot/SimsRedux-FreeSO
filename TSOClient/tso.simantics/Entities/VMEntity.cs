@@ -678,6 +678,19 @@ namespace FSO.SimAntics
 
             CodeOwner = Object;
 
+            // SimsRedux: a TS1 person missing one of the standard people's scripts (Hot Date's shop staff
+            // are made from a cut-down copy) borrows it from the template person, so they can be talked to
+            if (routine == null && context.VM.TS1 && this is VMAvatar && ActionID >= 4096)
+            {
+                var template = FSO.Content.Content.Get().WorldObjects.Get(VMAvatar.TEMPLATE_PERSON);
+                if (template != null && template != Object)
+                {
+                    if (ActionID < 8192) routine = (VMRoutine)template.Resource.GetRoutine(ActionID);
+                    else if (template.Resource.SemiGlobal != null) routine = (VMRoutine)template.Resource.SemiGlobal.GetRoutine(ActionID);
+                    if (routine != null) CodeOwner = template;
+                }
+            }
+
             if (routine == null) return null;
             return new VMBHAVOwnerPair(routine, CodeOwner);
         }

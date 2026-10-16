@@ -326,6 +326,18 @@ namespace FSO.Content
                 }
                 if (sg != null) SemiGlobal = sg.Resource; //used for tuning constant fetching.
             }
+            // SimsRedux: a person (Hot Date's shop staff, say) whose semi-global file isn't found gets the
+            // normal people's one, so their social interactions have their scripts like everyone else's
+            if (SemiGlobal == null && content.TS1)
+            {
+                try
+                {
+                    var objds = iff.List<OBJD>();
+                    if (objds != null && objds.Exists(x => x.ObjectType == OBJDType.Person))
+                        SemiGlobal = content.WorldObjectGlobals.Get("PersonGlobals")?.Resource;
+                }
+                catch (Exception) { }
+            }
 
             Recache();
         }
