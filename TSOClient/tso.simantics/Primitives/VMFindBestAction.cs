@@ -52,8 +52,6 @@ namespace FSO.SimAntics.Primitives
         /// </summary>
         public static int ReduxLevel = 2;
 
-        private static readonly VMMotive[] PhysicalMotives = { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene };
-
         public static VMPersonDataVariable[] VaryByTypes = new VMPersonDataVariable[]
         {
             VMPersonDataVariable.UnusedAndDoNotUse, //0
@@ -388,13 +386,17 @@ namespace FSO.SimAntics.Primitives
         public bool Urgent;
         private readonly bool Night, LateNight, Daytime, BeforeWork;
 
+        // (shared, so scoring - which runs for every choice of every Sim - doesn't allocate them each time)
+        private static readonly VMMotive[] PhysicalNeeds = { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene };
+        private static readonly VMMotive[] NonFunNeeds = { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room };
+
         public ReduxBrain(VM vm, VMAvatar sim, int level)
         {
             Sim = sim;
             Level = level;
             Hour = vm.Context.Clock.Hours;
             for (int i = 0; i < 16; i++) Needs[i] = sim.GetMotiveData((VMMotive)i);
-            foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene })
+            foreach (var m in PhysicalNeeds)
                 if (Needs[(int)m] < -40) Urgent = true;
             Now = vm.Context.Clock.DayOfMonth * 1440 + Hour * 60 + vm.Context.Clock.Minutes;
             NeedsFine = Needs[(int)VMMotive.Hunger] > 0 && Needs[(int)VMMotive.Bladder] > 0 && Needs[(int)VMMotive.Energy] > -20 && Needs[(int)VMMotive.Hygiene] > -20;
@@ -713,18 +715,19 @@ namespace FSO.SimAntics.Primitives
                 foreach (var d in Doors)
                     if (Tiles(d, inDoor.Position) < 1.2f) { w *= 0.3f; break; }
 
-            // stage 2 - finish what they start: still hungry after the plate, still tired after a nap -
-            // go back to it (the same object first) instead of wandering off to something else
+            // stage 3 - manners: fun near someone asleep (TV, stereo, games) is much less appealing
             if (Sleepers.Count > 0 && !(target is VMAvatar))
             {
                 bool funOnly = true;
-                foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room })
+                foreach (var m in NonFunNeeds)
                     if (Ads(entry, first, m)) { funOnly = false; break; }
                 if (funOnly)
                     foreach (var z in Sleepers)
                         if (Tiles(z.Position, target.Position) < 6) { w *= 0.3f; break; }
             }
 
+            // stage 2 - finish what they start: still hungry after the plate, still tired after a nap -
+            // go back to it (the same object first) instead of wandering off to something else
             if (Level >= 2 && LastNeed >= 0 && LastAgo <= 60 && Needs[(int)LastNeed] < 60)
             {
                 if (Ads(entry, first, LastNeed)) w *= (objectID == LastObject) ? 2.5f : 1.3f;
@@ -755,11 +758,11 @@ namespace FSO.SimAntics.Primitives
                     || n.IndexOf("Dinner", StringComparison.OrdinalIgnoreCase) >= 0 || n.StartsWith("Cook", StringComparison.OrdinalIgnoreCase)) w *= 0.5f;
             }
             bool helpsPhysical = false, onlyFunSocial = true;
-            foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene, VMMotive.Comfort, VMMotive.Room })
-                if (Ads(entry, first, m)) onlyFunSocial = false;
+            foreach (var m in NonFunNeeds)
+                if (Ads(entry, first, m)) { onlyFunSocial = false; break; }
 
             // 1. needs first: the lower a need, the more what fixes it matters
-            foreach (var m in new[] { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene })
+            foreach (var m in PhysicalNeeds)
             {
                 if (!Ads(entry, first, m)) continue;
                 var v = Needs[(int)m];

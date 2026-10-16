@@ -34,6 +34,11 @@ namespace FSO.SimAntics.Primitives
                 //in ts1, it's possible for a lot of blocking dialogs to come in one frame. due to the way our engine works,
                 //we cannot pause the rest of the tick as soon as we hit a blocking dialog, and we cannot show more than one blocking dialog.
                 //so additional blocking dialogs must wait.
+                // SimsRedux: a question whose asker is gone (deleted, reset, or it timed out) no longer holds the
+                // others up - online the lot keeps running, so this happens (decided from lot state: same everywhere)
+                var asker = context.VM.GlobalBlockingDialog;
+                if (context.VM.TS1 && asker != null && (asker.Dead || !(asker.Thread?.BlockingState is VMDialogResult)))
+                    context.VM.GlobalBlockingDialog = null;
                 if (context.VM.TS1 && context.VM.GlobalBlockingDialog != null) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                 VMDialogHandler.ShowDialog(context, operand, table);
 

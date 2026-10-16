@@ -119,7 +119,8 @@ namespace FSO.Common.Audio
 
                 lock (_controlLock)
                 {
-                    if (_disposed) return;
+                    // (disposed while the file was opening - e.g. during a load retry: close it here, Dispose already ran)
+                    if (_disposed) { _stream?.Dispose(); return; }
 
                     _inst = new DynamicSoundEffectInstance(freq, AudioChannels.Stereo)
                     {

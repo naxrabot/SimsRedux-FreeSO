@@ -24,6 +24,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     {
                         // the family's owner left their own home: their Sim stays, just nobody's directing it
                         sim.PersistID = (uint)sim.ObjectID;
+                        // (registered like on a fresh load, so this game and one that joins later look it up the same way)
+                        vm.Context.ObjectQueries.RegisterAvatarPersist(sim, sim.PersistID);
                     }
                 }
                 return true;

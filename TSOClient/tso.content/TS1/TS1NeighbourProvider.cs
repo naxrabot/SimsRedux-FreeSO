@@ -522,20 +522,7 @@ namespace FSO.Content.TS1
 
         private bool WriteNeighbourhood(bool withSims)
         {
-            //todo: save iffs for dirty avatars. 
-            if (withSims)
-            {
-                foreach (var ava in DirtyAvatars)
-                {
-                    var obj = ContentManager.WorldObjects.Get(ava);
-                    if (obj != null)
-                    {
-                        using (var stream = FSOFile.Open(obj.Resource.Name, FileMode.Create))
-                            obj.Resource.MainIff.Write(stream);
-                    }
-                }
-                DirtyAvatars.Clear();
-            }
+            if (withSims) WriteDirtyAvatars();
 
             using (var stream = FSOFile.Open(Path.Combine(UserPath, "Neighborhood.iff"), FileMode.Create, FileAccess.Write, FileShare.None))
                 MainResource.Write(stream);

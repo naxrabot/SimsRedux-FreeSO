@@ -19,7 +19,8 @@ namespace FSO.Common.Utils
             var img = Decoder(stream);
             if (img == null) throw new InvalidOperationException("This image format is not supported");
             var tex = new Texture2D(gd, img.Item2, img.Item3);
-            tex.SetData(img.Item1);
+            try { tex.SetData(img.Item1); }
+            catch { tex.Dispose(); throw; } // (bad pixel data: don't leave the GPU texture behind)
             return tex;
         }
     }

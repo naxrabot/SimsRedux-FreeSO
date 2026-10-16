@@ -66,7 +66,16 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 if (a?.Thread?.Queue == null) continue;
                 if (a.Thread.Queue.Any(q => q.Callee != null && group.Objects.Contains(q.Callee)) || (a.Container != null && group.Objects.Contains(a.Container)))
                 {
-                    if (vm.GlobalBlockingDialog == a) vm.GlobalBlockingDialog = null;
+                    if (vm.GlobalBlockingDialog == a)
+                    {
+                        // (its question goes away with it - un-pause, the same as the Sim fix above)
+                        vm.GlobalBlockingDialog = null;
+                        if (!vm.ReduxNoPause)
+                        {
+                            vm.SpeedMultiplier = vm.LastSpeedMultiplier;
+                            vm.LastSpeedMultiplier = 0;
+                        }
+                    }
                     a.Thread.BlockingState = null;
                     a.Reset(vm.Context);
                 }
@@ -139,6 +148,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            if (Action > DebugAction.MoveObject) return false; // (unknown action - nothing to do)
             if (Action >= DebugAction.ResetObject)
             {
                 // objects: online, only the family living on the lot (at home) can fix them
