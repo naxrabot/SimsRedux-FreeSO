@@ -1,3 +1,4 @@
+using System;
 using FSO.Files.Utils;
 using FSO.SimAntics.Engine.Scopes;
 using FSO.SimAntics.Engine.Utils;
@@ -141,11 +142,21 @@ namespace FSO.SimAntics.Engine.Primitives
                     {
                         var cAnim = avatar.CurrentAnimationState;
 
-                        // SimsRedux: "play and wait" on an animation that's already running as a
-                        // loop (started by a "play looping" step just before, e.g. the computer's
-                        // typing while it looks for another job) would wait forever, because a loop
-                        // never ends. Let it finish its current cycle instead, like the original.
-                        if (cAnim.Loop) cAnim.Loop = false;
+                        // SimsRedux: "play and wait" on an animation that's already running as a loop.
+                        // Most of the time that's how an action keeps going - the shower, the bath, playing
+                        // on the computer: the script waits for each event the loop sends (the next splash,
+                        // the next keypress), does its part, and waits again, many times over. That must be
+                        // left alone (cutting the loop short ended those actions after a second or two, with
+                        // all their need gains at once).
+                        // Only when a single wait has gone on far longer than any loop cycle with nothing at
+                        // all happening (e.g. the computer's typing while it looks for another job, which waits
+                        // for the end of a loop that never ends) is the loop allowed to finish its cycle.
+                        if (cAnim.Loop && cAnim.EventQueue.Count == 0 && !cAnim.EndReached)
+                        {
+                            int frames = Math.Max(1, cAnim.Anim?.NumFrames ?? 1);
+                            int limit = Math.Max(30 * 20, (int)(3 * frames / Math.Max(0.1f, cAnim.Speed)));
+                            if (++cAnim.ReduxWaitTicks > limit) cAnim.Loop = false;
+                        }
 
                         //SPECIAL CASE: if we are ending the animation, and the number of events run < expected events
                         //forcefully run those events, with id as their event number. (required for bath drain)
@@ -165,6 +176,7 @@ namespace FSO.SimAntics.Engine.Primitives
                                 VMMemory.SetVariable(context, VMVariableScope.Local, operand.LocalEventNumber, code);
                             else
                                 VMMemory.SetVariable(context, VMVariableScope.Parameters, 0, code);
+                            cAnim.ReduxWaitTicks = 0; // (something happened: the wait starts over)
                             return VMPrimitiveExitCode.GOTO_FALSE;
                         }
                         else if (cAnim.EndReached)

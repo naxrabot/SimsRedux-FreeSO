@@ -15,6 +15,8 @@ namespace FSO.SimAntics.Model
         public float Speed = 1.0f;
         public float Weight = 1.0f; //For animation blending. All active animations should add up to 1 but won't break if it doesn't.
         public bool Loop = false;
+        /// <summary>SimsRedux: ticks one "play and wait" step has been waiting on this (looping) animation without anything happening (not saved).</summary>
+        public int ReduxWaitTicks;
         public List<TimePropertyListItem> TimePropertyLists = new List<TimePropertyListItem>();
 
         public VMAnimationState(Animation animation, bool backwards)
