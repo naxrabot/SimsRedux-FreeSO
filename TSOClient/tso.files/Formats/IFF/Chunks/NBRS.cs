@@ -1,4 +1,5 @@
 ﻿using FSO.Files.Utils;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -138,17 +139,14 @@ namespace FSO.Files.Formats.IFF.Chunks
             if (PersonMode > 0)
             {
                 var size = (Version == 0x4) ? 0xa0 : 0x200;
-                PersonData = new short[88];
-                int pdi = 0;
-                for (int i=0; i<size; i+=2)
-                {
-                    if (pdi >= 88)
-                    {
-                        io.ReadBytes(size - i);
-                        break;
-                    }
-                    PersonData[pdi++] = io.ReadInt16();
-                }
+                var all = new short[size / 2];
+                for (int i = 0; i < all.Length; i++) all[i] = io.ReadInt16();
+                // the game uses the first 88; SimsRedux keeps its own marked block (200-209: the Writing
+                // skill and computer activities) - only when its mark is there, so nothing else is mistaken for it
+                bool redux = all.Length > ReduxBlockEnd && all[ReduxBlockStart] == ReduxBlockMark;
+                PersonData = new short[redux ? ReduxBlockEnd + 1 : 88];
+                Array.Copy(all, PersonData, Math.Min(88, all.Length));
+                if (redux) Array.Copy(all, ReduxBlockStart, PersonData, ReduxBlockStart, ReduxBlockEnd - ReduxBlockStart + 1);
             }
 
             NeighbourID = io.ReadInt16();
@@ -178,6 +176,10 @@ namespace FSO.Files.Formats.IFF.Chunks
             return Name;
         }
 
+        /// <summary>SimsRedux: its own person data block (see FSO.SimAntics.Utils.ReduxComputer), marked so it's never confused with anything else.</summary>
+        public const int ReduxBlockStart = 200, ReduxBlockEnd = 209;
+        public const short ReduxBlockMark = 0x5244; // "RD"
+
         public void Save(IoWriter io)
         {
             io.WriteInt32(Unknown1);
@@ -190,17 +192,10 @@ namespace FSO.Files.Formats.IFF.Chunks
             if (PersonMode > 0)
             {
                 var size = (Version == 0x4) ? 0xa0 : 0x200;
-                int pdi = 0;
-                for (int i = 0; i < size; i += 2)
+                for (int i = 0; i < size / 2; i++)
                 {
-                    if (pdi >= 88)
-                    {
-                        io.WriteInt16(0);
-                    }
-                    else
-                    {
-                        io.WriteInt16(PersonData[pdi++]);
-                    }
+                    bool keep = i < 88 || (i >= ReduxBlockStart && i <= ReduxBlockEnd);
+                    io.WriteInt16((keep && PersonData != null && i < PersonData.Length) ? PersonData[i] : (short)0);
                 }
             }
 

@@ -21,26 +21,58 @@ namespace FSO.SimAntics.Utils
     /// </summary>
     public static class ReduxComputer
     {
-        // ---- where it's kept on each Sim: the end of VMAvatar.BrainMemory (saved with the house) ----
+        // ---- where it's kept on each Sim: SimsRedux's own person data block (200-209), marked at 200 ----
+        // It's saved with the house, kept in the neighbourhood file (NBRS keeps the marked block) and
+        // travels with the Sim online, like the Sims 1 skills.
+        private const int Mark = 200;
         /// <summary>The Writing skill, 0-1000 like the other skills (shown as 0-10).</summary>
-        public const int WritingSkill = 18;
+        public const int WritingSkill = 201;
         /// <summary>How far through the current novel, 0-1000.</summary>
-        public const int NovelProgress = 19;
+        public const int NovelProgress = 202;
         /// <summary>The current novel's genre (1-5), 0 = none started.</summary>
-        public const int NovelGenre = 20;
+        public const int NovelGenre = 203;
         /// <summary>Novels finished.</summary>
-        public const int NovelsWritten = 21;
+        public const int NovelsWritten = 204;
         /// <summary>Hundredths of a skill point not yet added (so slow learning still adds up).</summary>
-        private const int SkillCarry = 22;
+        private const int SkillCarry = 205;
         /// <summary>The last game minute that was counted (+1, so 0 means never).</summary>
-        private const int LastMinute = 23;
+        private const int LastMinute = 206;
         /// <summary>Hacking: minutes since the last pay-out.</summary>
-        private const int HackMinutes = 24;
+        private const int HackMinutes = 207;
+
+        /// <summary>
+        /// Before the neighbourhood is saved: each Sim's block goes into their neighbourhood entry, so it's
+        /// there next time they're loaded somewhere else and when they travel online.
+        /// </summary>
+        public static void CopyToNeighbourhood(VM vm)
+        {
+            try
+            {
+                var neigh = Content.Content.Get().Neighborhood;
+                if (vm == null || neigh == null) return;
+                foreach (var e in vm.Entities)
+                {
+                    var ava = e as VMAvatar;
+                    if (ava == null || ava.GetPersonData((VMPersonDataVariable)Mark) != FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockMark) continue;
+                    var nb = neigh.GetNeighborByID(ava.GetPersonData(VMPersonDataVariable.NeighborId));
+                    if (nb?.PersonData == null) continue;
+                    int end = FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockEnd;
+                    if (nb.PersonData.Length <= end)
+                    {
+                        var bigger = new short[end + 1];
+                        Array.Copy(nb.PersonData, bigger, nb.PersonData.Length);
+                        nb.PersonData = bigger;
+                    }
+                    for (int i = Mark; i <= end; i++) nb.PersonData[i] = ava.GetPersonData((VMPersonDataVariable)i);
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("[SimsRedux] computer: couldn't copy the Writing skill to the neighbourhood: " + ex.Message); }
+        }
 
         /// <summary>A Sim's Writing skill, 0-1000 (for the Job page).</summary>
         public static int Writing(VMAvatar ava) { return ava == null ? 0 : Get(ava, WritingSkill); }
 
-        public enum Kind { None, PracticeWriting, WriteNovel, SurfWeb, ChatOnline, Hack }
+        public enum Kind { None, PracticeWriting, WriteNovel, SurfWeb, ChatOnline, Hack, PlayTwistedMetal2 }
 
         public static readonly string[] Genres = { "", "Romance", "Sci-Fi", "Mystery", "Fantasy", "Children's" };
         private static readonly float[] GenrePay = { 1f, 1.2f, 1f, 1.1f, 1f, 0.8f };
@@ -80,6 +112,7 @@ namespace FSO.SimAntics.Utils
                     Add(ttab, ttas, play, map, "Surf the Web", Kind.SurfWeb, 0);
                     Add(ttab, ttas, play, map, "Chat Online", Kind.ChatOnline, 0);
                     Add(ttab, ttas, play, map, "Hack", Kind.Hack, 0);
+                    Add(ttab, ttas, play, map, "Play Twisted Metal 2", Kind.PlayTwistedMetal2, 0);
                     Patched[ttab] = map;
                 }
             }
@@ -154,10 +187,7 @@ namespace FSO.SimAntics.Utils
             if (clock == null) return;
 
             // only while actually at the keyboard (not walking over)
-            var c = action.Callee.Position;
-            var p = ava.Position;
-            if (c.Level != p.Level || Math.Abs(c.x - p.x) > 28 || Math.Abs(c.y - p.y) > 28) return;
-            if (ava.Thread.Stack.Any(f => f is VMRoutingFrame)) return;
+            if (!AtKeyboard(ava, action)) return;
 
             int minute = clock.Hours * 60 + clock.Minutes + 1;
             int last = Get(ava, LastMinute);
@@ -243,6 +273,35 @@ namespace FSO.SimAntics.Utils
             }
         }
 
+        /// <summary>Is the Sim sitting at the computer for this action (not still walking over)?</summary>
+        public static bool AtKeyboard(VMAvatar ava, VMQueuedAction action)
+        {
+            if (ava?.Thread == null || action?.Callee == null) return false;
+            var c = action.Callee.Position;
+            var p = ava.Position;
+            if (c.Level != p.Level || Math.Abs(c.x - p.x) > 28 || Math.Abs(c.y - p.y) > 28) return false;
+            return !ava.Thread.Stack.Any(f => f is VMRoutingFrame);
+        }
+
+        /// <summary>
+        /// The computers someone is playing Twisted Metal 2 on right now (for the picture on the monitor).
+        /// </summary>
+        public static List<VMEntity> PlayingTwistedMetal(VM vm)
+        {
+            var list = new List<VMEntity>();
+            if (vm == null) return list;
+            foreach (var e in vm.Entities)
+            {
+                var ava = e as VMAvatar;
+                if (ava == null) continue;
+                int genre;
+                VMQueuedAction action;
+                if (Current(ava, out genre, out action) == Kind.PlayTwistedMetal2 && AtKeyboard(ava, action) && !list.Contains(action.Callee))
+                    list.Add(action.Callee);
+            }
+            return list;
+        }
+
         /// <summary>Hundredths of a Writing point a minute: a level takes an hour at first, longer as it rises.</summary>
         private static int SkillGain(int level)
         {
@@ -288,19 +347,18 @@ namespace FSO.SimAntics.Utils
         private static int Clamp(int v, int lo, int hi) { return Math.Max(lo, Math.Min(hi, v)); }
         private static int Get(VMAvatar ava, int slot)
         {
-            var m = ava.BrainMemory;
-            return (m == null || slot >= m.Length) ? 0 : m[slot];
+            // (nothing until the block has been marked as ours)
+            if (ava.GetPersonData((VMPersonDataVariable)Mark) != FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockMark) return 0;
+            return ava.GetPersonData((VMPersonDataVariable)slot);
         }
         private static void Set(VMAvatar ava, int slot, int v)
         {
-            var m = ava.BrainMemory;
-            if (m == null || slot >= m.Length)
+            if (ava.GetPersonData((VMPersonDataVariable)Mark) != FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockMark)
             {
-                var bigger = new int[26];
-                if (m != null) Array.Copy(m, bigger, Math.Min(m.Length, bigger.Length));
-                ava.BrainMemory = m = bigger;
+                for (int i = Mark + 1; i <= FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockEnd; i++) ava.SetPersonData((VMPersonDataVariable)i, 0);
+                ava.SetPersonData((VMPersonDataVariable)Mark, FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockMark);
             }
-            m[slot] = v;
+            ava.SetPersonData((VMPersonDataVariable)slot, (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, v)));
         }
     }
 }

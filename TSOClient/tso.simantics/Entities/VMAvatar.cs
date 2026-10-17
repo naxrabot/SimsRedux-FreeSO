@@ -226,7 +226,7 @@ namespace FSO.SimAntics
         /// (part of the lot's state, so every player's game remembers the same). 4 entries of
         /// [object id &lt;&lt; 16 | interaction, the game minute it was chosen, the need it was for + 1 (0 = fun/other)].
         /// </summary>
-        public int[] BrainMemory = new int[26]; // [18..25]: SimsRedux computer activities, the Writing skill (Utils/ReduxComputer.cs). // 4 x (object/interaction, time, need) + the plate they're eating (id, time) + a chore they keep failing (key, since) + idle since (game minute, 1 = counting) - see VMFindBestAction.ReduxIdleCheck
+        public int[] BrainMemory = new int[18]; // 4 x (object/interaction, time, need) + the plate they're eating (id, time) + a chore they keep failing (key, since) + idle since (game minute, 1 = counting) - see VMFindBestAction.ReduxIdleCheck
 
         public VMAvatar(GameObject obj)
             : base(obj)
@@ -761,7 +761,8 @@ namespace FSO.SimAntics
 
         public virtual short GetPersonData(VMPersonDataVariable variable)
         {
-            if ((ushort)variable > 100) throw new Exception("Person Data out of bounds!");
+            // (SimsRedux: 200-209 are its own block - the computer activities and Writing skill, Utils/ReduxComputer.cs)
+            if ((ushort)variable > 100 && ((ushort)variable < 200 || (ushort)variable > 209)) throw new Exception("Person Data out of bounds!");
             VMTSOJobInfo jobInfo = null;
             switch (variable)
             {
@@ -866,7 +867,8 @@ namespace FSO.SimAntics
 
         public virtual bool SetPersonData(VMPersonDataVariable variable, short value)
         {
-            if ((ushort)variable > 100) throw new Exception("Person Data out of bounds!");
+            // (SimsRedux: 200-209 are its own block - the computer activities and Writing skill, Utils/ReduxComputer.cs)
+            if ((ushort)variable > 100 && ((ushort)variable < 200 || (ushort)variable > 209)) throw new Exception("Person Data out of bounds!");
             VMTSOJobInfo jobInfo;
             switch (variable)
             {
