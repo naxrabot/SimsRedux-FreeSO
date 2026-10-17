@@ -2,6 +2,7 @@ using FSO.Files.Formats.IFF.Chunks;
 using FSO.LotView.Model;
 using FSO.SimAntics.Engine;
 using FSO.SimAntics.Model;
+using FSO.SimAntics.Primitives;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -179,6 +180,59 @@ namespace FSO.SimAntics.Utils
             action.Name = e.Label;
         }
 
+        // which of the computers' own routines is "tweak play happy enough" (looked up once each)
+        private static readonly Dictionary<VMRoutine, bool> HappyEnoughRoutines = new Dictionary<VMRoutine, bool>();
+
+        /// <summary>
+        /// Called as a routine is about to call one of its object's own routines. A computer's play loop
+        /// asks "tweak play happy enough" after every round, and stops as soon as the Sim's Fun reaches a
+        /// goal worked out from their personality - which for most Sims is only a few game minutes away.
+        /// Answering "not yet" (true here) keeps them going:
+        ///   writing, a novel, chatting, hacking: until you stop them (or a need, the novel or getting caught does)
+        ///   playing (Play, Twisted Metal 2, Surf the Web): until Fun is nearly full
+        /// </summary>
+        public static bool KeepGoing(VMThread thread, VMStackFrame frame, ushort opcode)
+        {
+            try
+            {
+                var ava = thread?.Entity as VMAvatar;
+                var callee = frame?.Callee;
+                if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return false;
+                lock (Lock)
+                {
+                    Dictionary<uint, Entry> map;
+                    if (!Patched.TryGetValue(callee.TreeTable, out map) || map == null) return false; // (only computers)
+                }
+                var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
+                if (routine == null) return false;
+                bool happy;
+                lock (Lock)
+                {
+                    if (!HappyEnoughRoutines.TryGetValue(routine, out happy))
+                    {
+                        var label = routine.Chunk?.ChunkLabel ?? "";
+                        happy = label.IndexOf("happy enough", StringComparison.OrdinalIgnoreCase) >= 0;
+                        HappyEnoughRoutines[routine] = happy;
+                    }
+                }
+                if (!happy) return false;
+
+                int genre;
+                VMQueuedAction action;
+                switch (Current(ava, out genre, out action))
+                {
+                    case Kind.PracticeWriting:
+                    case Kind.WriteNovel:
+                    case Kind.ChatOnline:
+                    case Kind.Hack:
+                        return true;
+                    default:
+                        return ava.GetMotiveData(VMMotive.Fun) < 90;
+                }
+            }
+            catch { return false; }
+        }
+
         /// <summary>What a Sim is doing at a computer right now (None if not one of the new activities).</summary>
         public static Kind Current(VMAvatar ava, out int genre, out VMQueuedAction action)
         {
@@ -208,6 +262,10 @@ namespace FSO.SimAntics.Utils
 
             // only while actually at the keyboard (not walking over)
             if (!AtKeyboard(ava, action)) return;
+
+            // the progress bar over their head (like studying): the next Writing level, or the novel
+            if (kind == Kind.PracticeWriting) ShowProgress(ava, Get(ava, WritingSkill) >= 1000 ? 99 : Get(ava, WritingSkill) % 100);
+            else if (kind == Kind.WriteNovel) ShowProgress(ava, Get(ava, NovelGenre) == genre ? Get(ava, NovelProgress) / 10 : 0);
 
             // work, not play: the computer's Play routine stops once Fun is full, so while writing,
             // chatting or hacking Fun is held just below that and the Sim keeps at it until told to stop
@@ -328,6 +386,39 @@ namespace FSO.SimAntics.Utils
                     list.Add(action.Callee);
             }
             return list;
+        }
+
+        /// <summary>
+        /// The Sims 1 progress bar over a Sim's head (the one studying shows), at 0-99 percent. Kept up
+        /// while they're at it and gone a couple of seconds after they stop. Anything else over their
+        /// head (a thought, a need) is left alone.
+        /// </summary>
+        private static void ShowProgress(VMAvatar ava, int percent)
+        {
+            try
+            {
+                var vm = ava.Thread?.Context?.VM;
+                if (vm?.Headline == null) return;
+                var current = ava.Headline;
+                if (current != null && current.Operand?.Group != VMSetBalloonHeadlineOperandGroup.Progress) return;
+                int index = Clamp(percent / 10, 0, 9);
+                if (current != null && current.Index == index && ava.HeadlineRenderer != null)
+                {
+                    current.Duration = 60;
+                    return;
+                }
+                ava.HeadlineRenderer?.Dispose();
+                var op = new VMSetBalloonHeadlineOperand
+                {
+                    Group = VMSetBalloonHeadlineOperandGroup.Progress,
+                    Index = (sbyte)index,
+                    Duration = 60,
+                    Type = 255, // (no balloon behind it)
+                };
+                ava.Headline = new VMRuntimeHeadline(op, ava, null, (sbyte)index) { Duration = 60 };
+                ava.HeadlineRenderer = vm.Headline.Get(ava.Headline);
+            }
+            catch { }
         }
 
         /// <summary>Hundredths of a Writing point a minute: a level takes an hour at first, longer as it rises.</summary>
