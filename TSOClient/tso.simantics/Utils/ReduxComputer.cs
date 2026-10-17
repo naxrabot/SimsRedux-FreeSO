@@ -195,7 +195,7 @@ namespace FSO.SimAntics.Utils
         {
             try
             {
-                var ava = thread?.Entity as VMAvatar;
+                var ava = frame?.Caller as VMAvatar;
                 var callee = frame?.Callee;
                 if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return false;
                 lock (Lock)
