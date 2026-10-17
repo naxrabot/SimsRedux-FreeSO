@@ -116,7 +116,8 @@ namespace FSO.SimAntics.Utils
                     Add(ttab, ttas, play, map, "Surf the Web", Kind.SurfWeb, 0);
                     Add(ttab, ttas, play, map, "Chat Online", Kind.ChatOnline, 0);
                     Add(ttab, ttas, play, map, "Hack", Kind.Hack, 0);
-                    Add(ttab, ttas, play, map, "Play Twisted Metal 2", Kind.PlayTwistedMetal2, 0);
+                    // games are kept together under "Play Games" (more can be added the same way: "Play Games/<name>")
+                    Add(ttab, ttas, play, map, "Play Games/Twisted Metal 2", Kind.PlayTwistedMetal2, 0);
                     Patched[ttab] = map;
                     ByName[ttab] = map.Values.GroupBy(x => x.Label).ToDictionary(g => g.Key, g => g.First());
                 }
