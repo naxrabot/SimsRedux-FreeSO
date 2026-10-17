@@ -77,8 +77,11 @@ namespace FSO.SimAntics.Utils
         public static readonly string[] Genres = { "", "Romance", "Sci-Fi", "Mystery", "Fantasy", "Children's" };
         private static readonly float[] GenrePay = { 1f, 1.2f, 1f, 1.1f, 1f, 0.8f };
 
-        private class Entry { public Kind Kind; public int Genre; }
+        private class Entry { public Kind Kind; public int Genre; public uint PlayIndex; public string Label; }
+        // per kind of computer: its new entries by pie menu number, and by name (a running action is
+        // recognised by its name - it runs as the computer's own "Play", see Adjust)
         private static readonly Dictionary<TTAB, Dictionary<uint, Entry>> Patched = new Dictionary<TTAB, Dictionary<uint, Entry>>();
+        private static readonly Dictionary<TTAB, Dictionary<string, Entry>> ByName = new Dictionary<TTAB, Dictionary<string, Entry>>();
         private static readonly object Lock = new object();
 
         /// <summary>Called as each object is made: a computer gets the new pie menu entries (once per kind of computer).</summary>
@@ -114,6 +117,7 @@ namespace FSO.SimAntics.Utils
                     Add(ttab, ttas, play, map, "Hack", Kind.Hack, 0);
                     Add(ttab, ttas, play, map, "Play Twisted Metal 2", Kind.PlayTwistedMetal2, 0);
                     Patched[ttab] = map;
+                    ByName[ttab] = map.Values.GroupBy(x => x.Label).ToDictionary(g => g.Key, g => g.First());
                 }
             }
             catch (Exception e)
@@ -141,7 +145,7 @@ namespace FSO.SimAntics.Utils
             };
             for (int i = 0; i < ia.MotiveEntries.Length; i++) ia.MotiveEntries[i] = new TTABMotiveEntry();
             ttab.InsertInteraction(ia, ttab.Interactions.Length);
-            map[(uint)index] = new Entry { Kind = kind, Genre = genre };
+            map[(uint)index] = new Entry { Kind = kind, Genre = genre, PlayIndex = play.TTAIndex, Label = label };
         }
 
         /// <summary>Adds a label at the end of the pie menu strings (every language they're in).</summary>
@@ -159,17 +163,33 @@ namespace FSO.SimAntics.Utils
             return index;
         }
 
+        /// <summary>
+        /// When one of the new entries is chosen, the action is the computer's own "Play" in every way but
+        /// its name: the computer's routine checks which of its interactions it's running, and an
+        /// unknown one made the Sim stand up again after a few seconds.
+        /// </summary>
+        public static void Adjust(VMEntity obj, int interaction, VMQueuedAction action)
+        {
+            if (obj?.TreeTable == null || action == null || interaction < 0) return;
+            Dictionary<uint, Entry> map;
+            lock (Lock) { if (!Patched.TryGetValue(obj.TreeTable, out map) || map == null) return; }
+            Entry e;
+            if (!map.TryGetValue((uint)interaction, out e)) return;
+            action.InteractionNumber = (int)e.PlayIndex;
+            action.Name = e.Label;
+        }
+
         /// <summary>What a Sim is doing at a computer right now (None if not one of the new activities).</summary>
         public static Kind Current(VMAvatar ava, out int genre, out VMQueuedAction action)
         {
             genre = 0;
             action = ava?.Thread?.ActiveAction;
             var callee = action?.Callee;
-            if (callee == null || callee.TreeTable == null || action.InteractionNumber < 0) return Kind.None;
-            Dictionary<uint, Entry> map;
-            lock (Lock) { if (!Patched.TryGetValue(callee.TreeTable, out map) || map == null) return Kind.None; }
+            if (callee == null || callee.TreeTable == null || action.Name == null) return Kind.None;
+            Dictionary<string, Entry> map;
+            lock (Lock) { if (!ByName.TryGetValue(callee.TreeTable, out map) || map == null) return Kind.None; }
             Entry e;
-            if (!map.TryGetValue((uint)action.InteractionNumber, out e)) return Kind.None;
+            if (!map.TryGetValue(action.Name, out e)) return Kind.None;
             genre = e.Genre;
             return e.Kind;
         }
@@ -188,6 +208,14 @@ namespace FSO.SimAntics.Utils
 
             // only while actually at the keyboard (not walking over)
             if (!AtKeyboard(ava, action)) return;
+
+            // work, not play: the computer's Play routine stops once Fun is full, so while writing,
+            // chatting or hacking Fun is held just below that and the Sim keeps at it until told to stop
+            if (kind == Kind.PracticeWriting || kind == Kind.WriteNovel || kind == Kind.ChatOnline || kind == Kind.Hack)
+            {
+                var fun = ava.GetMotiveData(VMMotive.Fun);
+                if (fun > 80) ava.SetMotiveData(VMMotive.Fun, 80);
+            }
 
             int minute = clock.Hours * 60 + clock.Minutes + 1;
             int last = Get(ava, LastMinute);

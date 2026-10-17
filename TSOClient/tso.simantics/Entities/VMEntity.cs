@@ -1084,7 +1084,7 @@ namespace FSO.SimAntics
 
             if (global) interaction |= unchecked((int)0x80000000);
 
-            return new VMQueuedAction
+            var result = new VMQueuedAction
             {
                 Callee = this,
                 IconOwner = this,
@@ -1099,6 +1099,9 @@ namespace FSO.SimAntics
                 Flags = Action.Flags,
                 Flags2 = Action.Flags2,
             };
+            // SimsRedux: the new computer activities run as the computer's own Play (Utils/ReduxComputer.cs)
+            if (!global) FSO.SimAntics.Utils.ReduxComputer.Adjust(this, interaction, result);
+            return result;
         }
 
         public void PushUserInteraction(int interaction, VMEntity caller, VMContext context, bool global)
