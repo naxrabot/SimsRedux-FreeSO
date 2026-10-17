@@ -342,6 +342,7 @@ namespace FSO.LotView.Components
                 TintRetries = 0;
                 if (dgrp != null)
                 {
+                    if (value != 0 && (value & 3) == 3 && dgrp.TintProfile == null) dgrp.TintProfile = ReduxTint.ObjectProfile(Obj);
                     dgrp.Tint = value;
                     dgrp.InvalidateRotation();
                 }

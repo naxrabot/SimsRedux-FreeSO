@@ -120,23 +120,44 @@ namespace FSO.LotView.Utils
         /// </summary>
         public static Color[] ApplyMain(Color[] src, uint tint)
         {
-            var px = new Color[src.Length];
+            return ApplyMain(src, tint, ComputeProfile(new[] { src }));
+        }
+
+        /// <summary>
+        /// SimsRedux: what an object's "own colour" is - worked out from all of its pictures together
+        /// (every part of a bed: the blanket end and the pillow end), not one picture at a time, so a
+        /// part that's mostly pillow or metal frame doesn't decide that white or grey is the colour.
+        /// </summary>
+        public class Profile
+        {
+            public bool Plain;      // a white / grey / black object
+            public float Main;      // its main hue
+            public float MainS = 0.5f; // how colourful that colour usually is
+            public int Key;         // (for the picture cache)
+        }
+
+        public static Profile ComputeProfile(IEnumerable<Color[]> images)
+        {
             var hist = new float[36];
             int chroma = 0, plain = 0;
-            for (int i = 0; i < src.Length; i++)
+            foreach (var src in images)
             {
-                var c = src[i];
-                if (c.A < 128) continue;
-                float h, s, v;
-                ToHSV(c, out h, out s, out v);
-                if (v < 0.12f) continue; // (deep shadow says nothing about the colour)
-                if (s >= 0.18f) { hist[((int)(h / 10) % 36 + 36) % 36] += s; chroma++; }
-                else plain++;
+                if (src == null) continue;
+                for (int i = 0; i < src.Length; i++)
+                {
+                    var c = src[i];
+                    if (c.A < 128) continue;
+                    float h, s, v;
+                    ToHSV(c, out h, out s, out v);
+                    if (v < 0.12f) continue; // (deep shadow says nothing about the colour)
+                    if (s >= 0.18f) { hist[((int)(h / 10) % 36 + 36) % 36] += s; chroma++; }
+                    else plain++;
+                }
             }
-            bool plainMain = plain > chroma;
-            // the main hue: the strongest 30 degree band, then the average hue inside it
-            float main = 0, mainS = 0.5f;
-            if (!plainMain)
+            var p = new Profile();
+            // plain only when the object really is mostly plain (a coloured blanket on a white bed counts)
+            p.Plain = plain > chroma * 2;
+            if (!p.Plain)
             {
                 int best = 0; float bestW = -1;
                 for (int i = 0; i < 36; i++)
@@ -151,22 +172,36 @@ namespace FSO.LotView.Utils
                     double a = (b * 10 + 5) * Math.PI / 180;
                     sx += (float)Math.Cos(a) * hist[b]; sy += (float)Math.Sin(a) * hist[b];
                 }
-                main = (float)(Math.Atan2(sy, sx) * 180 / Math.PI);
+                var main = (float)(Math.Atan2(sy, sx) * 180 / Math.PI);
                 if (main < 0) main += 360;
+                p.Main = main;
                 // how colourful the main colour usually is (so a red book on a brown shelf isn't mistaken for it)
                 var sHist = new int[20];
                 int sCount = 0;
-                for (int i = 0; i < src.Length; i++)
+                foreach (var src in images)
                 {
-                    var c = src[i];
-                    if (c.A < 128) continue;
-                    float h, s, v;
-                    ToHSV(c, out h, out s, out v);
-                    if (v < 0.12f || s < 0.18f || Math.Abs(HueDiff(h, main)) > 12) continue;
-                    sHist[Math.Min(19, (int)(s * 20))]++; sCount++;
+                    if (src == null) continue;
+                    for (int i = 0; i < src.Length; i++)
+                    {
+                        var c = src[i];
+                        if (c.A < 128) continue;
+                        float h, s, v;
+                        ToHSV(c, out h, out s, out v);
+                        if (v < 0.12f || s < 0.18f || Math.Abs(HueDiff(h, main)) > 12) continue;
+                        sHist[Math.Min(19, (int)(s * 20))]++; sCount++;
+                    }
                 }
-                for (int b = 0, seen = 0; b < 20; b++) { seen += sHist[b]; if (seen * 2 >= sCount) { mainS = (b + 0.5f) / 20f; break; } }
+                for (int b = 0, seen = 0; b < 20; b++) { seen += sHist[b]; if (seen * 2 >= sCount) { p.MainS = (b + 0.5f) / 20f; break; } }
             }
+            p.Key = p.Plain ? 1 : (2 + (int)p.Main * 100 + (int)(p.MainS * 99));
+            return p;
+        }
+
+        public static Color[] ApplyMain(Color[] src, uint tint, Profile prof)
+        {
+            var px = new Color[src.Length];
+            bool plainMain = prof.Plain;
+            float main = prof.Main, mainS = prof.MainS;
             for (int i = 0; i < src.Length; i++)
             {
                 var c = src[i];
@@ -174,7 +209,7 @@ namespace FSO.LotView.Utils
                 float h, s, v;
                 ToHSV(c, out h, out s, out v);
                 float w;
-                if (v < 0.12f) w = 1; // shadows go with the body
+                if (v < 0.12f) w = plainMain ? 1 : 0; // (deep shadow: only on a plain object - a dark pillow crease isn't the blanket)
                 else if (plainMain) w = s < 0.22f ? 1 : (s < 0.36f ? (0.36f - s) / 0.14f : 0); // a white / grey / black object: its plain parts
                 else
                 {
@@ -182,7 +217,7 @@ namespace FSO.LotView.Utils
                     float hw = d <= 14 ? 1 : (d >= 30 ? 0 : (30 - d) / 16f);
                     var ds = Math.Abs(s - mainS);
                     float sw = ds <= 0.16f ? 1 : (ds >= 0.32f ? 0 : (0.32f - ds) / 0.16f);
-                    w = s >= 0.18f ? hw * sw : (s <= 0.08f ? 0 : hw * (s - 0.08f) / 0.10f); // (white pages, grey bits keep theirs)
+                    w = s >= 0.18f ? hw * sw : 0; // (white, grey and metal bits keep theirs)
                 }
                 if (w <= 0) { px[i] = c; continue; }
                 var t = Apply(c, tint);
@@ -190,6 +225,66 @@ namespace FSO.LotView.Utils
                     (byte)(c.R + (t.R - c.R) * w), (byte)(c.G + (t.G - c.G) * w), (byte)(c.B + (t.B - c.B) * w), c.A);
             }
             return px;
+        }
+
+        // the profile of each kind of object (by its file and multi-tile group), worked out once
+        private static Dictionary<string, Profile> Profiles = new Dictionary<string, Profile>();
+
+        /// <summary>
+        /// The colour profile of a whole object: every part of it (a multi-tile object's other tiles
+        /// too), every picture. Null if its pictures can't be read (each picture then decides alone).
+        /// </summary>
+        public static Profile ObjectProfile(FSO.Content.GameObject obj)
+        {
+            try
+            {
+                var objd = obj?.OBJ;
+                var res = obj?.Resource;
+                if (objd == null || res == null) return null;
+                var key = (obj.Resource.MainIff?.Filename ?? "") + "#" + (objd.MasterID != 0 ? "m" + objd.MasterID : "g" + objd.GUID);
+                Profile prof;
+                if (Profiles.TryGetValue(key, out prof)) return prof;
+
+                var parts = new List<OBJD>();
+                if (objd.MasterID != 0)
+                {
+                    foreach (var o in res.List<OBJD>() ?? new List<OBJD>())
+                        if (o.MasterID == objd.MasterID) parts.Add(o);
+                }
+                if (parts.Count == 0) parts.Add(objd);
+
+                var images = new List<Color[]>();
+                var seen = new HashSet<SPR2Frame>();
+                foreach (var part in parts)
+                {
+                    for (int g = 0; g < Math.Max(1, (int)part.NumGraphics); g++)
+                    {
+                        if (part.BaseGraphicID == 0) break;
+                        var dgrp = res.Get<DGRP>((ushort)(part.BaseGraphicID + g));
+                        if (dgrp?.Images == null) continue;
+                        foreach (var img in dgrp.Images)
+                        {
+                            if (img?.Sprites == null) continue;
+                            foreach (var spr in img.Sprites)
+                            {
+                                SPR2Frame frame = null;
+                                try { frame = spr?.GetSPR2Frame(); } catch { }
+                                if (frame == null || !seen.Add(frame)) continue;
+                                try { frame.DecodeIfRequired(false); } catch { }
+                                if (frame.PixelData != null) images.Add(frame.PixelData);
+                            }
+                        }
+                    }
+                }
+                prof = images.Count == 0 ? null : ComputeProfile(images);
+                Profiles[key] = prof;
+                return prof;
+            }
+            catch (Exception e)
+            {
+                Log("tint profile failed: " + e.Message);
+                return null;
+            }
         }
 
         private static float HueDiff(float h, float target)
@@ -236,7 +331,7 @@ namespace FSO.LotView.Utils
         // Recoloured sprite cache
         // ------------------------------------------------------------------
 
-        private static Dictionary<Texture2D, Dictionary<uint, Texture2D>> Cache = new Dictionary<Texture2D, Dictionary<uint, Texture2D>>();
+        private static Dictionary<Texture2D, Dictionary<ulong, Texture2D>> Cache = new Dictionary<Texture2D, Dictionary<ulong, Texture2D>>();
         private static int CleanCounter;
 
         /// <summary>
@@ -247,20 +342,26 @@ namespace FSO.LotView.Utils
         /// </summary>
         public static Texture2D GetTinted(GraphicsDevice gd, DGRPSprite sprite, Texture2D original, uint tint, out bool pending)
         {
+            return GetTinted(gd, sprite, original, tint, null, out pending);
+        }
+
+        public static Texture2D GetTinted(GraphicsDevice gd, DGRPSprite sprite, Texture2D original, uint tint, Profile profile, out bool pending)
+        {
             pending = false;
             if (tint == 0 || original == null || original.IsDisposed) return original;
             try
             {
                 if (++CleanCounter > 2000) { CleanCounter = 0; Clean(); }
 
-                Dictionary<uint, Texture2D> byTint;
+                Dictionary<ulong, Texture2D> byTint;
                 if (!Cache.TryGetValue(original, out byTint))
                 {
-                    byTint = new Dictionary<uint, Texture2D>();
+                    byTint = new Dictionary<ulong, Texture2D>();
                     Cache[original] = byTint;
                 }
+                ulong cacheKey = tint | ((ulong)(uint)(profile?.Key ?? 0) << 32);
                 Texture2D result;
-                if (byTint.TryGetValue(tint, out result) && result != null && !result.IsDisposed) return result;
+                if (byTint.TryGetValue(cacheKey, out result) && result != null && !result.IsDisposed) return result;
 
                 int w = original.Width, h = original.Height;
                 Color[] src = null;
@@ -285,13 +386,13 @@ namespace FSO.LotView.Utils
                     if (!any) { pending = true; return original; } // still loading
                 }
 
-                var px = ((tint & 3) == ModeColour) ? ApplyMain(src, tint) : new Color[w * h];
+                var px = ((tint & 3) == ModeColour) ? (profile != null ? ApplyMain(src, tint, profile) : ApplyMain(src, tint)) : new Color[w * h];
                 if ((tint & 3) != ModeColour) for (int i = 0; i < px.Length; i++) px[i] = Apply(src[i], tint);
 
                 result = new Texture2D(gd, w, h, false, SurfaceFormat.Color);
                 result.SetData(px);
                 result.Tag = original.Tag ?? new TextureInfo(result, w, h);
-                byTint[tint] = result;
+                byTint[cacheKey] = result;
                 return result;
             }
             catch (Exception e)
@@ -312,14 +413,13 @@ namespace FSO.LotView.Utils
             {
                 foreach (var byTint in Cache.Values)
                 {
-                    foreach (var t in tints)
+                    var gone = new List<ulong>();
+                    foreach (var k in byTint.Keys) if (tints.Contains((uint)(k & 0xFFFFFFFF))) gone.Add(k);
+                    foreach (var k in gone)
                     {
-                        Texture2D tex;
-                        if (byTint.TryGetValue(t, out tex))
-                        {
-                            byTint.Remove(t);
-                            try { if (tex != null && !tex.IsDisposed) tex.Dispose(); } catch { }
-                        }
+                        var tex = byTint[k];
+                        byTint.Remove(k);
+                        try { if (tex != null && !tex.IsDisposed) tex.Dispose(); } catch { }
                     }
                 }
             }

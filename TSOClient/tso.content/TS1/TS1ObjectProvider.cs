@@ -22,6 +22,9 @@ namespace FSO.Content.TS1
             GameObjects = new TS1SubProvider<IffFile>(provider, ".iff");
         }
 
+        /// <summary>SimsRedux: how much custom content loaded (shown once in game, and in the console).</summary>
+        public static int ReduxModFiles, ReduxModCatalogItems, DownloadsCatalogItems;
+
         public void Init()
         {
             GameObjects.Init();
@@ -34,8 +37,10 @@ namespace FSO.Content.TS1
             for (int i = 0; i < 30; i++) ItemsByCategory[i] = new List<ObjectCatalogItem>();
 
             var allIffs = GameObjects.ListGeneric();
+            ReduxModFiles = 0; ReduxModCatalogItems = 0; DownloadsCatalogItems = 0;
             foreach (var iff in allIffs)
             {
+                bool reduxMod = false;
                 var file = (IffFile)iff.GetThrowawayGeneric();
                 var source = GameObjectSource.Far;
                 string filename = Path.GetFileName(iff.ToString().Replace('\\', '/'));
@@ -48,6 +53,8 @@ namespace FSO.Content.TS1
                     {
                         filename = fileIff.Filename;
                         source = GameObjectSource.Standalone;
+                        reduxMod = filename.Replace('\\', '/').IndexOf("redux/mods/", StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (reduxMod) ReduxModFiles++;
                     }
                 }
                 file.MarkThrowaway();
@@ -95,11 +102,15 @@ namespace FSO.Content.TS1
                             };
                             ItemsByCategory[item.Category].Add(item);
                             ItemsByGUID[item.GUID] = item;
+                            if (reduxMod) ReduxModCatalogItems++;
+                            else if (source == GameObjectSource.Standalone) DownloadsCatalogItems++;
                         }
                     }
                 }
             }
 
+            Console.WriteLine("[SimsRedux] custom content: " + ReduxModFiles + " shipped object files, " + ReduxModCatalogItems +
+                " shipped Buy/Build items, " + DownloadsCatalogItems + " from the Downloads folder");
             var globalSims = Entries.Values.Where(x => x.GlobalSimObject);
             ControllerObjects.Clear();
             ControllerObjects.AddRange(globalSims);
