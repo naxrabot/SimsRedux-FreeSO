@@ -131,9 +131,23 @@ namespace FSO.Content
             var all = compo.ListGeneric();
             foreach (var entry in all)
             {
-                var iff = (IffFile)entry.GetThrowawayGeneric();
+                // SimsRedux: a damaged download is left out (it used to stop the game from starting)
+                IffFile iff;
+                STR catStrings;
+                try
+                {
+                    iff = (IffFile)entry.GetThrowawayGeneric();
+                    catStrings = iff?.Get<STR>(0);
+                    if (catStrings == null) throw new Exception("no catalog text");
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("[SimsRedux] skipped a damaged floor file (" + entry + "): " + e.Message);
+                    continue;
+                }
+                int price;
+                int.TryParse((catStrings.GetString(1) ?? "").Trim(), out price);
                 DynamicFloorFromID[Path.GetFileNameWithoutExtension(entry.ToString().Replace('\\', '/')).ToLowerInvariant()] = floorID;
-                var catStrings = iff.Get<STR>(0);
 
                 Entries.Add(floorID, new FloorReference(this)
                 {
@@ -141,7 +155,7 @@ namespace FSO.Content
                     FileName = Path.GetFileName(entry.ToString().Replace('\\', '/')).ToLowerInvariant(),
 
                     Name = catStrings.GetString(0),
-                    Price = int.Parse(catStrings.GetString(1)),
+                    Price = price,
                     Description = catStrings.GetString(2)
                 });
 

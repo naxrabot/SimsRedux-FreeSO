@@ -41,7 +41,10 @@ namespace FSO.Content.TS1
             foreach (var iff in allIffs)
             {
                 bool reduxMod = false;
-                var file = (IffFile)iff.GetThrowawayGeneric();
+                IffFile file;
+                try { file = (IffFile)iff.GetThrowawayGeneric(); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] skipped a damaged object file (" + iff + "): " + e.Message); continue; }
+                if (file == null) continue;
                 var source = GameObjectSource.Far;
                 string filename = Path.GetFileName(iff.ToString().Replace('\\', '/'));
                 if (iff is FileContentReference<object>)

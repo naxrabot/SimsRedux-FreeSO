@@ -157,6 +157,9 @@ namespace FSO.Files.Formats.IFF
             using (var io = IoBuffer.FromStream(stream, ByteOrder.BIG_ENDIAN))
             {
                 var identifier = io.ReadCString(60, false).Replace("\0", "");
+                // SimsRedux: some downloads were saved with a space where the header has a zero byte
+                // ("SIZE  JAMIE"); the original game reads them, so this does too
+                identifier = System.Text.RegularExpressions.Regex.Replace(identifier, " +", " ");
                 if (identifier != "IFF FILE 2.5:TYPE FOLLOWED BY SIZE JAMIE DOORNBOS & MAXIS 1")
                 {
                     if (identifier != "IFF FILE 2.0:TYPE FOLLOWED BY SIZE JAMIE DOORNBOS & MAXIS 1") //house11.iff, seems to read fine
