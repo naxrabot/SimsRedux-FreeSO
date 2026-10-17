@@ -252,6 +252,8 @@ namespace FSO.SimAntics
                 TreeTable = SemiGlobal.Get<TTAB>(obj.OBJ.TreeTableID); //tree not in local, try semiglobal
                 TreeTableStrings = SemiGlobal.Get<TTAs>(obj.OBJ.TreeTableID);
             }
+            // SimsRedux: computers get more to do (Write a Novel, Practice Writing, ...)
+            FSO.SimAntics.Utils.ReduxComputer.Patch(this);
 
             this.Attributes = new List<short>(numAttributes);
             SetFlag(VMEntityFlags.ChairFacing, true);

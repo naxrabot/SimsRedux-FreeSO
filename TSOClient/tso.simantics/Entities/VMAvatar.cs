@@ -226,7 +226,7 @@ namespace FSO.SimAntics
         /// (part of the lot's state, so every player's game remembers the same). 4 entries of
         /// [object id &lt;&lt; 16 | interaction, the game minute it was chosen, the need it was for + 1 (0 = fun/other)].
         /// </summary>
-        public int[] BrainMemory = new int[18]; // 4 x (object/interaction, time, need) + the plate they're eating (id, time) + a chore they keep failing (key, since) + idle since (game minute, 1 = counting) - see VMFindBestAction.ReduxIdleCheck
+        public int[] BrainMemory = new int[26]; // [18..25]: SimsRedux computer activities, the Writing skill (Utils/ReduxComputer.cs). // 4 x (object/interaction, time, need) + the plate they're eating (id, time) + a chore they keep failing (key, since) + idle since (game minute, 1 = counting) - see VMFindBestAction.ReduxIdleCheck
 
         public VMAvatar(GameObject obj)
             : base(obj)
@@ -539,6 +539,8 @@ namespace FSO.SimAntics
                 MotiveDecay.Tick(this, Thread.Context);
                 // SimsRedux: a family Sim left standing with nothing to do finds something (see there)
                 if (KillTimeout == -1) FSO.SimAntics.Primitives.VMFindBestAction.ReduxIdleCheck(this);
+                // SimsRedux: the new computer activities (writing, novels, chat, hacking) do their part
+                FSO.SimAntics.Utils.ReduxComputer.Tick(this);
                 if (Position == LotTilePos.OUT_OF_WORLD && (PersistID > 0 || IsPet) && (Container == null || Container.Position == LotTilePos.OUT_OF_WORLD) && !Content.Content.Get().TS1)
                 {
                     //uh oh!
