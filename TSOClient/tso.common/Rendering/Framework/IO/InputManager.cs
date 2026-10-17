@@ -494,6 +494,15 @@ namespace FSO.Common.Rendering.Framework.IO
                 state.CurrentMouseID = mouse.ID;
                 //if anyone accesses vanilla mouse state during the update loop, it will be the last mouse that was present.
 
+                // SimsRedux: a finger lifting off the screen lets go BEFORE it "leaves" what it was on,
+                // like a mouse click. (It used to leave first, so anything that only counts a click while
+                // the pointer is still over it - catalog pictures, family faces, tabs - never got the tap.)
+                if (mouse.Dead && mouseDif && !mouseBtnDown && mouse.LastMouseDown != null)
+                {
+                    mouse.LastMouseDown.Callback(UIMouseEventType.MouseUp, state);
+                    mouse.LastMouseDown = null;
+                }
+
                 var topMost =
                     state.MouseEvents.Where(x => x.Item1 == mouse.ID).OrderByDescending(x => x.Item2.Element.Depth).FirstOrDefault();
 
