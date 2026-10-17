@@ -30,7 +30,7 @@ namespace FSO.SimAntics
             {
                 // SimsRedux: a Sim playing or writing on a computer keeps going (Utils/ReduxComputer.cs)
                 if (opcode >= 4096 && opcode < 8192 && FSO.SimAntics.Utils.ReduxComputer.KeepGoing(frame.Thread, frame, opcode))
-                    return VMPrimitiveExitCode.GOTO_FALSE;
+                    return VMPrimitiveExitCode.GOTO_TRUE;
                 frame.Thread.ExecuteSubRoutine(frame, opcode, (VMSubRoutineOperand)instruction.Operand);
                 return VMPrimitiveExitCode.CONTINUE;
             }

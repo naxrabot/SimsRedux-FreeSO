@@ -83,6 +83,10 @@ namespace FSO.SimAntics.Utils
         // recognised by its name - it runs as the computer's own "Play", see Adjust)
         private static readonly Dictionary<TTAB, Dictionary<uint, Entry>> Patched = new Dictionary<TTAB, Dictionary<uint, Entry>>();
         private static readonly Dictionary<TTAB, Dictionary<string, Entry>> ByName = new Dictionary<TTAB, Dictionary<string, Entry>>();
+        // each computer's own "Play" (its pie menu number), which is shown under Play Games
+        private static readonly Dictionary<TTAB, uint> PlayIndex = new Dictionary<TTAB, uint>();
+        /// <summary>The computer's own Play, as it shows in the Play Games menu.</summary>
+        public const string ComputerGamesLabel = "Play Games/Computer Games";
         private static readonly object Lock = new object();
 
         /// <summary>Called as each object is made: a computer gets the new pie menu entries (once per kind of computer).</summary>
@@ -119,6 +123,7 @@ namespace FSO.SimAntics.Utils
                     // games are kept together under "Play Games" (more can be added the same way: "Play Games/<name>")
                     Add(ttab, ttas, play, map, "Play Games/Twisted Metal 2", Kind.PlayTwistedMetal2, 0);
                     Patched[ttab] = map;
+                    PlayIndex[ttab] = play.TTAIndex;
                     ByName[ttab] = map.Values.GroupBy(x => x.Label).ToDictionary(g => g.Key, g => g.First());
                 }
             }
@@ -186,9 +191,10 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>
         /// Called as a routine is about to call one of its object's own routines. A computer's play loop
-        /// asks "tweak play happy enough" after every round, and stops as soon as the Sim's Fun reaches a
-        /// goal worked out from their personality - which for most Sims is only a few game minutes away.
-        /// Answering "not yet" (true here) keeps them going:
+        /// asks "tweak play happy enough" after every round (it answers TRUE for "not yet, keep playing"),
+        /// and stops as soon as the Sim's Fun reaches a goal worked out from their personality - which for
+        /// most Sims is only a few game minutes away. Returning true here answers TRUE without asking,
+        /// which keeps them going:
         ///   writing, a novel, chatting, hacking: until you stop them (or a need, the novel or getting caught does)
         ///   playing (Play, Twisted Metal 2, Surf the Web): until Fun is nearly full
         /// </summary>
@@ -232,6 +238,27 @@ namespace FSO.SimAntics.Utils
                 }
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// The pie menu for an object: on a computer, its own "Play" moves into the Play Games menu (as
+        /// Computer Games), next to Twisted Metal 2 and any games added later.
+        /// </summary>
+        public static void AdjustPie(VMEntity obj, List<VMPieMenuInteraction> pie)
+        {
+            try
+            {
+                if (pie == null || obj?.TreeTable == null || obj is VMAvatar) return;
+                uint play;
+                lock (Lock) { if (!PlayIndex.TryGetValue(obj.TreeTable, out play)) return; }
+                foreach (var p in pie)
+                {
+                    if (p == null || p.Global || p.ID != play) continue;
+                    if (p.Name != null && p.Name.Contains("/")) continue;
+                    p.Name = ComputerGamesLabel;
+                }
+            }
+            catch { }
         }
 
         /// <summary>What a Sim is doing at a computer right now (None if not one of the new activities).</summary>

@@ -973,6 +973,7 @@ namespace FSO.SimAntics
                         actionS.Entry = ia;
                         actionS.Global = global;
                     }
+                    FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, actionStrings); // SimsRedux
                 }
                 else
                 {
@@ -1053,6 +1054,7 @@ namespace FSO.SimAntics
                 }
             }
 
+            FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, pie); // SimsRedux: the computer's Play goes under Play Games
             return pie;
         }
         
