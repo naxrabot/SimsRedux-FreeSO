@@ -542,6 +542,8 @@ namespace FSO.SimAntics
                 if (KillTimeout == -1) FSO.SimAntics.Primitives.VMFindBestAction.ReduxIdleCheck(this);
                 // SimsRedux: the new computer activities (writing, novels, chat, hacking) do their part
                 FSO.SimAntics.Utils.ReduxComputer.Tick(this);
+                // SimsRedux: skills grow by doing (cooking raises Cooking, repairing Mechanical...)
+                FSO.SimAntics.Utils.ReduxSkillByDoing.Tick(this);
                 if (Position == LotTilePos.OUT_OF_WORLD && (PersistID > 0 || IsPet) && (Container == null || Container.Position == LotTilePos.OUT_OF_WORLD) && !Content.Content.Get().TS1)
                 {
                     //uh oh!

@@ -57,6 +57,49 @@ namespace FSO.Vitaboy
             }
         }
 
+        private static readonly Dictionary<int, Microsoft.Xna.Framework.Graphics.Texture2D> Plains = new Dictionary<int, Microsoft.Xna.Framework.Graphics.Texture2D>();
+
+        /// <summary>
+        /// The last resort for a Sim's picture that can't be had: a plain one in a sensible colour (skin
+        /// for heads and hands, in the right skin tone; a soft grey-blue for clothes) - never black.
+        /// </summary>
+        public static Microsoft.Xna.Framework.Graphics.Texture2D Plain(Microsoft.Xna.Framework.Graphics.GraphicsDevice device, string texName, string meshName)
+        {
+            var n = (texName ?? "").ToLowerInvariant();
+            var m = (meshName ?? "").ToLowerInvariant();
+            int skin = n.Contains("drk") ? 2 : n.Contains("med") ? 1 : 0;
+            bool skinPart = n.StartsWith("c") || n.StartsWith("h") || m.StartsWith("c") || m.StartsWith("h") || m.Contains("hand");
+            int key = (skinPart ? 10 : 0) + skin;
+            Microsoft.Xna.Framework.Graphics.Texture2D tex;
+            if (Plains.TryGetValue(key, out tex) && tex != null && !tex.IsDisposed) return tex;
+            Microsoft.Xna.Framework.Color c;
+            if (skinPart) c = skin == 2 ? new Microsoft.Xna.Framework.Color(112, 76, 54) : skin == 1 ? new Microsoft.Xna.Framework.Color(196, 146, 108) : new Microsoft.Xna.Framework.Color(238, 200, 170);
+            else c = new Microsoft.Xna.Framework.Color(120, 132, 160);
+            try
+            {
+                tex = new Microsoft.Xna.Framework.Graphics.Texture2D(device, 2, 2);
+                tex.SetData(new[] { c, c, c, c });
+                Plains[key] = tex;
+            }
+            catch { tex = null; }
+            return tex;
+        }
+
+        /// <summary>Is this picture completely black? (a picture that didn't come through properly)</summary>
+        public static bool AllBlack(Microsoft.Xna.Framework.Graphics.Texture2D tex)
+        {
+            try
+            {
+                if (tex.Format != Microsoft.Xna.Framework.Graphics.SurfaceFormat.Color || tex.Width * tex.Height > 1024 * 1024) return false;
+                var data = new Microsoft.Xna.Framework.Color[tex.Width * tex.Height];
+                tex.GetData(data);
+                foreach (var c in data) if (c.R > 8 || c.G > 8 || c.B > 8) return false;
+                if (ReportProblem != null) try { ReportProblem("black Sim texture", "A Sim texture came out completely black (" + tex.Width + "x" + tex.Height + ") - using another"); } catch { }
+                return true;
+            }
+            catch { return false; }
+        }
+
         private static List<string> AllTextures()
         {
             if (TexNames != null) return TexNames;

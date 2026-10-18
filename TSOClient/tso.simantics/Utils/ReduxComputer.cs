@@ -524,7 +524,7 @@ namespace FSO.SimAntics.Utils
                 Notice(ava, "Skill Up!", ava.Name + " is now a level " + (next / 100) + " writer.");
         }
 
-        private static bool IsMyFamily(VMAvatar ava)
+        internal static bool IsMyFamily(VMAvatar ava)
         {
             var fam = ava.Thread.Context.VM.TS1State?.CurrentFamily;
             return fam != null && ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == fam.ChunkID;
@@ -537,7 +537,7 @@ namespace FSO.SimAntics.Utils
             fam.Budget = Math.Max(0, fam.Budget + amount);
         }
 
-        private static void Notice(VMAvatar ava, string title, string message)
+        internal static void Notice(VMAvatar ava, string title, string message)
         {
             try
             {
@@ -547,13 +547,13 @@ namespace FSO.SimAntics.Utils
         }
 
         private static int Clamp(int v, int lo, int hi) { return Math.Max(lo, Math.Min(hi, v)); }
-        private static int Get(VMAvatar ava, int slot)
+        internal static int Get(VMAvatar ava, int slot)
         {
             // (nothing until the block has been marked as ours)
             if (ava.GetPersonData((VMPersonDataVariable)Mark) != FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockMark) return 0;
             return ava.GetPersonData((VMPersonDataVariable)slot);
         }
-        private static void Set(VMAvatar ava, int slot, int v)
+        internal static void Set(VMAvatar ava, int slot, int v)
         {
             if (ava.GetPersonData((VMPersonDataVariable)Mark) != FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockMark)
             {

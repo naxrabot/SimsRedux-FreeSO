@@ -459,6 +459,7 @@ namespace FSO.Vitaboy
         public string MeshName;
         private int Fails;
         private int RetryIn;
+        private bool CheckedBlack, UsePlain;
 
         /// <summary>
         /// SimsRedux: this binding's texture, ready to draw. A texture that failed to load (a file read
@@ -468,12 +469,23 @@ namespace FSO.Vitaboy
         public Texture2D SafeTexture(GraphicsDevice device)
         {
             if (Texture == null && (TexName == null || TexName == "x")) return null;
-            if (RetryIn > 0) { RetryIn--; return null; }
+            if (RetryIn > 0) { RetryIn--; return ReduxAvatarFallback.Plain(device, TexName, MeshName); }
+            if (UsePlain) return ReduxAvatarFallback.Plain(device, TexName, MeshName);
             Texture2D tex = null;
             string why = null;
             try { tex = Texture?.Get(device); }
             catch (Exception e) { why = e.GetType().Name + ": " + e.Message; }
-            if (tex != null && !tex.IsDisposed) return tex;
+            if (tex != null && !tex.IsDisposed)
+            {
+                // (once: a picture that came out completely black is as good as missing)
+                if (!CheckedBlack)
+                {
+                    CheckedBlack = true;
+                    if (ReduxAvatarFallback.AllBlack(tex)) { why = "came out black"; tex = null; Texture = null; Fails = Math.Max(Fails, 3); }
+                    else return tex;
+                }
+                else return tex;
+            }
             if (why == null) why = Texture == null ? "not found" : (tex == null ? "empty" : "thrown away");
 
             Fails++;
@@ -492,7 +504,9 @@ namespace FSO.Vitaboy
             }
             catch (Exception) { }
             RetryIn = Math.Min(600, 30 * Fails); // (don't try every frame)
-            return null;
+            // the last resort: a plain picture in the right colours, never a black Sim
+            if (Fails >= 5) { UsePlain = true; return ReduxAvatarFallback.Plain(device, TexName, MeshName); }
+            return ReduxAvatarFallback.Plain(device, TexName, MeshName);
         }
     }
 }
