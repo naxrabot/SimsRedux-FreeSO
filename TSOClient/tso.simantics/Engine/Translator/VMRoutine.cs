@@ -39,6 +39,8 @@ namespace FSO.SimAntics
                     if (off < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                     if (off > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                 }
+                // SimsRedux: no more than a couple of uninvited visitors a day (Utils/ReduxVisitCap.cs)
+                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxVisitCap.Skip(frame, opcode)) return VMPrimitiveExitCode.GOTO_TRUE;
                 // SimsRedux: Smarter Sims get up from skill objects before a need runs out (Utils/ReduxExit.cs)
                 if (opcode < 4096 && FSO.SimAntics.Utils.ReduxExit.StopSkill(frame, opcode)) return VMPrimitiveExitCode.GOTO_TRUE;
                 frame.Thread.ExecuteSubRoutine(frame, opcode, (VMSubRoutineOperand)instruction.Operand);
