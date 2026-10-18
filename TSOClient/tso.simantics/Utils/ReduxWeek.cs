@@ -28,6 +28,13 @@ namespace FSO.SimAntics.Utils
             return (int)(((abs - 150) % 7 + 7) % 7); // (1 June 1997 = Monday)
         }
 
+        /// <summary>The weekday (0 = Monday) of any date on the game's calendar.</summary>
+        public static int DayOf(int year, int month, int day)
+        {
+            long abs = (long)(year - 1997) * 360 + (month - 1) * 30 + (day - 1);
+            return (int)(((abs - 150) % 7 + 7) % 7);
+        }
+
         // which days each career works (bit 0 = Monday ... bit 6 = Sunday)
         private const int MonFri = 0x1F, TueSat = 0x3E, WedSun = 0x7C, ThuMon = 0x79, SunThu = 0x4F;
         private static readonly Dictionary<int, int> Careers = new Dictionary<int, int>

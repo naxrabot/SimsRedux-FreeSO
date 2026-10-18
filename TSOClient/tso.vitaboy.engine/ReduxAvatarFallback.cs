@@ -21,9 +21,26 @@ namespace FSO.Vitaboy
         private static List<string> TexNames;
         private static HashSet<string> Logged = new HashSet<string>();
 
+        /// <summary>The website sends these to the server's problem log (set by the web version).</summary>
+        public static Action<string, string> ReportProblem;
+        private static int Reported;
+        private static readonly List<string> Pending = new List<string>();
+
         private static void Note(string what)
         {
-            if (Logged.Count < 200 && Logged.Add(what)) Console.WriteLine("[SimsRedux] Missing Sim clothes: " + what);
+            if (Logged.Count < 200 && Logged.Add(what))
+            {
+                Console.WriteLine("[SimsRedux] Missing Sim clothes: " + what);
+                // (two reports at most - the first one, then a list of the first 15 - so a black head or
+                //  outfit can be tracked down to its file without using up the page's problem reports)
+                Pending.Add(what);
+                if (ReportProblem != null && (Reported == 0 || (Reported == 1 && Pending.Count >= 15)))
+                {
+                    Reported++;
+                    try { ReportProblem("missing Sim texture", string.Join("; ", Pending)); } catch { }
+                    Pending.Clear();
+                }
+            }
         }
 
         private static List<string> AllTextures()

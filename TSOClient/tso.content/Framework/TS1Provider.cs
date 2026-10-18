@@ -16,6 +16,7 @@ namespace FSO.Content.Framework
             // SimsRedux: Downloads also for heads/bodies (.bmp, .skn), floors (.flr) and object sounds (.wav),
             // like the original game
             { ".bmp", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } },
+            { ".tga", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } }, // SimsRedux: some skins are .tga
             { ".cmx", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } }, // downloads for animations
             { ".skn", new string[] { "GameData/Skins/", "ExpansionShared/SkinsBuy/", "Downloads/" } },
             { ".iff", new string[] { "Downloads/" } },
@@ -59,7 +60,9 @@ namespace FSO.Content.Framework
                     FileProvider<object> provider;
                     if (!FileProvidersByRegex.TryGetValue(regexStr, out provider))
                     {
-                        var regex = new Regex(regexStr);
+                        // SimsRedux: any capitals (gamedata/skins, .BMP...) - a Sims folder copied from a Mac,
+                        // or a download, isn't always spelled like the Windows game
+                        var regex = new Regex(regexStr, RegexOptions.IgnoreCase);
                         provider = new FileProvider<object>(Manager, null, regex);
                         provider.UseTS1 = true;
                         provider.Init();
