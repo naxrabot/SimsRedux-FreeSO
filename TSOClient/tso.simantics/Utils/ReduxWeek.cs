@@ -101,7 +101,8 @@ namespace FSO.SimAntics.Utils
                     {
                         var label = routine.Chunk?.ChunkLabel ?? "";
                         kind = label.IndexOf("due at work", StringComparison.OrdinalIgnoreCase) >= 0 ? 1
-                            : (label.IndexOf("warnings car pool", StringComparison.OrdinalIgnoreCase) >= 0 ? 2 : 0);
+                            : (label.IndexOf("warnings car pool", StringComparison.OrdinalIgnoreCase) >= 0 ? 2
+                            : (label.IndexOf("school bus schedule", StringComparison.OrdinalIgnoreCase) >= 0 ? 3 : 0));
                         DueRoutines[routine] = kind;
                     }
                 }
@@ -109,6 +110,8 @@ namespace FSO.SimAntics.Utils
                 var vm = frame.VM;
                 if (vm == null) return 0;
                 int day = Day(vm.Context.Clock);
+                // school is Monday to Friday: no school bus at the weekend
+                if (kind == 3) return day >= 5 ? 1 : 0;
                 if (kind == 2)
                 {
                     foreach (var a in vm.Context.ObjectQueries.Avatars)

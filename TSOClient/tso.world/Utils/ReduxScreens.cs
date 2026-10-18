@@ -118,6 +118,23 @@ namespace FSO.LotView.Utils
                     else if (off[i].PackedValue != px[i].PackedValue) mask[i] = true;
                 }
             }
+            // in some views "off" is only the bezel, with see-through glass inside it: that inside is glass too
+            if (off != null && off.Length == w * h)
+            {
+                var outside = new bool[w * h];
+                var stack = new Stack<int>();
+                for (int x = 0; x < w; x++) { Seed(off, outside, stack, x); Seed(off, outside, stack, (h - 1) * w + x); }
+                for (int y = 0; y < h; y++) { Seed(off, outside, stack, y * w); Seed(off, outside, stack, y * w + w - 1); }
+                while (stack.Count > 0)
+                {
+                    int j = stack.Pop(), jx = j % w, jy = j / w;
+                    if (jx > 0) Seed(off, outside, stack, j - 1);
+                    if (jx < w - 1) Seed(off, outside, stack, j + 1);
+                    if (jy > 0) Seed(off, outside, stack, j - w);
+                    if (jy < h - 1) Seed(off, outside, stack, j + w);
+                }
+                for (int i = 0; i < mask.Length; i++) if (off[i].A == 0 && !outside[i]) mask[i] = true;
+            }
             // (a few glass pixels happen to be the same colour on and off: fill each row between its ends)
             for (int y = 0; y < h; y++)
             {
@@ -157,37 +174,39 @@ namespace FSO.LotView.Utils
                 if (src == null || src.Length != w * h) return null;
                 var mask = Mask(iff, ov, sprite.SpriteFrameIndex, w, h);
 
-                // the glass's sides: its left- and right-most columns, and where it starts and ends in each
-                int minX = int.MaxValue, maxX = -1;
+                // only the glass: the biggest solid patch of changed pixels (a stray pixel elsewhere in the
+                // picture stretched the old outline past the monitor), with its gaps filled
+                var glass = Glass(mask, w, h);
+                if (glass == null) return null; // (this view doesn't show the glass)
+
+                // where each row and column of the glass starts and ends: the screenshot is fitted to them,
+                // so it follows the glass's slant from every side
+                var rowMin = new int[h]; var rowMax = new int[h];
+                var colMin = new int[w]; var colMax = new int[w];
+                for (int y = 0; y < h; y++) { rowMin[y] = int.MaxValue; rowMax[y] = -1; }
+                for (int x = 0; x < w; x++) { colMin[x] = int.MaxValue; colMax[x] = -1; }
                 for (int y = 0; y < h; y++)
                     for (int x = 0; x < w; x++)
-                        if (mask[y * w + x]) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
-                if (maxX - minX < 2) return null; // (this view doesn't show the glass)
-                float tl, bl, tr, br;
-                Edge(mask, w, h, minX, Math.Min(maxX, minX + 1), out tl, out bl);
-                Edge(mask, w, h, Math.Max(minX, maxX - 1), maxX, out tr, out br);
+                        if (glass[y * w + x])
+                        {
+                            if (x < rowMin[y]) rowMin[y] = x; if (x > rowMax[y]) rowMax[y] = x;
+                            if (y < colMin[x]) colMin[x] = y; if (y > colMax[x]) colMax[x] = y;
+                        }
 
                 var px = (Color[])src.Clone();
-                float span = Math.Max(1, maxX - minX);
-                // every pixel inside the glass's outline (not only the ones that changed: the game's own
-                // screens have see-through specks, and the computer showed through them)
-                for (int x = minX; x <= maxX; x++)
-                {
-                    float u = (x - minX) / span;
-                    float top = tl + (tr - tl) * u, bottom = bl + (br - bl) * u;
-                    float height = Math.Max(1, bottom - top);
-                    float pu = sprite.Flip ? 1 - u : u; // (the game mirrors this view: mirror the picture back)
-                    for (int y = (int)Math.Ceiling(top); y <= (int)Math.Floor(bottom); y++)
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
                     {
-                        if (y < 0 || y >= h) continue;
                         int i = y * w + x;
-                        float v = (y - top) / height;
+                        if (!glass[i]) continue;
+                        float rw = Math.Max(1, rowMax[y] - rowMin[y]), ch = Math.Max(1, colMax[x] - colMin[x]);
+                        float u = (x - rowMin[y]) / rw, v = (y - colMin[x]) / ch;
+                        if (sprite.Flip) u = 1 - u; // (the game mirrors this view: mirror the picture back)
                         // the average of the screenshot's pixels this one covers (a small screen, a big picture)
-                        var c = Area(pic, pu, v, 1f / span, 1f / height);
+                        var c = Area(pic, u, v, 1f / (rw + 1), 1f / (ch + 1));
                         // a touch dimmer than the screenshot (a lit screen in a room, not a sticker)
                         px[i] = new Color((byte)(c.R * 0.9f), (byte)(c.G * 0.9f), (byte)(c.B * 0.92f), (byte)255);
                     }
-                }
                 tex = new Texture2D(gd, w, h, false, SurfaceFormat.Color);
                 tex.SetData(px);
                 tex.Tag = original.Tag ?? new TextureInfo(tex, w, h);
@@ -199,6 +218,54 @@ namespace FSO.LotView.Utils
                 Console.WriteLine("[SimsRedux] monitor picture: " + e.Message);
                 return null;
             }
+        }
+
+        private static void Seed(Color[] off, bool[] outside, Stack<int> stack, int i)
+        {
+            if (outside[i] || off[i].A != 0) return;
+            outside[i] = true;
+            stack.Push(i);
+        }
+
+        /// <summary>The glass: the biggest connected patch of the mask, with the holes in its rows and columns filled.</summary>
+        private static bool[] Glass(bool[] mask, int w, int h)
+        {
+            var label = new int[w * h];
+            int best = 0, bestCount = 0, next = 0;
+            var stack = new Stack<int>();
+            for (int i = 0; i < mask.Length; i++)
+            {
+                if (!mask[i] || label[i] != 0) continue;
+                int id = ++next, count = 0;
+                label[i] = id; stack.Push(i);
+                while (stack.Count > 0)
+                {
+                    int j = stack.Pop(); count++;
+                    int jx = j % w, jy = j / w;
+                    if (jx > 0 && mask[j - 1] && label[j - 1] == 0) { label[j - 1] = id; stack.Push(j - 1); }
+                    if (jx < w - 1 && mask[j + 1] && label[j + 1] == 0) { label[j + 1] = id; stack.Push(j + 1); }
+                    if (jy > 0 && mask[j - w] && label[j - w] == 0) { label[j - w] = id; stack.Push(j - w); }
+                    if (jy < h - 1 && mask[j + w] && label[j + w] == 0) { label[j + w] = id; stack.Push(j + w); }
+                }
+                if (count > bestCount) { bestCount = count; best = id; }
+            }
+            if (bestCount < 6) return null;
+            var g = new bool[w * h];
+            for (int i = 0; i < g.Length; i++) g[i] = label[i] == best;
+            // fill each row and each column between its ends (glass pixels that look the same on and off)
+            for (int y = 0; y < h; y++)
+            {
+                int a = -1, b = -1;
+                for (int x = 0; x < w; x++) if (g[y * w + x]) { if (a < 0) a = x; b = x; }
+                for (int x = a + 1; x < b; x++) g[y * w + x] = true;
+            }
+            for (int x = 0; x < w; x++)
+            {
+                int a = -1, b = -1;
+                for (int y = 0; y < h; y++) if (g[y * w + x]) { if (a < 0) a = y; b = y; }
+                for (int y = a + 1; y < b; y++) g[y * w + x] = true;
+            }
+            return g;
         }
 
         private static void Edge(bool[] mask, int w, int h, int x0, int x1, out float top, out float bottom)
