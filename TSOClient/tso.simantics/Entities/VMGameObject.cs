@@ -137,6 +137,8 @@ namespace FSO.SimAntics
             {
                 SetFlag(VMEntityFlags.HasZeroExtent, true);
                 SetValue(VMStackObjectVariable.LightingContribution, FSO.SimAntics.Utils.ReduxSkylight.Contribution);
+                // anywhere: indoors, outdoors, upstairs, over other things (it hangs from the ceiling)
+                SetValue(VMStackObjectVariable.PlacementFlags, (short)(VMPlacementFlags.OnFloor | VMPlacementFlags.OnTerrain | VMPlacementFlags.OnSlope));
             }
         }
 

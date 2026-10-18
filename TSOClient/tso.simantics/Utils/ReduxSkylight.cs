@@ -2,7 +2,7 @@ namespace FSO.SimAntics.Utils
 {
     /// <summary>
     /// SimsRedux: the Skylight (Content/redux/mods/Downloads/redux/redux_skylight.iff) - a plain "dev light":
-    /// a light gray circle you place like a lamp. It lights the area around it softly and is always on;
+    /// a small light gray circle up by the ceiling, placed on any tile like a lamp. It lights the area around it softly and is always on;
     /// Sims walk straight through it; and while you play it isn't drawn at all (only in Buy and Build
     /// mode), so all you see is its light. The file has no scripts: everything it does is here.
     /// </summary>
