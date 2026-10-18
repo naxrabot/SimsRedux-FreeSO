@@ -294,6 +294,7 @@ namespace FSO.SimAntics.NetPlay.Drivers
             //verify the queued commands. Remove ones which fail (or defer til later)
             for (int i = 0; i < cmdQueue.Count; i++)
             {
+                if (cmdQueue[i]?.Command == null) { cmdQueue.RemoveAt(i--); continue; } // (SimsRedux)
                 var caller = vm.GetAvatarByPersist(cmdQueue[i].Command.ActorUID);
                 try
                 {

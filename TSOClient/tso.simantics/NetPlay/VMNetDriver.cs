@@ -1,4 +1,4 @@
-﻿using FSO.SimAntics.NetPlay.Model;
+using FSO.SimAntics.NetPlay.Model;
 using FSO.SimAntics.NetPlay.Model.Commands;
 using FSO.SimAntics.Engine.TSOTransaction;
 using System.IO;
@@ -54,6 +54,7 @@ namespace FSO.SimAntics.NetPlay
 
         protected void InternalTick(VM vm, VMNetTick tick)
         {
+            if (tick.Commands == null) tick.Commands = new System.Collections.Generic.List<VMNetCommand>(); // (SimsRedux)
             CurrentTick = tick.TickID;
             if (CurrentTick > GreatestTick) GreatestTick = CurrentTick;
             if (!tick.ImmediateMode && (tick.Commands.Count == 0 || !(tick.Commands[0].Command is VMStateSyncCmd)) && vm.Context.RandomSeed != tick.RandomSeed)
@@ -84,9 +85,18 @@ namespace FSO.SimAntics.NetPlay
                     //disable just for fsor playback
                 }
 
+                if (cmd?.Command == null) continue; // SimsRedux: a broken command is skipped, not a crash
                 var caller = vm.GetAvatarByPersist(cmd.Command.ActorUID);
                 Executing = cmd;
-                var ok = cmd.Command.Execute(vm, caller);
+                bool ok;
+                // SimsRedux: one command going wrong (a click on something that just vanished, say) used
+                // to stop the whole game with "Something went wrong". Now it's logged and skipped.
+                try { ok = cmd.Command.Execute(vm, caller); }
+                catch (System.Exception e)
+                {
+                    ok = false;
+                    System.Console.WriteLine("[SimsRedux] command " + cmd.Command.GetType().Name + " failed and was skipped: " + e);
+                }
                 Executing = null;
                 if (!(cmd.Command is VMStateSyncCmd)) Note(cmd.Command.GetType().Name.Replace("VMNet", "").Replace("Cmd", "") + (ok ? " done" : " FAILED") + (caller == null ? " (no Sim for uid " + cmd.Command.ActorUID + ")" : ""));
                 if (vm.FSOVAsyncLoading)

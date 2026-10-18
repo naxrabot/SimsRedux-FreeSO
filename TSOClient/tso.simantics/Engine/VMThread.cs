@@ -662,6 +662,15 @@ namespace FSO.SimAntics.Engine
                 return;
             }
 
+            // SimsRedux: a script that loops "find the thief, walk to him" when the walk finishes at once
+            // (the police officer already standing there) never gives up its turn and was reset as an
+            // "infinite loop". After a lot of work in one tick, a walk waits for the next tick first.
+            if ((opcode == 27 || opcode == 45) && TicksThisFrame > 5000 && !IsCheck)
+            {
+                HandleResult(frame, instruction, VMPrimitiveExitCode.CONTINUE_NEXT_TICK);
+                return;
+            }
+
             VMPrimitiveHandler handler = primitive.GetHandler();
             var result = handler.Execute(frame, instruction.Operand);
             HandleResult(frame, instruction, result);

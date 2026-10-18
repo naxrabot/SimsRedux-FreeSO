@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework.Graphics;
@@ -45,6 +45,16 @@ namespace FSO.LotView.Components
         {
             var pelvis = Avatar.Skeleton.GetBone("PELVIS").AbsolutePosition / 3.0f;
             return Vector3.Transform(new Vector3(pelvis.X, pelvis.Z, pelvis.Y), Matrix.CreateRotationZ((float)(RadianDirection + Math.PI))) + this.Position;// - new Vector3(0.5f, 0.5f, 0f);
+        }
+
+        /// <summary>SimsRedux: where one of the Sim's bones is, in tile units (null if the skeleton hasn't got it).
+        /// Used for the bathroom blur.</summary>
+        public Vector3? ReduxBoneTilePos(string bone)
+        {
+            var b = Avatar?.Skeleton?.GetBone(bone);
+            if (b == null) return null;
+            var p = b.AbsolutePosition / 3.0f;
+            return Vector3.Transform(new Vector3(p.X, p.Z, p.Y), Matrix.CreateRotationZ((float)(RadianDirection + Math.PI))) + this.Position;
         }
 
         public Vector3 GetPelvisPosition()
