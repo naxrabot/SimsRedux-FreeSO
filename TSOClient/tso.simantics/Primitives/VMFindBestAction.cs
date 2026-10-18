@@ -756,7 +756,7 @@ namespace FSO.SimAntics.Primitives
             if (!tired) return null;
             if (BeforeWork && energy > -60) return null; // (the carpool is coming)
             // the bathroom or a meal first if that's worse
-            if (Needs[(int)VMMotive.Bladder] < Math.Min(-40, energy) || Needs[(int)VMMotive.Hunger] < Math.Min(-50, energy)) return null;
+            if (Needs[(int)VMMotive.Bladder] < Math.Min(-40, (int)energy) || Needs[(int)VMMotive.Hunger] < Math.Min(-50, (int)energy)) return null;
 
             VMPieMenuInteraction best = null, nap = null; float bestDist = float.MaxValue, napDist = float.MaxValue;
             var done = new HashSet<short>();
