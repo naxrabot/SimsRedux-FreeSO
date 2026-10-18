@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.Common.Content;
@@ -26,6 +26,10 @@ namespace FSO.Content
         private Dictionary<ushort, Wall> ById;
         private Dictionary<ushort, WallStyle> StyleById;
         public Dictionary<string, ushort> DynamicWallFromID;
+        /// <summary>SimsRedux: where each wallpaper file came from (for making tinted copies of it).</summary>
+        public Dictionary<ushort, IContentReference> ReduxSources = new Dictionary<ushort, IContentReference>();
+        /// <summary>SimsRedux: the file the game's own wallpapers are in.</summary>
+        public string ReduxGlobalsPath;
         private IffFile WallGlobals;
         private IffFile BuildGlobals;
 
@@ -180,6 +184,7 @@ namespace FSO.Content
         public void InitTS1()
         {
             var wallGlobalsPath = Path.Combine(ContentManager.TS1BasePath, "GameData/walls.iff");
+            ReduxGlobalsPath = wallGlobalsPath;
             WallGlobals = new IffFile(wallGlobalsPath);
 
             var buildGlobalsPath = Path.Combine(ContentManager.TS1BasePath, "GameData/Build.iff");
@@ -221,6 +226,7 @@ namespace FSO.Content
                 int price;
                 int.TryParse((catStrings.GetString(1) ?? "").Trim(), out price);
                 DynamicWallFromID[Path.GetFileNameWithoutExtension(entry.ToString().Replace('\\', '/')).ToLowerInvariant()] = wallID;
+                ReduxSources[wallID] = entry;
 
                 Entries.Add(wallID, new WallReference(this)
                 {
@@ -319,6 +325,31 @@ namespace FSO.Content
             ById.Add(wall.ID, wall);
         }
 
+        /// <summary>
+        /// SimsRedux: adds a wallpaper made while playing (a tinted copy), from a wall file's contents
+        /// (STR# 0 for its name, SPR 1 / 1793 / 2049 for its pictures). Returns its ID (the same one
+        /// again if a wallpaper with this name is already there).
+        /// </summary>
+        public ushort ReduxAddRuntime(string name, IffFile iff)
+        {
+            name = name.ToLowerInvariant();
+            ushort existing;
+            if (DynamicWallFromID.TryGetValue(name, out existing)) return existing;
+            var far = iff.Get<SPR>(1); var medium = iff.Get<SPR>(1793); var near = iff.Get<SPR>(2049);
+            if (far == null || medium == null || near == null) throw new InvalidDataException("not a wallpaper");
+            var id = (ushort)NumWalls;
+            if (id >= 65000) throw new InvalidOperationException("too many wallpapers");
+            NumWalls++;
+            ById[id] = new Wall { ID = id, Far = far, Medium = medium, Near = near };
+            var str = iff.Get<STR>(0);
+            int price; int.TryParse((str?.GetString(1) ?? "").Trim(), out price);
+            Entries[id] = new WallReference(this) { ID = id, FileName = name + ".wll", Name = str?.GetString(0) ?? name, Price = price, Description = str?.GetString(2) ?? "" };
+            DynamicWallFromID[name] = id;
+            ReduxRuntime.Add(id);
+            return id;
+        }
+        private HashSet<ushort> ReduxRuntime = new HashSet<ushort>();
+
         private void AddWallStyle(WallStyle wall)
         {
             WallStyles.Add(wall);
@@ -341,7 +372,7 @@ namespace FSO.Content
 
         public Texture2D GetWallThumb(ushort id, GraphicsDevice device)
         {
-            if (id < 256)
+            if (id < 256 || ReduxRuntime.Contains(id))
             {
                 var spr = ById[id].Medium;
                 return TextureUtils.Copy(device, (spr == null)?null:spr.Frames[2].GetTexture(device));

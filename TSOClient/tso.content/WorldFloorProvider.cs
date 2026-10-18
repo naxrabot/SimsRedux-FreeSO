@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.Common.Content;
@@ -26,6 +26,10 @@ namespace FSO.Content
         public Dictionary<ushort, FloorReference> Entries;
         public IContentProvider<IffFile> Floors;
         public Dictionary<string, ushort> DynamicFloorFromID;
+        /// <summary>SimsRedux: where each floor file came from (for making tinted copies of it).</summary>
+        public Dictionary<ushort, IContentReference> ReduxSources = new Dictionary<ushort, IContentReference>();
+        /// <summary>SimsRedux: the file the game's own floors are in.</summary>
+        public string ReduxGlobalsPath;
 
         private IffFile FloorGlobals;
         private IffFile BuildGlobals;
@@ -106,6 +110,7 @@ namespace FSO.Content
         public void InitTS1()
         {
             var floorGlobalsPath = Path.Combine(ContentManager.TS1BasePath, "GameData/floors.iff");
+            ReduxGlobalsPath = floorGlobalsPath;
             var floorGlobals = new IffFile(floorGlobalsPath);
             FloorGlobals = floorGlobals;
 
@@ -148,6 +153,7 @@ namespace FSO.Content
                 int price;
                 int.TryParse((catStrings.GetString(1) ?? "").Trim(), out price);
                 DynamicFloorFromID[Path.GetFileNameWithoutExtension(entry.ToString().Replace('\\', '/')).ToLowerInvariant()] = floorID;
+                ReduxSources[floorID] = entry;
 
                 Entries.Add(floorID, new FloorReference(this)
                 {
@@ -234,6 +240,32 @@ namespace FSO.Content
             ById.Add(floor.ID, floor);
         }
 
+        /// <summary>
+        /// SimsRedux: adds a floor made while playing (a tinted copy), from a floor file's contents
+        /// (STR# 0 for its name, SPR2 1 / 257 / 513 for its pictures). Returns its ID (the same one
+        /// again if a floor with this name is already there).
+        /// </summary>
+        public ushort ReduxAddRuntime(string name, IffFile iff)
+        {
+            name = name.ToLowerInvariant();
+            ushort existing;
+            if (DynamicFloorFromID.TryGetValue(name, out existing)) return existing;
+            var far = iff.Get<SPR2>(1); var medium = iff.Get<SPR2>(257); var near = iff.Get<SPR2>(513);
+            if (far == null || medium == null || near == null) throw new InvalidDataException("not a floor");
+            far.FloorCopy = 1; medium.FloorCopy = 1; near.FloorCopy = 1;
+            var id = (ushort)NumFloors;
+            if (id >= 65000) throw new InvalidOperationException("too many floors");
+            NumFloors++;
+            ById[id] = new Floor { ID = id, Far = far, Medium = medium, Near = near };
+            var str = iff.Get<STR>(0);
+            int price; int.TryParse((str?.GetString(1) ?? "").Trim(), out price);
+            Entries[id] = new FloorReference(this) { ID = id, FileName = name + ".flr", Name = str?.GetString(0) ?? name, Price = price, Description = str?.GetString(2) ?? "" };
+            DynamicFloorFromID[name] = id;
+            ReduxRuntime.Add(id);
+            return id;
+        }
+        private HashSet<ushort> ReduxRuntime = new HashSet<ushort>();
+
 
         public Texture2D GetFloorThumb(ushort id, GraphicsDevice device)
         {
@@ -256,6 +288,10 @@ namespace FSO.Content
                     spr.SpritePreprocessed = true;
                 }
                 return TextureUtils.Copy(device, spr.Frames[0].GetTexture(device));
+            }
+            else if (ReduxRuntime.Contains(id))
+            {
+                return ById[id].Near.Frames[0].GetTexture(device);
             }
             else
             {

@@ -226,7 +226,7 @@ namespace FSO.SimAntics
         /// (part of the lot's state, so every player's game remembers the same). 4 entries of
         /// [object id &lt;&lt; 16 | interaction, the game minute it was chosen, the need it was for + 1 (0 = fun/other)].
         /// </summary>
-        public int[] BrainMemory = new int[18]; // 4 x (object/interaction, time, need) + the plate they're eating (id, time) + a chore they keep failing (key, since) + idle since (game minute, 1 = counting) - see VMFindBestAction.ReduxIdleCheck
+        public int[] BrainMemory = new int[20]; // 4 x (object/interaction, time, need) + the plate they're eating (id, time) + a chore they keep failing (key, since) + idle since (game minute, 1 = counting) - see VMFindBestAction.ReduxIdleCheck + the last repairman / fire department call (game minute)
 
         public VMAvatar(GameObject obj)
             : base(obj)
@@ -488,6 +488,7 @@ namespace FSO.SimAntics
                         Sound = thread,
                         Pan = true,
                         Zoom = true,
+                        Name = soundevt, // SimsRedux: so the same sound isn't started again while it's still playing
                     };
                     owner.SoundThreads.Add(entry);
                     owner.Thread?.Context?.VM?.SoundEntities?.Add(this);

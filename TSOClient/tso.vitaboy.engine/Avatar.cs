@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.Common.Rendering.Framework;
@@ -49,7 +50,9 @@ namespace FSO.Vitaboy
                 Bindings.Add(new AvatarBindingInstance()
                 {
                     Mesh = oldb.Mesh,
-                    Texture = oldb.Texture
+                    Texture = oldb.Texture,
+                    TexName = oldb.TexName,
+                    MeshName = oldb.MeshName
                 });
             }
             for (int i = 0; i < old.Accessories.Count(); i++)
@@ -100,7 +103,7 @@ namespace FSO.Vitaboy
                 foreach (var binding in Bindings)
                 {
                     binding.Mesh.StoreOnGPU(device);
-                    binding.Texture.Get(device);
+                    binding.SafeTexture(device);
                 }
             }
         }
@@ -186,6 +189,8 @@ namespace FSO.Vitaboy
             if (binding.MeshName != null)
             {
                 instance.Mesh = content.AvatarMeshes.Get(binding.MeshName);
+                instance.TexName = binding.TextureName ?? instance.Mesh?.TextureName;
+                instance.MeshName = binding.MeshName;
                 instance.Texture = content.AvatarTextures.Get(binding.TextureName ?? instance.Mesh.TextureName);
                 // SimsRedux: a texture that's gone (a removed download) - another for the same outfit,
                 // not a pitch-black Sim
@@ -309,15 +314,7 @@ namespace FSO.Vitaboy
                 {
                     foreach (var binding in Bindings)
                     {
-                        if (binding.Texture != null)
-                        {
-                            var tex = binding.Texture.Get(device);
-                            effect.Parameters["MeshTex"]?.SetValue(tex);
-                        }
-                        else
-                        {
-                            effect.Parameters["MeshTex"]?.SetValue((Texture2D)null);
-                        }
+                        effect.Parameters["MeshTex"]?.SetValue(binding.SafeTexture(device));
                         pass.Apply();
                         binding.Mesh.Draw(device);
                     }
@@ -342,15 +339,7 @@ namespace FSO.Vitaboy
                             continue;
                         }
 
-                        if (binding.Texture != null)
-                        {
-                            var tex = binding.Texture.Get(device);
-                            effect.Parameters["MeshTex"]?.SetValue(tex);
-                        }
-                        else
-                        {
-                            effect.Parameters["MeshTex"]?.SetValue((Texture2D)null);
-                        }
+                        effect.Parameters["MeshTex"]?.SetValue(binding.SafeTexture(device));
                         pass.Apply();
                         binding.Mesh.Draw(device);
                     }
@@ -464,5 +453,46 @@ namespace FSO.Vitaboy
     {
         public Mesh Mesh;
         public ITextureRef Texture;
+
+        // SimsRedux: the texture's name, so a texture that fails to load can be found again
+        public string TexName;
+        public string MeshName;
+        private int Fails;
+        private int RetryIn;
+
+        /// <summary>
+        /// SimsRedux: this binding's texture, ready to draw. A texture that failed to load (a file read
+        /// that didn't work that moment) or was thrown away by the graphics card is loaded again
+        /// instead of the Sim staying black (a few tries, then the outfit's fallback texture).
+        /// </summary>
+        public Texture2D SafeTexture(GraphicsDevice device)
+        {
+            if (Texture == null && (TexName == null || TexName == "x")) return null;
+            if (RetryIn > 0) { RetryIn--; return null; }
+            Texture2D tex = null;
+            string why = null;
+            try { tex = Texture?.Get(device); }
+            catch (Exception e) { why = e.GetType().Name + ": " + e.Message; }
+            if (tex != null && !tex.IsDisposed) return tex;
+            if (why == null) why = Texture == null ? "not found" : (tex == null ? "empty" : "thrown away");
+
+            Fails++;
+            ReduxAvatarFallback.TextureProblem(TexName, why, Fails);
+            try
+            {
+                var content = FSO.Content.Content.Get();
+                if (Fails <= 3 && TexName != null) Texture = content.AvatarTextures.Get(TexName);
+                else
+                {
+                    var alt = ReduxAvatarFallback.Texture(TexName, MeshName, Mesh?.TextureName);
+                    if (alt != null) Texture = content.AvatarTextures.Get(alt);
+                }
+                tex = Texture?.Get(device);
+                if (tex != null && !tex.IsDisposed) return tex;
+            }
+            catch (Exception) { }
+            RetryIn = Math.Min(600, 30 * Fails); // (don't try every frame)
+            return null;
+        }
     }
 }

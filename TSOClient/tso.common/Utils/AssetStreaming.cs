@@ -1,4 +1,4 @@
-﻿using FSO.Common.Rendering.Framework.Model;
+using FSO.Common.Rendering.Framework.Model;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
@@ -102,10 +102,17 @@ namespace FSO.Common.Utils
 
                 Task.Run(dataProvider).ContinueWith((taskResult) =>
                 {
-                    var data = taskResult.Result;
+                    // SimsRedux: a picture whose data failed to come in on the side is made again on the
+                    // game's own turn, instead of the texture staying empty (black) for good
+                    var data = taskResult.IsFaulted ? null : taskResult.Result;
                     InStreamUpdate(() =>
                     {
-                        TextureUtils.UploadTexData(tex, data);
+                        try
+                        {
+                            if (data == null) data = dataProvider();
+                            if (!tex.IsDisposed) TextureUtils.UploadTexData(tex, data);
+                        }
+                        catch (Exception e) { Console.WriteLine("[SimsRedux] texture load failed: " + e.Message); }
 
                         RemoveLoadingResource();
                     });
@@ -113,7 +120,19 @@ namespace FSO.Common.Utils
             }
             else
             {
-                var data = dataProvider();
+                TextureData<T>[] data = null;
+                try { data = dataProvider(); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] texture load failed, trying again: " + e.Message); }
+                if (data == null)
+                {
+                    // (tried once more on the next frame)
+                    InStreamUpdate(() =>
+                    {
+                        try { if (!tex.IsDisposed) TextureUtils.UploadTexData(tex, dataProvider()); }
+                        catch (Exception e) { Console.WriteLine("[SimsRedux] texture load failed: " + e.Message); }
+                    });
+                    return;
+                }
 
                 TextureUtils.UploadTexData(tex, data);
             }

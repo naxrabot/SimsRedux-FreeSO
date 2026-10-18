@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.SimAntics.Engine.Scopes;
@@ -388,6 +388,9 @@ namespace FSO.SimAntics.Engine.Utils
             if (mode == 2 && tableID == 258 && keyID >= 7 && keyID <= 10 && context?.VM != null && context.VM.TS1)
             {
                 int level = context.VM.ReduxNoPause ? 2 : FSO.SimAntics.Primitives.VMFindBestAction.ReduxLevel;
+                // (energy, at night: get up for bed while still only a bit tired, not once almost asleep)
+                var h = context.VM.Context.Clock.Hours;
+                if (keyID == 9 && level >= 1 && (h >= 22 || h < 6)) return (short)(level >= 2 ? 10 : -15);
                 if (level >= 2) return SmartExit[keyID - 7];
                 if (level == 1) return SmarterExit[keyID - 7];
             }

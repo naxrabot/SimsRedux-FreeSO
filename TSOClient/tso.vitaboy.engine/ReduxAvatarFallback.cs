@@ -43,6 +43,20 @@ namespace FSO.Vitaboy
             }
         }
 
+        private static int LoadReports;
+        /// <summary>A Sim texture that wouldn't load or was lost (reported a few times, so it can be tracked down).</summary>
+        public static void TextureProblem(string name, string why, int tries)
+        {
+            if (tries != 1 && tries != 4) return;
+            var line = "texture " + (name ?? "?") + " " + why + (tries > 1 ? " (still failing)" : "");
+            Console.WriteLine("[SimsRedux] Sim texture problem: " + line);
+            if (ReportProblem != null && LoadReports < 4)
+            {
+                LoadReports++;
+                try { ReportProblem("Sim texture didn't load", line); } catch { }
+            }
+        }
+
         private static List<string> AllTextures()
         {
             if (TexNames != null) return TexNames;

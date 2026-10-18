@@ -278,6 +278,7 @@ namespace FSO.SimAntics.Engine
             if (interaction.Mode != VMQueueMode.ParentIdle) Entity.SetFlag(VMEntityFlags.InteractionCanceled, false);
             if (interaction.Callback != null) interaction.Callback.Run(Entity);
             if (Queue.Count > 0) Queue.RemoveAt(ActiveQueueBlock);
+            if (Entity is VMAvatar && !IsCheck && ActiveQueueBlock == 0) ReduxStopLeftoverSounds();
             if (Entity is VMAvatar && !IsCheck && ActiveQueueBlock == 0)
             {
                 //some things are reset when an interaction ends
@@ -290,6 +291,29 @@ namespace FSO.SimAntics.Engine
             //update priority with the priority of the interaction we are going back to (or 0)
             ((VMAvatar)Entity).SetPersonData(VMPersonDataVariable.Priority, (ActiveQueueBlock > -1) ? Queue[ActiveQueueBlock].Priority : (short)0);
             EvaluateQueuePriorities();
+        }
+
+        /// <summary>
+        /// SimsRedux: when a Sim's interaction ends, the repeating sounds it started on that Sim stop
+        /// with it (snoring after a nap, a chopping or munching sound that kept looping) - some
+        /// interactions end in a way that skips their own "stop sounds" step. One-off sounds finish
+        /// by themselves and are left alone.
+        /// </summary>
+        public void ReduxStopLeftoverSounds()
+        {
+            var threads = Entity.SoundThreads;
+            if (threads == null || threads.Count == 0) return;
+            for (int i = 0; i < threads.Count; i++)
+            {
+                var entry = threads[i];
+                var hit = entry?.Sound as FSO.HIT.HITThread;
+                if (entry == null || entry.Sound == null) continue;
+                bool repeating = entry.Loop || (hit != null && (hit.Loop || !hit.SimpleMode));
+                if (!repeating) continue;
+                entry.Sound.RemoveOwner(Entity.ObjectID);
+                threads.RemoveAt(i--);
+            }
+            if (threads.Count == 0) Context.VM.SoundEntities.Remove(Entity);
         }
 
         public void AbortCurrentInteraction()
@@ -738,6 +762,7 @@ namespace FSO.SimAntics.Engine
                     Stack.Clear();
                     QueueDirty = true;
                     if (Queue.Count > 0) Queue.RemoveAt(0);
+                    if (Entity is VMAvatar && !IsCheck) ReduxStopLeftoverSounds();
                     LastStackExitCode = result;
                     break;
             }

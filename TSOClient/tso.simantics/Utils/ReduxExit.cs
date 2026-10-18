@@ -41,6 +41,8 @@ namespace FSO.SimAntics.Utils
                 if (sim == null || sim.IsPet) return false;
                 if (sim.GetPersonData((VMPersonDataVariable)32) != 0) return false; // (visitors: the game's own rules)
                 int h = level >= 2 ? -45 : -60, b = level >= 2 ? -50 : -65, e = level >= 2 ? -55 : -65;
+                var hour = vm.Context.Clock.Hours;
+                if (hour >= 22 || hour < 6) e = level >= 2 ? 10 : -15; // (bedtime: see VMMemory.GetTuningVariable)
                 return sim.GetMotiveData(VMMotive.Hunger) <= h || sim.GetMotiveData(VMMotive.Bladder) <= b || sim.GetMotiveData(VMMotive.Energy) <= e;
             }
             catch { return false; }

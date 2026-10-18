@@ -360,7 +360,14 @@ namespace FSO.SimAntics.Primitives
             // a Sim with every need fine is exactly the one who should be paying the bills or calling
             // the fire department.)
             bool chore = false;
-            if (brain != null && level >= 2 && !visitor)
+            // SimsRedux: bedtime - a tired family Sim at night (or anyone exhausted) goes to bed, instead of
+            // the bed losing out to one more round of fun
+            if (brain != null && level >= 1 && familySim)
+            {
+                var bed = brain.FindBed(context, ents);
+                if (bed != null) { selection = bed; chore = true; }
+            }
+            if (!chore && brain != null && level >= 2 && !visitor)
             {
                 var c = brain.FindChore(context, ents);
                 if (c != null) { selection = c; chore = true; }
@@ -646,7 +653,13 @@ namespace FSO.SimAntics.Primitives
         }
 
         /// <summary>The phone call is in this Sim's memory, so nobody in the family calls again while help is on the way.</summary>
-        public void MarkCall(int code) { var m = Sim.BrainMemory; if (m != null && m.Length >= 12) m[2] = code; }
+        public void MarkCall(int code)
+        {
+            var m = Sim.BrainMemory;
+            if (m != null && m.Length >= 12) m[2] = code;
+            // (also kept on its own, so four more things done since don't make them forget the call)
+            if (m != null && m.Length >= 20 && (code == 100 || code == 101)) m[code == 100 ? 18 : 19] = Math.Max(1, Now);
+        }
 
         /// <summary>Did anyone in the family make this call in the last few hours?</summary>
         private static bool CalledRecently(VM vm, int code, int now, int window)
@@ -655,6 +668,15 @@ namespace FSO.SimAntics.Primitives
             {
                 var a = e as VMAvatar; var m = a?.BrainMemory;
                 if (m == null || m.Length < 12) continue;
+                if (m.Length >= 20 && (code == 100 || code == 101))
+                {
+                    var stamp = m[code == 100 ? 18 : 19];
+                    if (stamp != 0)
+                    {
+                        var since = now - stamp; if (since < 0) since += 30 * 1440;
+                        if (since <= window) return true;
+                    }
+                }
                 for (int i = 0; i < 4; i++)
                 {
                     if (m[i * 3 + 2] != code) continue;
@@ -721,6 +743,55 @@ namespace FSO.SimAntics.Primitives
             m[2] = need;
         }
 
+        /// <summary>
+        /// Time for bed: the nearest bed's Sleep when it's night and the Sim is tired, or any time they're
+        /// exhausted (a sofa nap only if there's no bed). Null when it isn't bedtime, or a worse need
+        /// (bladder, hunger) should come first.
+        /// </summary>
+        public VMPieMenuInteraction FindBed(VMStackFrame context, List<VMEntity> ents)
+        {
+            if (Sim.IsPet || Sim.GetMotiveData(VMMotive.SleepState) != 0) return null;
+            var energy = Needs[(int)VMMotive.Energy];
+            bool tired = energy < -55 || (Night && energy < 15) || (LateNight && energy < 40);
+            if (!tired) return null;
+            if (BeforeWork && energy > -60) return null; // (the carpool is coming)
+            // the bathroom or a meal first if that's worse
+            if (Needs[(int)VMMotive.Bladder] < Math.Min(-40, energy) || Needs[(int)VMMotive.Hunger] < Math.Min(-50, energy)) return null;
+
+            VMPieMenuInteraction best = null, nap = null; float bestDist = float.MaxValue, napDist = float.MaxValue;
+            var done = new HashSet<short>();
+            foreach (var iobj in ents)
+            {
+                if (iobj.Position == LotTilePos.OUT_OF_WORLD || !(iobj is VMGameObject)) continue;
+                var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
+                if (!done.Add(obj.ObjectID) || obj.TreeTable == null || ((VMGameObject)obj).Disabled > 0) continue;
+                var ttas = obj.TreeTableStrings;
+                foreach (var ia in obj.TreeTable.Interactions)
+                {
+                    var name = (ttas?.GetString((int)ia.TTAIndex) ?? "").Trim();
+                    bool sleep = name.Equals("Sleep", StringComparison.OrdinalIgnoreCase);
+                    bool isNap = name.Equals("Nap", StringComparison.OrdinalIgnoreCase);
+                    if (!sleep && !isNap) continue;
+                    if (GivenUp(obj.ObjectID, ia.TTAIndex)) continue;
+                    var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
+                    if (action == null) continue;
+                    Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
+                    var avail = Sim.Thread.CheckAction(action, true);
+                    if (avail == null) continue; // (someone's in it, a child's bed for a grown-up...)
+                    var d = Tiles(Sim.Position, obj.Position);
+                    var choice = new VMPieMenuInteraction { Name = name, ID = (byte)ia.TTAIndex, Entry = ia, Global = false, Callee = obj, Score = 1,
+                        Param0 = avail.Count > 0 ? avail[0].Param0 : (short)0 };
+                    if (sleep && d < bestDist) { bestDist = d; best = choice; }
+                    else if (isNap && d < napDist) { napDist = d; nap = choice; }
+                }
+            }
+            best = best ?? nap;
+            if (best == null) return null;
+            // picked twice in the last hour and still not asleep (they can't get to it): leave it a while
+            if (TriesRecently(best.Callee.ObjectID, best.ID, 60) >= 2) { GiveUp(best.Callee.ObjectID, best.ID); return null; }
+            return best;
+        }
+
         /// <summary>A chore worth doing now (bills to pay, something broken it can fix), or null.</summary>
         public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents)
         {
@@ -775,7 +846,9 @@ namespace FSO.SimAntics.Primitives
             }
 
             // stage 3 - something is broken and nobody in the family here can fix it: call the repairman (once)
-            if (!Sim.IsChild && !CalledRecently(context.VM, 100, Now, 6 * 60) && !SomeoneHandy(context.VM, family.ChunkID) && SomethingBroken(context))
+            // (once a day at most - the repairman can take a while to come, and is already on the way -
+            //  and not while one is here)
+            if (!Sim.IsChild && !CalledRecently(context.VM, 100, Now, 24 * 60) && !RepairmanHere(context.VM) && !SomeoneHandy(context.VM, family.ChunkID) && SomethingBroken(context))
             {
                 var call = PhoneService(context, ents, n => n.IndexOf("Repairman", StringComparison.OrdinalIgnoreCase) >= 0
                     || n.IndexOf("Repair Man", StringComparison.OrdinalIgnoreCase) >= 0 || n.EndsWith("/Repair", StringComparison.OrdinalIgnoreCase));
@@ -818,6 +891,18 @@ namespace FSO.SimAntics.Primitives
             if (m == null || m.Length < 16) return;
             m[14] = ChoreKey(objectID, tta);
             m[15] = Now;
+        }
+
+        /// <summary>A repairman is already on the lot.</summary>
+        private static bool RepairmanHere(VM vm)
+        {
+            foreach (var e in vm.Context.ObjectQueries.Avatars)
+            {
+                if (e.Position == LotTilePos.OUT_OF_WORLD) continue;
+                var n = (e.Name ?? "") + " " + (e.Object?.OBJ?.ChunkLabel ?? "");
+                if (n.IndexOf("repair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
         }
 
         private static bool SomeoneHandy(VM vm, int family)
