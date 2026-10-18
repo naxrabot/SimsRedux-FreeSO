@@ -100,6 +100,9 @@ namespace FSO.SimAntics.Engine.Primitives
                 animation = VMMemory.GetAnimation(context, source, id);
             }
 
+            // SimsRedux: typing on the computer (writing, chatting...) uses the keyboard animations
+            if (animation != null && context.VM.TS1) animation = FSO.SimAntics.Utils.ReduxComputer.TypingAnimation(avatar, animation);
+
             if (animation == null)
             {
                 return VMPrimitiveExitCode.GOTO_TRUE_NEXT_TICK;

@@ -88,6 +88,14 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             // a visitor (made the way the game makes any neighbour, with their neighbour data)
             ava.SetPersonData(VMPersonDataVariable.PersonType, 1);
             if (Greet >= 0) ava.SetPersonData(VMPersonDataVariable.GreetStatus, Greet);
+            // arriving in good shape, the way Sims 1's own "init visitor" sets them up: a visitor checks
+            // their needs all the time and goes home as soon as one is low - with the needs they had saved
+            // in the neighbourhood (often near empty) they left the moment they were greeted
+            // (the lot's own random numbers: every game on an online lot sets the same)
+            foreach (var m in new[] { VMMotive.Energy, VMMotive.Comfort, VMMotive.Hunger, VMMotive.Hygiene, VMMotive.Bladder })
+                ava.SetMotiveData(m, (short)(45 + (int)vm.Context.NextRandom(40)));
+            ava.SetMotiveData(VMMotive.Social, (short)(10 + (int)vm.Context.NextRandom(40)));
+            ava.SetMotiveData(VMMotive.Fun, (short)(20 + (int)vm.Context.NextRandom(40)));
             // passing through: never saved into the lot (Sims 1 sends visitors home when you leave)
             ava.SetValue(VMStackObjectVariable.MovementFlags,
                 (short)(ava.GetValue(VMStackObjectVariable.MovementFlags) | (short)VMMovementFlags.FSOExcludeUserSave));

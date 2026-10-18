@@ -100,6 +100,8 @@ namespace FSO.LotView.Utils
 
         /// <summary>SimsRedux: packed colour tint (see ReduxTint). 0 = original colours.</summary>
         public uint Tint;
+        /// <summary>SimsRedux: which screenshot the object's screen shows (-1: its own screen).</summary>
+        public int ReduxScreen = -1;
         /// <summary>SimsRedux: the whole object's colour profile (null = each picture decides alone).</summary>
         public ReduxTint.Profile TintProfile;
         /// <summary>SimsRedux: the tinted picture couldn't be made yet (still loading).</summary>
@@ -207,6 +209,12 @@ namespace FSO.LotView.Utils
                                 bool pending;
                                 sprite.Pixel = ReduxTint.GetTinted(world.Device, dgrpSprite, texture.Pixel, Tint, TintProfile, out pending);
                                 if (pending) TintPending = true;
+                            }
+                            // SimsRedux: a picture on the computer's screen (see ReduxScreens)
+                            if (ReduxScreen >= 0)
+                            {
+                                var screen = ReduxScreens.Get(world.Device, dgrpSprite, sprite.Pixel, ReduxScreen);
+                                if (screen != null) sprite.Pixel = screen;
                             }
                             sprite.Depth = texture.ZBuffer;
                             if (texture.ZBuffer != null)

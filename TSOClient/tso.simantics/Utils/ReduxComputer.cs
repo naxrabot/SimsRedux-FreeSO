@@ -387,6 +387,33 @@ namespace FSO.SimAntics.Utils
             }
         }
 
+        /// <summary>
+        /// Writing, a novel, chatting and hacking are typed: these start from the computer's own Play,
+        /// whose animations reach for the joystick and play a game - swapped here for the keyboard ones the
+        /// computer uses for Study ("...-computer-getkeyboard", "...-computer-type").
+        /// </summary>
+        public static FSO.Vitaboy.Animation TypingAnimation(VMAvatar ava, FSO.Vitaboy.Animation anim)
+        {
+            try
+            {
+                if (anim?.Name == null || ava == null) return anim;
+                var name = anim.Name.ToLowerInvariant();
+                string swap = null;
+                if (name.Contains("computer-playgame")) swap = "computer-playgame";
+                else if (name.Contains("computer-getjoystick")) swap = "computer-getjoystick";
+                if (swap == null) return anim;
+                int genre; VMQueuedAction action;
+                var kind = Current(ava, out genre, out action);
+                if (kind != Kind.PracticeWriting && kind != Kind.WriteNovel && kind != Kind.ChatOnline && kind != Kind.Hack) return anim;
+                var to = swap == "computer-playgame" ? "computer-type" : "computer-getkeyboard";
+                var start = name.IndexOf(swap);
+                var newName = anim.Name.Substring(0, start) + to + anim.Name.Substring(start + swap.Length);
+                var typed = FSO.Content.Content.Get().AvatarAnimations.Get(newName + ".anim");
+                return typed ?? anim;
+            }
+            catch { return anim; }
+        }
+
         /// <summary>Is the Sim sitting at the computer for this action (not still walking over)?</summary>
         public static bool AtKeyboard(VMAvatar ava, VMQueuedAction action)
         {

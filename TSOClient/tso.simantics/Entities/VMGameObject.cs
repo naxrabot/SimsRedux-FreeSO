@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using FSO.Content;
 using FSO.LotView.Components;
@@ -132,6 +132,12 @@ namespace FSO.SimAntics
 
             base.Init(context);
             DisableIfTSOCategoryWrong(context);
+            // SimsRedux: the Skylight - a light with nothing to walk around (see ReduxSkylight)
+            if (FSO.SimAntics.Utils.ReduxSkylight.Is(this))
+            {
+                SetFlag(VMEntityFlags.HasZeroExtent, true);
+                SetValue(VMStackObjectVariable.LightingContribution, FSO.SimAntics.Utils.ReduxSkylight.Contribution);
+            }
         }
 
         public override void Tick()

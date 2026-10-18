@@ -217,10 +217,29 @@ namespace FSO.SimAntics.Engine
                 }
                 else
                 {
+                    ReduxQueueNote(this, item, (item.Mode == VMQueueMode.ParentIdle && Entity.GetFlag(VMEntityFlags.InteractionCanceled))
+                        ? "it was waiting on an action that was cancelled" : "its check said no when it came to run (it was fine when picked)");
                     Queue.RemoveAt(ActiveQueueBlock + 1); //keep going.
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// SimsRedux: a player's order that was dropped before it ran (it shows in the queue for a moment,
+        /// then goes) - noted in the console and queue_debug.log, so we can see why.
+        /// </summary>
+        public static void ReduxQueueNote(VMThread t, VMQueuedAction a, string why)
+        {
+            try
+            {
+                if (t == null || a == null || t.IsCheck || !(t.Entity is VMAvatar) || a.Priority < (short)VMQueuePriority.UserDriven) return;
+                var line = DateTime.Now.ToString("HH:mm:ss") + " " + t.Entity.ToString() + ": '" + (a.Name ?? "?") + "' on " + (a.Callee?.ToString() ?? "?")
+                    + " was dropped - " + why;
+                Console.WriteLine("[SimsRedux] " + line);
+                FSO.Common.IO.FSOFile.AppendAllText(System.IO.Path.Combine(FSO.Common.FSOEnvironment.UserDir, "queue_debug.log"), line + "\r\n");
+            }
+            catch { }
         }
 
         public void TryRunImmediately()
@@ -942,6 +961,7 @@ namespace FSO.SimAntics.Engine
 
                 if (canQueueSkip && (index > ActiveQueueBlock || Stack.LastOrDefault()?.ActionTree == false) && (interaction.Mode == Engine.VMQueueMode.Normal || interaction.Flags.HasFlag(TTABFlags.FSODirectControl)))
                 {
+                    ReduxQueueNote(this, interaction, "it was cancelled before it started");
                     Queue.Remove(interaction);
                     if (Context.VM.TS1) interaction.Callee.ExecuteEntryPoint(4, Context, true, Entity); //queue skipped
                 }

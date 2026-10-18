@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using FSO.Files.Utils;
 using Microsoft.Xna.Framework;
@@ -266,6 +266,9 @@ namespace FSO.Files.Formats.IFF.Chunks
         }
 
         #endregion
+
+        /// <summary>SimsRedux: the file this sprite's pictures are in.</summary>
+        public IffFile ReduxIff { get { return Parent?.ChunkParent; } }
 
         /// <summary>SimsRedux: the SPR2 frame this sprite draws (null for old-style SPR sprites). Used for colour tinting.</summary>
         public SPR2Frame GetSPR2Frame()

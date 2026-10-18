@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.Xna.Framework;
 using FSO.Common.Utils;
 
@@ -269,9 +269,17 @@ namespace FSO.Vitaboy
             {
                 var AppearanceID = m_Head.GetAppearance(m_Appearance);
                 var Appearance = FSO.Content.Content.Get().AvatarAppearances.Get(AppearanceID);
+                var tex = m_Head.TS1TextureID;
+                // SimsRedux: clothes the game can't find (a removed download, a missing uniform) -
+                // something of the same kind instead of an invisible Sim
+                if (Appearance == null && m_Head.TS1AppearanceID != null)
+                {
+                    var fb = ReduxAvatarFallback.Outfit(m_Head.TS1AppearanceID, tex);
+                    if (fb != null) { Appearance = FSO.Content.Content.Get().AvatarAppearances.Get(new FSO.Common.Content.ContentID(fb.Item1)); tex = fb.Item2; }
+                }
                 if (Appearance != null)
                 {
-                    m_HeadInstance = base.AddAppearance(Appearance, m_Head.TS1TextureID);
+                    m_HeadInstance = base.AddAppearance(Appearance, tex);
                 }
             }
         }
@@ -392,9 +400,17 @@ namespace FSO.Vitaboy
             {
                 var AppearanceID = m_Body.GetAppearance(m_Appearance);
                 var Appearance = FSO.Content.Content.Get().AvatarAppearances.Get(AppearanceID);
+                var tex = m_Body.TS1TextureID;
+                // SimsRedux: clothes the game can't find (a removed download, a missing uniform) -
+                // something of the same kind instead of an invisible Sim
+                if (Appearance == null && m_Body.TS1AppearanceID != null)
+                {
+                    var fb = ReduxAvatarFallback.Outfit(m_Body.TS1AppearanceID, tex);
+                    if (fb != null) { Appearance = FSO.Content.Content.Get().AvatarAppearances.Get(new FSO.Common.Content.ContentID(fb.Item1)); tex = fb.Item2; }
+                }
                 if (Appearance != null)
                 {
-                    m_BodyInstance = base.AddAppearance(Appearance, m_Body.TS1TextureID);
+                    m_BodyInstance = base.AddAppearance(Appearance, tex);
                 }
             }
         }

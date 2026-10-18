@@ -330,6 +330,24 @@ namespace FSO.LotView.Components
             }
         }
 
+        // SimsRedux: a screenshot on the object's screen (a computer playing Twisted Metal 2, see ReduxScreens).
+        private int _ReduxScreen = -1;
+        public int ReduxScreen
+        {
+            get { return _ReduxScreen; }
+            set
+            {
+                if (_ReduxScreen == value) return;
+                _ReduxScreen = value;
+                if (dgrp != null)
+                {
+                    dgrp.ReduxScreen = value;
+                    dgrp.InvalidateRotation();
+                }
+                if (blueprint != null) blueprint.Changes.RegisterObjectChange(this);
+            }
+        }
+
         // SimsRedux: colour tint (see ReduxTint). Setting it redraws the object in its new colours.
         private uint _Tint;
         public uint Tint

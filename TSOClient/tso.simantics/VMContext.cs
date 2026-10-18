@@ -728,7 +728,18 @@ namespace FSO.SimAntics
                         if (((ent as VMGameObject)?.Disabled ?? 0) > 0) continue;
                         
                         var flags2 = (VMEntityFlags2)ent.GetValue(VMStackObjectVariable.FlagField2);
-                        
+
+                        // SimsRedux: the Skylight - a soft light around it, always on
+                        if (FSO.SimAntics.Utils.ReduxSkylight.Is(ent))
+                        {
+                            var sky = new LotView.LMap.LightData(new Vector2(ent.Position.x, ent.Position.y), false, FSO.SimAntics.Utils.ReduxSkylight.Size,
+                                room, info2.Room.Floor, ent.LightColor);
+                            sky.LightIntensity = FSO.SimAntics.Utils.ReduxSkylight.Intensity;
+                            light.Lights.Add(sky);
+                            inside += FSO.SimAntics.Utils.ReduxSkylight.Contribution;
+                            continue;
+                        }
+
                         var mainSource = true;
                         var lighted = objs.Count(x => x.GetValue(VMStackObjectVariable.LightingContribution) > 0);
                         if (lighted > 0)

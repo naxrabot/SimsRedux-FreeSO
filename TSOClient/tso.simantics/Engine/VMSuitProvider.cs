@@ -1,4 +1,4 @@
-﻿using FSO.Files.Formats.IFF.Chunks;
+using FSO.Files.Formats.IFF.Chunks;
 using FSO.SimAntics.Engine.Scopes;
 using FSO.SimAntics.Model;
 using System;
@@ -114,12 +114,45 @@ namespace FSO.SimAntics.Engine
                     var job = Content.Content.Get().Jobs.GetJobLevel(jtype, level);
 
                     var bskn = job.MaleUniformMesh;
-                    if (bskn == "") return new VMOutfitReference(bodyStrings, false);
+                    if (string.IsNullOrWhiteSpace(bskn)) return new VMOutfitReference(bodyStrings, false);
 
-                    if (!male && job.FemaleUniformMesh != null) bskn = job.FemaleUniformMesh;
-                    bskn = bskn.ToLowerInvariant().Replace("$g", code[0].ToString()).Replace("$b", code.Substring(1)).Replace("$c", skn);
+                    // (SimsRedux: some jobs - the military, for one - leave the women's uniform blank and
+                    // use the men's for both, with the gender filled in: a blank one made the Sim invisible)
+                    if (!male && !string.IsNullOrWhiteSpace(job.FemaleUniformMesh)) bskn = job.FemaleUniformMesh;
+                    var bsknPattern = bskn.ToLowerInvariant();
+                    bskn = bsknPattern.Replace("$g", code[0].ToString()).Replace("$b", code.Substring(1)).Replace("$c", skn);
                     var btex = job.UniformSkin;
-                    btex = btex.ToLowerInvariant().Replace("$g", code[0].ToString()).Replace("$b", code.Substring(1)).Replace("$c", skn);
+                    var btexPattern = (btex ?? "").ToLowerInvariant();
+                    btex = btexPattern.Replace("$g", code[0].ToString()).Replace("$b", code.Substring(1)).Replace("$c", skn);
+                    // SimsRedux: some uniforms were only made for some builds (fit, fat, skinny) - if this
+                    // Sim's build doesn't have one, try the others; if none exists, they keep their own clothes
+                    // (instead of the uniform being invisible)
+                    if (VM.UseWorld)
+                    {
+                        var apr = Content.Content.Get().AvatarAppearances;
+                        if (apr.Get(new FSO.Common.Content.ContentID(bskn + ".apr")) == null)
+                        {
+                            string found = null;
+                            foreach (var b in new[] { "fit", "fat", "skn" })
+                            {
+                                var alt = code.Length > 1 ? code[0] + b : code;
+                                if (child) alt = code;
+                                var tryMesh = bsknPattern.Replace("$g", alt[0].ToString()).Replace("$b", alt.Substring(1)).Replace("$c", skn);
+                                if (apr.Get(new FSO.Common.Content.ContentID(tryMesh + ".apr")) != null)
+                                {
+                                    found = tryMesh;
+                                    btex = btexPattern.Replace("$g", alt[0].ToString()).Replace("$b", alt.Substring(1)).Replace("$c", skn);
+                                    break;
+                                }
+                            }
+                            if (found == null)
+                            {
+                                Console.WriteLine("[SimsRedux] No uniform '" + bskn + "' for this Sim - they keep their own clothes.");
+                                return new VMOutfitReference(bodyStrings, false);
+                            }
+                            bskn = found;
+                        }
+                    }
 
                     toHandCopy = new VMOutfitReference(bskn+",BODY=" + btex, false);
                     break;

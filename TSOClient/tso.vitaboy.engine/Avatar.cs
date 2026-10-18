@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using FSO.Common.Rendering.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -187,6 +187,13 @@ namespace FSO.Vitaboy
             {
                 instance.Mesh = content.AvatarMeshes.Get(binding.MeshName);
                 instance.Texture = content.AvatarTextures.Get(binding.TextureName ?? instance.Mesh.TextureName);
+                // SimsRedux: a texture that's gone (a removed download) - another for the same outfit,
+                // not a pitch-black Sim
+                if (instance.Texture == null && content.TS1 && instance.Mesh != null)
+                {
+                    var alt = ReduxAvatarFallback.Texture(binding.TextureName ?? instance.Mesh.TextureName, binding.MeshName, instance.Mesh.TextureName);
+                    if (alt != null) instance.Texture = content.AvatarTextures.Get(alt);
+                }
             }
             else
             {
