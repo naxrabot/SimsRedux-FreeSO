@@ -139,6 +139,8 @@ namespace FSO.SimAntics
                 SetValue(VMStackObjectVariable.LightingContribution, FSO.SimAntics.Utils.ReduxSkylight.Contribution);
                 // anywhere: indoors, outdoors, upstairs, over other things (it hangs from the ceiling)
                 SetValue(VMStackObjectVariable.PlacementFlags, (short)(VMPlacementFlags.OnFloor | VMPlacementFlags.OnTerrain | VMPlacementFlags.OnSlope));
+                // (its template was a table lamp: allow the floor height too, or it asks for a table or surface)
+                SetValue(VMStackObjectVariable.AllowedHeightFlags, (short)(GetValue(VMStackObjectVariable.AllowedHeightFlags) | 1));
             }
         }
 

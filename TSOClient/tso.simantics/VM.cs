@@ -327,8 +327,12 @@ namespace FSO.SimAntics
             }
         }
 
+        /// <summary>SimsRedux: told about every command this game sends (the Build / Buy undo watches for changes).</summary>
+        public static Action<VM, VMNetCommandBodyAbstract> ReduxCommandSent;
+
         public void SendCommand(VMNetCommandBodyAbstract cmd)
         {
+            try { ReduxCommandSent?.Invoke(this, cmd); } catch { }
             cmd.ActorUID = MyUID;
             Driver.SendCommand(cmd);
         }

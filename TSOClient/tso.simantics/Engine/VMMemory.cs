@@ -361,6 +361,10 @@ namespace FSO.SimAntics.Engine.Utils
             256
         };
 
+        // SimsRedux: get up from fun for hunger, bladder, energy, comfort at these (see GetTuningVariable)
+        private static readonly short[] SmartExit = { -45, -50, -55, -60 };
+        private static readonly short[] SmarterExit = { -60, -65, -65, -75 };
+
         public static short GetTuningVariable(VMEntity entity, ushort data, VMStackFrame context) {
             var tableID = (ushort)(data >> 7);
             var keyID = (ushort)(data & 0x7F);
@@ -378,6 +382,15 @@ namespace FSO.SimAntics.Engine.Utils
 
             var replacement = entity.TuningReplacement?.TryGetEntry(tableID, keyID);
             if (replacement.HasValue) return replacement.Value;
+            // SimsRedux: Sims 1's "Global Tuning" (BCON 258) entries 7-10 are when a family Sim gets up from a
+            // fun object for a need: hunger -80, bladder -85, energy -80, comfort -90 - almost empty. Smarter and
+            // Smartest Sims get up sooner (visitors already use -40 to -80). Online lots are always Smartest.
+            if (mode == 2 && tableID == 258 && keyID >= 7 && keyID <= 10 && context?.VM != null && context.VM.TS1)
+            {
+                int level = context.VM.ReduxNoPause ? 2 : FSO.SimAntics.Primitives.VMFindBestAction.ReduxLevel;
+                if (level >= 2) return SmartExit[keyID - 7];
+                if (level == 1) return SmarterExit[keyID - 7];
+            }
             /*
             var dyn = context.VM.Tuning;
             if (dyn != null) {

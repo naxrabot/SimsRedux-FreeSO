@@ -48,6 +48,7 @@ namespace FSO.Client.UI.Panels.LotControls
 
         public override void MouseUp(UpdateState state)
         {
+            if (!Drawing) { Commands.Clear(); return; } // REDUX: a release without a press (the tool was picked mid-click)
             HITVM.Get().PlaySoundEvent(UISounds.BuildDragToolUp);
 
             vm.SendCommand(new VMNetArchitectureCmd

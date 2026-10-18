@@ -88,7 +88,7 @@ namespace FSO.Content
         public static string ReduxModsDir { get { return Path.Combine(FSOEnvironment.ContentDir, "redux/mods/"); } }
 
         /// <summary>
-        /// SimsRedux: content made with the Sims Redux Creator (Content/redux/creator/, listed in its
+        /// SimsRedux: content made with the Sims Refresh Creator (Content/redux/creator/, listed in its
         /// manifest.txt). It's only loaded while it's being tried out on the Test server: the game sets
         /// this before the content loads (Test server, a Test lot worker, or the "creatorcontent" setting).
         /// </summary>
