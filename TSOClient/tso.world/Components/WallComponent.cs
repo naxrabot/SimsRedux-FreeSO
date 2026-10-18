@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using FSO.LotView.Model;
 using Microsoft.Xna.Framework;
@@ -796,6 +796,20 @@ namespace FSO.LotView.Components
                 }
                 Cuts[off] = result;
             }
+        }
+
+        /// <summary>
+        /// SimsRedux: is the wall on this tile's top-left (or top-right) edge drawn cut down, fully or
+        /// partly, right now? (so things hanging on it can be hidden with it)
+        /// </summary>
+        public bool ReduxWallCutAt(int x, int y, bool topLeft)
+        {
+            var cuts = Cuts;
+            if (cuts == null || blueprint == null || x < 0 || y < 0 || x >= blueprint.Width || y >= blueprint.Height) return false;
+            var i = y * blueprint.Width + x;
+            if (i >= cuts.Length) return false;
+            var c = topLeft ? cuts[i].TLCut : cuts[i].TRCut;
+            return c != WallCut.Up;
         }
 
         /// <summary>

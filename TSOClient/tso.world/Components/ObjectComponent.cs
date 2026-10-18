@@ -547,6 +547,17 @@ namespace FSO.LotView.Components
                                 && blueprint.Cutaway[pos.Y * blueprint.Width + pos.X]);
                             if (!canContinue) break;
                         }
+                        // SimsRedux: also hidden when the wall it hangs on is drawn cut down (fully or partly),
+                        // so a painting doesn't float in the air (its back showing) over a cut wall
+                        if (!canContinue && blueprint.WallComp != null && world.CameraMode == CameraRenderMode._2D)
+                        {
+                            var seg = (AdjacentWall & wall.Segments);
+                            if (seg == 0) seg = wall.OccupiedWalls & wall.Segments;
+                            if ((seg & WallSegments.TopLeft) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X, tilePos.Y, true);
+                            else if ((seg & WallSegments.TopRight) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X, tilePos.Y, false);
+                            else if ((seg & WallSegments.BottomRight) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X + 1, tilePos.Y, true);
+                            else if ((seg & WallSegments.BottomLeft) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X, tilePos.Y + 1, false);
+                        }
                         CutawayHidden = canContinue;
                     }
                 }
