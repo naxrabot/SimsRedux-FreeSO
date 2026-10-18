@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -254,6 +254,7 @@ namespace FSO.SimAntics
             }
             // SimsRedux: computers get more to do (Write a Novel, Practice Writing, ...)
             FSO.SimAntics.Utils.ReduxComputer.Patch(this);
+            FSO.SimAntics.Utils.ReduxLeftovers.Patch(this); // SimsRedux: leftovers in the fridge
 
             this.Attributes = new List<short>(numAttributes);
             SetFlag(VMEntityFlags.ChairFacing, true);
@@ -974,6 +975,7 @@ namespace FSO.SimAntics
                         actionS.Global = global;
                     }
                     FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, actionStrings); // SimsRedux
+                    FSO.SimAntics.Utils.ReduxLeftovers.AdjustPie(this, actionStrings);
                 }
                 else
                 {
@@ -1055,6 +1057,7 @@ namespace FSO.SimAntics
             }
 
             FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, pie); // SimsRedux: the computer's Play goes under Play Games
+            FSO.SimAntics.Utils.ReduxLeftovers.AdjustPie(this, pie); // SimsRedux: leftovers
             return pie;
         }
         
@@ -1103,6 +1106,7 @@ namespace FSO.SimAntics
             };
             // SimsRedux: the new computer activities run as the computer's own Play (Utils/ReduxComputer.cs)
             if (!global) FSO.SimAntics.Utils.ReduxComputer.Adjust(this, interaction, result);
+            if (!global) FSO.SimAntics.Utils.ReduxLeftovers.Adjust(this, interaction, result);
             return result;
         }
 
@@ -1425,6 +1429,7 @@ namespace FSO.SimAntics
             else
             {
                 if (Dead) return;
+                FSO.SimAntics.Utils.ReduxLeftovers.OnDelete(this, context); // SimsRedux: servings put away go in the fridge
                 
                 //DEBUG
                 if (Object.OBJ.GUID == 0x5157DDF2 || Object.OBJ.GUID == 0x3278BD34)

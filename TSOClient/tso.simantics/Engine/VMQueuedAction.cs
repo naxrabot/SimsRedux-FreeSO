@@ -1,4 +1,4 @@
-﻿using FSO.Content;
+using FSO.Content;
 using FSO.SimAntics.Marshals.Threads;
 using FSO.Files.Formats.IFF.Chunks;
 
@@ -37,6 +37,8 @@ namespace FSO.SimAntics.Engine
         public TTABFlags Flags;
         public TSOFlags Flags2 = (TSOFlags)0x1f;
 
+        /// <summary>SimsRedux: "Have Leftovers" has taken its serving out of the fridge.</summary>
+        public bool ReduxCounted;
         public ushort UID; //a wraparound ID that is just here so that a specific interaction can be reliably "cancelled" by a client.
 
         public VMActionCallback Callback;

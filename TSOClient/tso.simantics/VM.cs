@@ -442,6 +442,7 @@ namespace FSO.SimAntics
             {
                 Scheduler.RunTick();
             }
+            if (TS1 && SpeedMultiplier > 0) Utils.ReduxTraffic.Tick(this); // SimsRedux: cars driving past
 
             if (tickID % Math.Max(1, SpeedMultiplier) == 0) Context.ProcessLightingChanges();
             //Context.SetToNextCache.VerifyPositions(); use only for debug!
