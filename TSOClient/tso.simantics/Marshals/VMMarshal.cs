@@ -24,7 +24,7 @@ namespace FSO.SimAntics.Marshals
         // 36 - FSO Inventory Token (inventory ops async state has temp list)
         // 37 - Inventory Token Total
         // 38 - Direct Control Frame
-        public static readonly int LATEST_VERSION = 40; // SimsRedux: 39 adds object colour tints, 40 the Sims' brain memory
+        public static readonly int LATEST_VERSION = 41; // SimsRedux: 39 adds object colour tints, 40 the Sims' brain memory, 41 wall items' height
 
         public int Version = LATEST_VERSION;
         public bool Compressed = true;

@@ -1,4 +1,4 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -401,7 +401,7 @@ namespace FSO.SimAntics
                     WorldUI.Altitude = Terrain.Heights;
 
                     WorldUI.AltitudeCenters = Terrain.Centers;
-                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState);
+                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.Heights, Terrain.GrassState, Terrain.Ground);
 
                 }
                 TerrainDirty = false;
@@ -415,7 +415,7 @@ namespace FSO.SimAntics
                 WorldUI.SignalFloorChange();
                 if (TerrainDirty)
                 {
-                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.VisHeights, Terrain.VisGrass);
+                    WorldUI.Terrain.UpdateTerrain(Terrain.LightType, Terrain.DarkType, Terrain.VisHeights, Terrain.VisGrass, Terrain.VisGround ?? Terrain.Ground);
                     TerrainDirty = false;
                 }
             }
@@ -633,6 +633,9 @@ namespace FSO.SimAntics
                         var dotCount = VMArchitectureTools.DotTerrain(this, new Point(com.x, com.y), (short)com.pattern);
                         cost += dotCount;
                         break;
+                    case VMArchitectureCommandType.GROUND_DOT:
+                        cost += VMArchitectureTools.DotGround(this, new Point(com.x, com.y), (byte)com.pattern);
+                        break;
                 }
             }
             if (lastAvatar != null && pdCount > 0)
@@ -827,6 +830,28 @@ namespace FSO.SimAntics
 
             TerrainDirty = true;
             Redraw = true;
+        }
+
+        /// <summary>SimsRedux: paints the ground at a corner (0 = the lot's own grass).</summary>
+        public void SetTerrainGround(short tileX, short tileY, byte kind)
+        {
+            var off = GetOffset(tileX, tileY);
+            if (Terrain.Ground == null)
+            {
+                if (kind == 0) return;
+                Terrain.Ground = new byte[Terrain.GrassState.Length];
+            }
+            if (off < 0 || off >= Terrain.Ground.Length) return;
+            Terrain.Ground[off] = kind;
+            TerrainDirty = true;
+            Redraw = true;
+        }
+
+        public byte GetTerrainGround(short tileX, short tileY)
+        {
+            var off = GetOffset(tileX, tileY);
+            var g = Terrain.Ground;
+            return (g == null || off < 0 || off >= g.Length) ? (byte)0 : g[off];
         }
 
         public byte GetTerrainGrass(short tileX, short tileY)

@@ -1,4 +1,4 @@
-﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using FSO.LotView.Model;
@@ -650,6 +650,17 @@ namespace FSO.SimAntics.Utils
             var n = (byte)Math.Max(0, Math.Min(255, current + mod));
             target.SetTerrainGrass((short)pos.X, (short)pos.Y, n);
             return (Math.Abs(current - n) + 63) / 64;
+        }
+
+        /// <summary>SimsRedux: paints the ground at one corner. Returns the cost (§1 a corner painted).</summary>
+        public static int DotGround(VMArchitecture target, Point pos, byte kind)
+        {
+            var bounds = target.DisableClip ? new Rectangle(0, 0, target.Width, target.Height) : target.BuildableArea;
+            bounds.X--; bounds.Y--; bounds.Width++; bounds.Height++;
+            if (!bounds.Contains(pos)) return 0;
+            if (target.GetTerrainGround((short)pos.X, (short)pos.Y) == kind) return 0;
+            target.SetTerrainGround((short)pos.X, (short)pos.Y, kind);
+            return 1;
         }
 
         public static int RaiseTerrain(VMArchitecture target, Rectangle pos, short height, bool smoothMode)

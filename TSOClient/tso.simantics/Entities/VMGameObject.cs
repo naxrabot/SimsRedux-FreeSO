@@ -232,8 +232,23 @@ namespace FSO.SimAntics
 
         public override Vector3 VisualPosition
         {
-            get { return (UseWorld)?(WorldUI.Position + new Vector3(0.5f, 0.5f, 0f)):new Vector3(); }
-            set { if (UseWorld) WorldUI.Position = value-new Vector3(0.5f, 0.5f, 0f); }
+            get { return (UseWorld)?(WorldUI.Position + new Vector3(0.5f, 0.5f, -LiftZ)):new Vector3(); }
+            set { if (UseWorld) WorldUI.Position = value-new Vector3(0.5f, 0.5f, -LiftZ); }
+        }
+
+        /// <summary>SimsRedux: how far a wall item (a painting, a shelf...) is moved up or down the wall, in hundredths.</summary>
+        public short ReduxLift { get; private set; }
+        private float LiftZ { get { return (ReduxLift != 0 && Container == null) ? ReduxLift / 100f : 0f; } }
+
+        public const short MaxLift = 120;
+
+        public void SetReduxLift(short lift)
+        {
+            lift = (short)Math.Max(-MaxLift, Math.Min(MaxLift, (int)lift));
+            if (lift == ReduxLift) return;
+            var vis = VisualPosition;   // (where it is without the lift)
+            ReduxLift = lift;
+            if (UseWorld) VisualPosition = vis;
         }
 
         // Begin Container SLOTs interface
@@ -526,7 +541,7 @@ namespace FSO.SimAntics
         #region VM Marshalling Functions
         public VMGameObjectMarshal Save()
         {
-            var gameObj = new VMGameObjectMarshal { Direction = Direction, Disabled = Disabled, Tint = ReduxTint };
+            var gameObj = new VMGameObjectMarshal { Direction = Direction, Disabled = Disabled, Tint = ReduxTint, Lift = ReduxLift };
             SaveEnt(gameObj);
             return gameObj;
         }
@@ -539,6 +554,7 @@ namespace FSO.SimAntics
             Direction = input.Direction;
             Disabled = input.Disabled;
             SetReduxTint(input.Tint);
+            SetReduxLift(input.Lift);
             if (UseWorld)
             {
                 ((ObjectComponent)this.WorldUI).DynamicSpriteFlags = this.DynamicSpriteFlags;

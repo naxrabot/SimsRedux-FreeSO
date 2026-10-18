@@ -1,4 +1,4 @@
-﻿using FSO.Content.Model;
+using FSO.Content.Model;
 using FSO.SimAntics.NetPlay.Model;
 using FSO.SimAntics.Utils;
 using System;
@@ -20,6 +20,11 @@ namespace FSO.SimAntics.Model
         public byte[] VisGrass;
         private short[] OldHeights;
         private byte[] OldGrass;
+
+        /// <summary>SimsRedux: painted ground at each corner (0 = the lot's own grass; see TerrainComponent.GroundColours). Null until something is painted.</summary>
+        public byte[] Ground;
+        public byte[] VisGround;
+        private byte[] OldGround;
 
         public TerrainType LightType = TerrainType.GRASS;
         public TerrainType DarkType = TerrainType.GRASS;
@@ -52,12 +57,20 @@ namespace FSO.SimAntics.Model
 
             Heights = VisHeights;
             GrassState = VisGrass;
+
+            OldGround = Ground;
+            if (VisGround == null || VisGround.Length != GrassState.Length) VisGround = new byte[GrassState.Length];
+            if (Ground != null) Array.Copy(Ground, VisGround, Math.Min(Ground.Length, VisGround.Length));
+            else Array.Clear(VisGround, 0, VisGround.Length);
+            Ground = VisGround;
         }
 
         public void ExitVis()
         {
             Heights = OldHeights;
             GrassState = OldGrass;
+            // (painting started during the preview: the preview's copy isn't kept)
+            Ground = OldGround;
         }
 
         public void RegenerateCenters() //TODO: partial update
@@ -244,6 +257,9 @@ namespace FSO.SimAntics.Model
             VMSerializableUtils.WriteArray(writer, Heights);
             writer.Write(GrassState.Length);
             writer.Write(GrassState);
+            // SimsRedux (version 41+): painted ground
+            writer.Write(Ground == null ? 0 : Ground.Length);
+            if (Ground != null) writer.Write(Ground);
         }
 
         public void Deserialize(BinaryReader reader)
@@ -262,6 +278,11 @@ namespace FSO.SimAntics.Model
             }
             
             GrassState = reader.ReadBytes(reader.ReadInt32());
+            if (Version > 40)
+            {
+                var n = reader.ReadInt32();
+                Ground = n > 0 ? reader.ReadBytes(n) : null;
+            }
         }
     }
 }

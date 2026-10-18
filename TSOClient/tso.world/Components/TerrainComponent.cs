@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework;
@@ -72,6 +72,55 @@ namespace FSO.LotView.Components
 
         public void UpdateTerrain(TerrainType light, TerrainType dark, short[] heights, byte[] grass)
         {
+            UpdateTerrain(light, dark, heights, grass, null);
+        }
+
+        // ---- SimsRedux: painted ground ----
+        private byte[] Ground;
+        /// <summary>The kinds of ground that can be painted (index = the value stored; 0 = the lot's own grass).</summary>
+        public static readonly string[] GroundNames = { "Grass", "Dirt", "Sand", "Gravel", "Snow", "Dark Grass", "Autumn", "Mud", "Stone" };
+        public static readonly Color[] GroundColours =
+        {
+            Color.Transparent,
+            new Color(122, 92, 58),   // dirt
+            new Color(222, 200, 150), // sand
+            new Color(150, 146, 138), // gravel
+            new Color(240, 244, 250), // snow
+            new Color(52, 92, 40),    // dark grass
+            new Color(176, 132, 52),  // autumn
+            new Color(86, 66, 44),    // mud
+            new Color(118, 118, 124), // stone
+        };
+
+        private float GroundAt(int x, int y, out Color col)
+        {
+            col = Color.Transparent;
+            var g = Ground;
+            if (g == null) return 0;
+            var off = (y - 1) * Size.Width + x - 1; // (the same corners as the grass)
+            if (off < 0 || off >= g.Length) return 0;
+            var k = g[off];
+            if (k == 0 || k >= GroundColours.Length) return 0;
+            col = GroundColours[k];
+            return 1;
+        }
+
+        /// <summary>A corner's colour, and its grass value (2 = no grass blades: painted ground).</summary>
+        private Color CornerColour(int x, int y, out float live)
+        {
+            live = GetGrassState(x, y);
+            Color painted;
+            if (GroundAt(x, y, out painted) > 0)
+            {
+                live = 2f;
+                return painted;
+            }
+            return Color.Lerp(LightGreen, LightBrown, live);
+        }
+
+        public void UpdateTerrain(TerrainType light, TerrainType dark, short[] heights, byte[] grass, byte[] ground)
+        {
+            Ground = ground;
             //DECEMBER TEMP: snow replace
             //TODO: tie to tuning, or serverside weather system.
             LightType = light;
@@ -255,15 +304,16 @@ namespace FSO.LotView.Components
 
                     short tx = (short)x, ty = (short)y;
 
-                    Color tlCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x, y));
-                    Color trCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x + 1, y));
-                    Color blCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x, y + 1));
-                    Color brCol = Color.Lerp(LightGreen, LightBrown, GetGrassState(x + 1, y + 1));
+                    float tlLive, trLive, blLive, brLive;
+                    Color tlCol = CornerColour(x, y, out tlLive);
+                    Color trCol = CornerColour(x + 1, y, out trLive);
+                    Color blCol = CornerColour(x, y + 1, out blLive);
+                    Color brCol = CornerColour(x + 1, y + 1, out brLive);
 
-                    Geom[geomOffset++] = new TerrainParallaxVertex(tl, tlCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y) * 0.5f), GetGrassState(x, y), GetNormalAt(x, y));
-                    Geom[geomOffset++] = new TerrainParallaxVertex(tr, trCol.ToVector4(), new Vector2(((x - y) + 2) * 0.5f, (x + 1 + y) * 0.5f), GetGrassState(x + 1, y), GetNormalAt(x + 1, y));
-                    Geom[geomOffset++] = new TerrainParallaxVertex(br, brCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y + 2) * 0.5f), GetGrassState(x + 1, y + 1), GetNormalAt(x + 1, y + 1));
-                    Geom[geomOffset++] = new TerrainParallaxVertex(bl, blCol.ToVector4(), new Vector2((x - y) * 0.5f, (x + y + 1) * 0.5f), GetGrassState(x, y + 1), GetNormalAt(x, y + 1));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(tl, tlCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y) * 0.5f), tlLive, GetNormalAt(x, y));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(tr, trCol.ToVector4(), new Vector2(((x - y) + 2) * 0.5f, (x + 1 + y) * 0.5f), trLive, GetNormalAt(x + 1, y));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(br, brCol.ToVector4(), new Vector2(((x - y) + 1) * 0.5f, (x + y + 2) * 0.5f), brLive, GetNormalAt(x + 1, y + 1));
+                    Geom[geomOffset++] = new TerrainParallaxVertex(bl, blCol.ToVector4(), new Vector2((x - y) * 0.5f, (x + y + 1) * 0.5f), blLive, GetNormalAt(x, y + 1));
                 }
             }
 

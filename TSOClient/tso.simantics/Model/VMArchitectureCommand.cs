@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using FSO.SimAntics.NetPlay.Model;
 
 namespace FSO.SimAntics.Model
@@ -65,6 +65,8 @@ namespace FSO.SimAntics.Model
         TERRAIN_RAISE,
         TERRAIN_FLATTEN,
 
-        GRASS_DOT
+        GRASS_DOT,
+
+        GROUND_DOT // SimsRedux: paints the ground (pattern = the kind, 0 = the lot's own grass again)
     }
 }
