@@ -808,6 +808,9 @@ namespace FSO.SimAntics.Primitives
             }
             if (Urgent || !NeedsFine) return null;
             bool handy = Sim.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200;
+            // SimsRedux: housework is for everyone (not only Neat Sims): dirty dishes, puddles, a full
+            // trash can, thirsty plants, a dirty toilet or shower - when the place is getting messy
+            bool messy = Needs[(int)VMMotive.Room] < 60;
             VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
             var done = new HashSet<short>();
             foreach (var iobj in ents)
@@ -821,7 +824,9 @@ namespace FSO.SimAntics.Primitives
                     var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
                     bool bills = name.IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0;
                     bool repair = handy && name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase);
-                    if (!bills && !repair) continue;
+                    bool housework = messy && IsHousework(obj, name);
+                    if (!bills && !repair && !housework) continue;
+                    if (housework && (IsPlate(obj) && SomeoneElsesPlate(context.VM, obj))) continue; // (someone's still eating)
                     if (GivenUp(obj.ObjectID, ia.TTAIndex)) continue; // tried it again and again: leave it for a while
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
                     if (action == null) continue;
@@ -829,7 +834,7 @@ namespace FSO.SimAntics.Primitives
                     var avail = Sim.Thread.CheckAction(action, true);
                     if (avail == null) continue; // not available right now (no bills, nothing broken)
                     var p = obj.Position;
-                    var d = (float)Math.Sqrt(Math.Pow(Sim.Position.x - p.x, 2) + Math.Pow(Sim.Position.y - p.y, 2)) / 16f + (bills ? 0 : 5);
+                    var d = (float)Math.Sqrt(Math.Pow(Sim.Position.x - p.x, 2) + Math.Pow(Sim.Position.y - p.y, 2)) / 16f + (bills ? 0 : repair ? 5 : 8);
                     if (d < bestDist)
                     {
                         bestDist = d;
@@ -855,6 +860,24 @@ namespace FSO.SimAntics.Primitives
                 if (call != null) { ChoreCode = 100; return call; }
             }
             return null;
+        }
+
+        /// <summary>
+        /// SimsRedux: housework anyone does - clean up dishes and puddles, empty the trash, water plants,
+        /// clean the toilet, shower or tub. (Each only shows when it's needed: the object's own check
+        /// decides.) A meal with servings still on it is left alone - someone may still want some.
+        /// </summary>
+        private static bool IsHousework(VMEntity obj, string name)
+        {
+            if (name.IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            bool clean = name.Equals("Clean", StringComparison.OrdinalIgnoreCase) || name.Equals("Clean Up", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith("Clean ", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Mop", StringComparison.OrdinalIgnoreCase);
+            bool trash = name.IndexOf("Empty Trash", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Take Out Trash", StringComparison.OrdinalIgnoreCase) >= 0
+                || name.Equals("Empty", StringComparison.OrdinalIgnoreCase);
+            bool water = name.Equals("Water", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Water ", StringComparison.OrdinalIgnoreCase);
+            if (!clean && !trash && !water) return false;
+            if (clean && FSO.SimAntics.Utils.ReduxLeftovers.IsGroupMeal(obj) && obj.GetAttribute(2) > 0) return false;
+            return true;
         }
 
         // SimsRedux: chores a Sim keeps failing. BrainMemory[14] = the chore (object << 16 | interaction),
