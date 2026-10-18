@@ -169,19 +169,23 @@ namespace FSO.LotView.Utils
 
                 var px = (Color[])src.Clone();
                 float span = Math.Max(1, maxX - minX);
-                for (int y = 0; y < h; y++)
+                // every pixel inside the glass's outline (not only the ones that changed: the game's own
+                // screens have see-through specks, and the computer showed through them)
+                for (int x = minX; x <= maxX; x++)
                 {
-                    for (int x = 0; x < w; x++)
+                    float u = (x - minX) / span;
+                    float top = tl + (tr - tl) * u, bottom = bl + (br - bl) * u;
+                    float height = Math.Max(1, bottom - top);
+                    float pu = sprite.Flip ? 1 - u : u; // (the game mirrors this view: mirror the picture back)
+                    for (int y = (int)Math.Ceiling(top); y <= (int)Math.Floor(bottom); y++)
                     {
+                        if (y < 0 || y >= h) continue;
                         int i = y * w + x;
-                        if (!mask[i]) continue;
-                        float u = (x - minX) / span;
-                        float top = tl + (tr - tl) * u, bottom = bl + (br - bl) * u;
-                        float v = (bottom - top) < 1 ? 0.5f : (y - top) / (bottom - top);
-                        if (sprite.Flip) u = 1 - u; // (the game mirrors this view: mirror the picture back)
-                        var c = Sample(pic, u, v);
+                        float v = (y - top) / height;
+                        // the average of the screenshot's pixels this one covers (a small screen, a big picture)
+                        var c = Area(pic, pu, v, 1f / span, 1f / height);
                         // a touch dimmer than the screenshot (a lit screen in a room, not a sticker)
-                        px[i] = new Color((byte)(c.R * 0.9f), (byte)(c.G * 0.9f), (byte)(c.B * 0.92f), src[i].A);
+                        px[i] = new Color((byte)(c.R * 0.9f), (byte)(c.G * 0.9f), (byte)(c.B * 0.92f), (byte)255);
                     }
                 }
                 tex = new Texture2D(gd, w, h, false, SurfaceFormat.Color);
@@ -205,6 +209,24 @@ namespace FSO.LotView.Utils
                     if (mask[y * w + x]) { if (y < t) t = y; if (y > b) b = y; }
             if (b < 0) { t = 0; b = h - 1; }
             top = t; bottom = b;
+        }
+
+        /// <summary>The average colour of the picture over a small area (u, v the middle; du, dv its size, 0-1).</summary>
+        private static Color Area(Picture p, float u, float v, float du, float dv)
+        {
+            int x0 = (int)Math.Floor((u - du / 2) * p.Width), x1 = (int)Math.Ceiling((u + du / 2) * p.Width);
+            int y0 = (int)Math.Floor((v - dv / 2) * p.Height), y1 = (int)Math.Ceiling((v + dv / 2) * p.Height);
+            x0 = Math.Max(0, Math.Min(p.Width - 1, x0)); x1 = Math.Max(x0 + 1, Math.Min(p.Width, x1));
+            y0 = Math.Max(0, Math.Min(p.Height - 1, y0)); y1 = Math.Max(y0 + 1, Math.Min(p.Height, y1));
+            long r = 0, g = 0, b = 0; int n = 0;
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++)
+                {
+                    var c = p.Pixels[y * p.Width + x];
+                    r += c.R; g += c.G; b += c.B; n++;
+                }
+            if (n == 0) return Sample(p, u, v);
+            return new Color((byte)(r / n), (byte)(g / n), (byte)(b / n), (byte)255);
         }
 
         private static Color Sample(Picture p, float u, float v)

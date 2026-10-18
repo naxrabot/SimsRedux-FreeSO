@@ -200,18 +200,44 @@ namespace FSO.SimAntics.Utils
         /// </summary>
         public static bool KeepGoing(VMThread thread, VMStackFrame frame, ushort opcode)
         {
+            return Decide(thread, frame, opcode) > 0;
+        }
+
+        /// <summary>
+        /// A need low enough that the Sim must stop: hungry, tired, needing the toilet or a wash, or
+        /// lonely and unhappy (-100 is empty). Sims 1's own check only looks at Fun, and with the computer
+        /// kept going they used to sit there until every bar was empty.
+        /// </summary>
+        public const short StopBelow = -35;
+
+        public static bool NeedsSomething(VMAvatar ava)
+        {
+            return ava.GetMotiveData(VMMotive.Hunger) < StopBelow || ava.GetMotiveData(VMMotive.Energy) < StopBelow
+                || ava.GetMotiveData(VMMotive.Bladder) < StopBelow || ava.GetMotiveData(VMMotive.Hygiene) < StopBelow - 15
+                || ava.GetMotiveData(VMMotive.Social) < StopBelow - 25 || ava.GetMotiveData(VMMotive.Comfort) < StopBelow - 25;
+        }
+
+        /// <summary>1: keep going (answer TRUE); -1: stop now (answer FALSE); 0: let the game's own check decide.</summary>
+        public static int Decide(VMThread thread, VMStackFrame frame, ushort opcode)
+        {
+            int r = DecideInner(thread, frame, opcode);
+            return r;
+        }
+
+        private static int DecideInner(VMThread thread, VMStackFrame frame, ushort opcode)
+        {
             try
             {
                 var ava = frame?.Caller as VMAvatar;
                 var callee = frame?.Callee;
-                if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return false;
+                if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return 0;
                 lock (Lock)
                 {
                     Dictionary<uint, Entry> map;
-                    if (!Patched.TryGetValue(callee.TreeTable, out map) || map == null) return false; // (only computers)
+                    if (!Patched.TryGetValue(callee.TreeTable, out map) || map == null) return 0; // (only computers)
                 }
                 var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
-                if (routine == null) return false;
+                if (routine == null) return 0;
                 bool happy;
                 lock (Lock)
                 {
@@ -222,7 +248,9 @@ namespace FSO.SimAntics.Utils
                         HappyEnoughRoutines[routine] = happy;
                     }
                 }
-                if (!happy) return false;
+                if (!happy) return 0;
+                // (a need is getting low: they get up, whatever they're doing)
+                if (NeedsSomething(ava)) return -1;
 
                 int genre;
                 VMQueuedAction action;
@@ -232,12 +260,12 @@ namespace FSO.SimAntics.Utils
                     case Kind.WriteNovel:
                     case Kind.ChatOnline:
                     case Kind.Hack:
-                        return true;
+                        return 1;
                     default:
-                        return ava.GetMotiveData(VMMotive.Fun) < 90;
+                        return ava.GetMotiveData(VMMotive.Fun) < 90 ? 1 : 0;
                 }
             }
-            catch { return false; }
+            catch { return 0; }
         }
 
         /// <summary>

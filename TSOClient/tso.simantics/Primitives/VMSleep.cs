@@ -11,6 +11,15 @@ namespace FSO.SimAntics.Primitives
             var operand = (VMSleepOperand)args;
             var idleStart = context.Thread.ScheduleIdleStart;
 
+            // REDUX: a loop that sleeps for 0 ticks never gives up its turn (Makin' Magic's insanity controller does this)
+            // and gets reset as an "infinite loop". After a lot of work in one tick, a sleep always waits at least a tick.
+            if (context.Thread.TicksThisFrame > 20000 && idleStart == 0 && !context.Thread.Interrupt)
+            {
+                context.Thread.ScheduleIdleStart = context.VM.Scheduler.CurrentTickID;
+                context.VM.Scheduler.ScheduleTickIn(context.Caller, 1);
+                return VMPrimitiveExitCode.CONTINUE_FUTURE_TICK;
+            }
+
             context.Args[operand.StackVarToDec] -= (short)((idleStart != 0 && idleStart < context.VM.Scheduler.CurrentTickID) ? (context.VM.Scheduler.CurrentTickID - idleStart) : 1);
 
             if (context.Thread.Interrupt)
