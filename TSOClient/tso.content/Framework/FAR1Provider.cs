@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -161,6 +161,9 @@ namespace FSO.Content.Framework
 
         #region IContentProvider<T> Members
 
+        /// <summary>SimsRedux: where a broken archive is reported (the web build sends it to the server's problem log).</summary>
+        public static Action<string, string> ReportProblem;
+
         public void Init()
         {
             Cache = new TimedReferenceCache<string, T>();
@@ -182,8 +185,21 @@ namespace FSO.Content.Framework
             }
             
             foreach (var farPath in FarFiles){
-                var archive = new FAR1Archive((TS1)?Path.Combine(ContentManager.TS1BasePath, farPath):ContentManager.GetPath(farPath), !TS1);
-                var entries = archive.GetAllFarEntries();
+                // SimsRedux: one broken archive (a bad or half-finished download) is skipped and reported,
+                // instead of stopping the game while it loads
+                FAR1Archive archive;
+                List<FarEntry> entries;
+                try
+                {
+                    archive = new FAR1Archive((TS1)?Path.Combine(ContentManager.TS1BasePath, farPath):ContentManager.GetPath(farPath), !TS1);
+                    entries = archive.GetAllFarEntries();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("[SimsRedux] skipped a broken game archive: " + farPath + ": " + e.Message);
+                    try { ReportProblem?.Invoke("broken game file", farPath + ": " + e.Message); } catch { }
+                    continue;
+                }
 
                 foreach (var entry in entries)
                 {

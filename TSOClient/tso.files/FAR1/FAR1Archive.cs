@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
@@ -45,13 +45,16 @@ namespace FSO.Files.FAR1
             m_Reader = new BinaryReader(FSOFile.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read));
 
             //Magic number - An 8-byte string (not null-terminated), consisting of the ASCII characters "FAR!byAZ"
-            string Header = Encoding.ASCII.GetString(m_Reader.ReadBytes(8));
+            var headBytes = m_Reader.ReadBytes(8);
+            string Header = Encoding.ASCII.GetString(headBytes);
             //Version - A 4-byte unsigned integer specifying the version; 1a and 1b each specify 1.
             uint Version = m_Reader.ReadUInt32();
 
             if ((Header != "FAR!byAZ") || (Version != 1))
             {
-                throw (new Exception("Archive wasn't a valid FAR V.1 archive!"));
+                // SimsRedux: say which file, and what it starts with (a broken download shows here)
+                m_Reader.Dispose();
+                throw (new Exception("Archive wasn't a valid FAR V.1 archive! (" + Path + ", starts " + BitConverter.ToString(headBytes) + ", version " + Version + ")"));
             }
 
             //File table offset - A 4-byte unsigned integer specifying the offset to the file table 
