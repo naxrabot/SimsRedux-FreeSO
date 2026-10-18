@@ -1,4 +1,5 @@
 using FSO.LotView.Model;
+using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
 using System;
 using System.Collections.Generic;
