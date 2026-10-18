@@ -1219,6 +1219,19 @@ namespace FSO.SimAntics
 
         public VMPlacementResult PositionValid(LotTilePos pos, Direction direction, VMContext context, VMPlaceRequestFlags flags)
         {
+            var result = PositionValidInner(pos, direction, context, flags);
+            // SimsRedux: the placeanywhere cheat - a player placing a Buy or Build item can put it anywhere
+            // on the lot (through walls, over other objects, off the floor). Slots still catch it when it
+            // lands on one; only the game's "can't go there" answers are ignored.
+            if (result.Status != VMPlacementError.Success && this is VMGameObject && context.Cheats.PlaceAnywhere
+                && (flags & VMPlaceRequestFlags.UserBuildableLimit) != 0
+                && result.Status != VMPlacementError.LocationOutOfBounds && pos != LotTilePos.OUT_OF_WORLD)
+                return new VMPlacementResult(VMPlacementError.Success);
+            return result;
+        }
+
+        private VMPlacementResult PositionValidInner(LotTilePos pos, Direction direction, VMContext context, VMPlaceRequestFlags flags)
+        {
             if (pos == LotTilePos.OUT_OF_WORLD) return new VMPlacementResult();
             var userOOB = context.IsUserOutOfBounds(pos);
             if ((((flags & VMPlaceRequestFlags.UserBuildableLimit) > 0) && userOOB) || context.IsOutOfBounds(pos))

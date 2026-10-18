@@ -279,7 +279,7 @@ namespace FSO.Vitaboy
                 }
                 if (Appearance != null)
                 {
-                    m_HeadInstance = base.AddAppearance(Appearance, tex);
+                    try { m_HeadInstance = base.AddAppearance(Appearance, tex); } catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] outfit skipped: " + e.Message); } // (SimsRedux)
                 }
             }
         }
@@ -410,7 +410,7 @@ namespace FSO.Vitaboy
                 }
                 if (Appearance != null)
                 {
-                    m_BodyInstance = base.AddAppearance(Appearance, tex);
+                    try { m_BodyInstance = base.AddAppearance(Appearance, tex); } catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] outfit skipped: " + e.Message); } // (SimsRedux)
                 }
             }
         }

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 
 namespace FSO.SimAntics.Utils
@@ -12,7 +12,8 @@ namespace FSO.SimAntics.Utils
         private static Dictionary<VMCheatType, ExecuteHandler> predefinedBehavior = new Dictionary<VMCheatType, ExecuteHandler>()
             {
                 { VMCheatType.Budget, new ExecuteHandler(ExecuteBudget) },
-                { VMCheatType.MoveObjects, new ExecuteHandler(ExecuteMoveObjects) }
+                { VMCheatType.MoveObjects, new ExecuteHandler(ExecuteMoveObjects) },
+                { VMCheatType.PlaceAnywhere, new ExecuteHandler(ExecutePlaceAnywhere) }
             };
 
         public enum VMCheatParameterType
@@ -46,7 +47,9 @@ namespace FSO.SimAntics.Utils
             /// For transaction cheats it adds the amount to the user's budget
             /// </summary>
             Budget = 1,
-            MoveObjects = 2
+            MoveObjects = 2,
+            /// <summary>SimsRedux: place Buy and Build items anywhere.</summary>
+            PlaceAnywhere = 3
         }
         /// <summary>
         /// The selected cheat to run
@@ -90,6 +93,12 @@ namespace FSO.SimAntics.Utils
         private static void ExecuteMoveObjects(VM vm, VMAvatar caller, VMCheatContext context, out bool result)
         {
             vm.Context.Cheats.MoveObjects = context.Modifier;
+            result = true;
+        }
+
+        private static void ExecutePlaceAnywhere(VM vm, VMAvatar caller, VMCheatContext context, out bool result)
+        {
+            vm.Context.Cheats.PlaceAnywhere = context.Modifier;
             result = true;
         }
 

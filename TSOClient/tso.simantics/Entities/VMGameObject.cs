@@ -236,11 +236,11 @@ namespace FSO.SimAntics
             set { if (UseWorld) WorldUI.Position = value-new Vector3(0.5f, 0.5f, -LiftZ); }
         }
 
-        /// <summary>SimsRedux: how far a wall item (a painting, a shelf...) is moved up or down the wall, in hundredths.</summary>
+        /// <summary>SimsRedux: how far an item is raised or lowered (a painting up the wall, a vase above the table...), in hundredths.</summary>
         public short ReduxLift { get; private set; }
         private float LiftZ { get { return (ReduxLift != 0 && Container == null) ? ReduxLift / 100f : 0f; } }
 
-        public const short MaxLift = 120;
+        public const short MaxLift = 300; // (SimsRedux: about a floor up or down)
 
         public void SetReduxLift(short lift)
         {

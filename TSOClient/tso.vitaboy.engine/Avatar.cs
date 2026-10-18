@@ -123,18 +123,28 @@ namespace FSO.Vitaboy
             var result = new AvatarAppearanceInstance();
             result.Original = appearance;
             result.Bindings = new List<AvatarBindingInstance>();
+            // SimsRedux: an outfit whose files are missing (a custom outfit's mesh or texture) shows
+            // nothing for that part instead of stopping the game
+            if (appearance?.Bindings == null) return result;
 
             int i = 0;
             int replaced = 0;
+            // SimsRedux: a custom outfit can have an empty or broken part list - those parts are skipped
             var realBindings = appearance.Bindings.Select(bindingReference =>
-                bindingReference.RealBinding ?? FSO.Content.Content.Get().AvatarBindings?.Get(bindingReference.TypeID, bindingReference.FileID)).ToList();
+            {
+                if (bindingReference == null) return null;
+                try { return bindingReference.RealBinding ?? FSO.Content.Content.Get().AvatarBindings?.Get(bindingReference.TypeID, bindingReference.FileID); }
+                catch { return null; }
+            }).ToList();
 
             if (Content.Content.Get().TS1)
             {
                 foreach (var binding in realBindings)
                 {
-                    if (binding == null) { i++; continue; }
-                    var mesh = Content.Content.Get().AvatarMeshes.Get(binding.MeshName);
+                    if (binding == null || binding.MeshName == null) { i++; continue; }
+                    Mesh mesh;
+                    try { mesh = Content.Content.Get().AvatarMeshes.Get(binding.MeshName); } catch { mesh = null; }
+                    if (mesh?.TextureName == null) { i++; continue; } // (SimsRedux: its mesh is missing)
                     if (texOverride != null &&
                             (UniformName(mesh.TextureName.ToLowerInvariant()).EndsWith(UniformName(texOverride.ToLowerInvariant()))
                             || mesh.TextureName.ToLowerInvariant() == "x"))
@@ -144,7 +154,7 @@ namespace FSO.Vitaboy
                     i++;
                 }
 
-                if (texOverride != null)
+                if (texOverride != null && replaced < realBindings.Count && realBindings[replaced] != null)
                 {
                     realBindings[replaced] = realBindings[replaced].TS1Copy();
                     realBindings[replaced].TextureName = texOverride;
@@ -154,7 +164,13 @@ namespace FSO.Vitaboy
             foreach (var binding in realBindings)
             {
                 if (binding == null) { continue; }
-                result.Bindings.Add(AddBinding(binding));
+                // SimsRedux: a part whose mesh file is missing is left off (it used to stop the game)
+                try { if (binding.MeshName != null && binding.TextureName == null && FSO.Content.Content.Get().AvatarMeshes.Get(binding.MeshName) == null) continue; }
+                catch { continue; }
+                AvatarBindingInstance inst;
+                try { inst = AddBinding(binding); }
+                catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] outfit part skipped (" + binding.MeshName + "): " + e.Message); continue; }
+                result.Bindings.Add(inst);
             }
 
             return result;

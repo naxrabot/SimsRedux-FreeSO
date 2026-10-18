@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using FSO.LotView.Model;
 using FSO.SimAntics.Model.TSOPlatform;
@@ -19,6 +19,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public PurchaseMode Mode = PurchaseMode.Normal;
         public byte TargetUpgradeLevel;
+        /// <summary>SimsRedux: raised or lowered while it was being placed (Page Up/Down, +/-).</summary>
+        public short Lift;
 
         private int value = -1;
 
@@ -113,6 +115,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 }
             }
             CreatedGroup = group;
+            if (Lift != 0) foreach (var o in group.Objects) (o as VMGameObject)?.SetReduxLift(Lift);
 
             if (Mode == PurchaseMode.Donate)
             {
@@ -195,6 +198,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
             writer.Write((byte)Mode);
             writer.Write(TargetUpgradeLevel);
+            writer.Write(Lift);
         }
 
         public override void Deserialize(BinaryReader reader)
@@ -209,6 +213,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
             Mode = (PurchaseMode)reader.ReadByte();
             TargetUpgradeLevel = reader.ReadByte();
+            Lift = reader.ReadInt16();
         }
 
         #endregion

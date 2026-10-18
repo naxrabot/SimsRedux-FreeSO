@@ -41,8 +41,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (!vm.TS1 && caller == null) return false;
             foreach (var part in obj.MultitileGroup.Objects)
             {
-                if (part is VMAvatar) return false;
-                if (!IsWallItem(part)) return false;
+                if (part is VMAvatar) return false; // (any Buy or Build item - not only wall items)
                 var flags = (VMMovementFlags)part.GetValue(VMStackObjectVariable.MovementFlags);
                 if ((flags & VMMovementFlags.PlayersCanMove) == 0 && !vm.Context.Cheats.MoveObjects) return false;
             }
