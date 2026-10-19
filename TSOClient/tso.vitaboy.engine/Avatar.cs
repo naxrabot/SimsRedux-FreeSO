@@ -126,6 +126,14 @@ namespace FSO.Vitaboy
             // SimsRedux: an outfit whose files are missing (a custom outfit's mesh or texture) shows
             // nothing for that part instead of stopping the game
             if (appearance?.Bindings == null) return result;
+            // SimsRedux: a Sims Online outfit comes in its own version for each skin tone (its texture name says
+            // which) - that version already has every part's texture, so nothing is swapped in below
+            if (Content.Content.Get().TS1)
+            {
+                Appearance skinned = null;
+                try { skinned = FSO.Content.TS1.ReduxTSOAvatars.ForSkin(appearance, texOverride); } catch { }
+                if (skinned?.Bindings != null) { appearance = skinned; texOverride = null; }
+            }
 
             int i = 0;
             int replaced = 0;

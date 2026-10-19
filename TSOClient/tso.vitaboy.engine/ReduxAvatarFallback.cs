@@ -69,6 +69,8 @@ namespace FSO.Vitaboy
             var m = (meshName ?? "").ToLowerInvariant();
             int skin = n.Contains("drk") ? 2 : n.Contains("med") ? 1 : 0;
             bool skinPart = n.StartsWith("c") || n.StartsWith("h") || m.StartsWith("c") || m.StartsWith("h") || m.Contains("hand");
+            // (a Sims Online part: its heads come from the heads archive, everything else is clothes)
+            if (FSO.Content.TS1.ReduxTSOAvatars.IsTSOFile(m)) skinPart = m.StartsWith(FSO.Content.TS1.ReduxTSOAvatars.HeadFilePrefix);
             int key = (skinPart ? 10 : 0) + skin;
             Microsoft.Xna.Framework.Graphics.Texture2D tex;
             if (Plains.TryGetValue(key, out tex) && tex != null && !tex.IsDisposed) return tex;

@@ -130,6 +130,8 @@ namespace FSO.Content.TS1
             else if (expected == typeof(Appearance))
             {
                 name = name.Substring(0, name.Length - 4).ToLowerInvariant(); //remove .apr
+                // SimsRedux: a Sims Online outfit (null when its files aren't here - the Sim then gets a stand-in)
+                if (ReduxTSOAvatars.IsTSOName(name)) return ReduxTSOAvatars.Instance?.GetAppearance(name);
                 string filename = null;
                 if (SkinHostBCF.TryGetValue(name, out filename))
                 {

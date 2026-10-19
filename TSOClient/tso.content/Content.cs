@@ -100,12 +100,13 @@ namespace FSO.Content
         /// SimsRedux: The Sims Online's own folder (TSOClient - the one with housedata and objectdata in it),
         /// "" = none. In the browser it's "/tso/" (downloaded from the server by Admins and Testers).
         /// Its content is only used while ReduxTSOContent is on (set before the content loads, like
-        /// ReduxCreatorContent). Stage 1: TSO's walls and floors join the build catalogs.
+        /// ReduxCreatorContent). Stage 1: TSO's walls and floors join the build catalogs. Stage 2: TSO's adult
+        /// clothes and heads join Create-a-Sim (TS1/ReduxTSOAvatars).
         /// </summary>
         public static string TSOBasePath = "";
         public static bool ReduxTSOContent;
         /// <summary>How much of The Sims Online is brought in (part of the online content stamp).</summary>
-        public const int ReduxTSOStage = 1;
+        public const int ReduxTSOStage = 2;
 
         /// <summary>A file in The Sims Online's folder, e.g. TSOPath("housedata/walls/walls.far").</summary>
         public static string TSOPath(string rel)
@@ -141,7 +142,8 @@ namespace FSO.Content
 
         /// <summary>
         /// What Sims Online content this game loaded: "" = none, else stage, archive count and their bytes
-        /// ("tso1:8:31000000"). Two games playing one lot must have the same stamp.
+        /// ("tso2:22:115000000" - the walls, floors and the Sims' clothes and heads). Two games playing one lot
+        /// must have the same stamp.
         /// </summary>
         public static string ReduxTSOStamp
         {
@@ -191,6 +193,8 @@ namespace FSO.Content
         public bool TS1 = TS1Hybrid;
         public TS1Provider TS1Global;
         public TS1BCFProvider BCFGlobal;
+        /// <summary>SimsRedux: The Sims Online's clothes and heads (null: not loaded - no TSO folder, or no avatardata in it).</summary>
+        public ReduxTSOAvatars ReduxTSOAvatarSet;
         public string TS1BasePath = TS1HybridBasePath;
         public string VersionString = "unidentified";
         public bool Inited = false;
@@ -288,6 +292,7 @@ namespace FSO.Content
                 LoadProgress = ContentLoadingProgress.InitArch;
 
                 lock (TSOStampLock) { ReduxTSOFiles = 0; ReduxTSOBytes = 0; } // (the walls and floors add theirs)
+                if (ReduxTSOAvatarSet != null) ReduxAddTSOStamp(ReduxTSOAvatarSet.ArchiveCount, ReduxTSOAvatarSet.ArchiveBytes); // (and the Sims' clothes)
                 WorldWalls.InitTS1();
                 WorldFloors.InitTS1();
             }
@@ -394,6 +399,11 @@ namespace FSO.Content
             {
                 ((TS1AvatarTextureProvider)AvatarTextures)?.Init();
                 ((TS1BMFProvider)AvatarMeshes)?.Init();
+                // SimsRedux: The Sims Online's adult clothes and heads, next to the Sims 1 ones (only their file lists
+                // are read now - see ReduxTSOAvatars). Loaded without graphics too, so a lot worker's content stamp
+                // is the same as its players'.
+                try { ReduxTSOAvatarSet = HasTSO ? ReduxTSOAvatars.Load() : ReduxTSOAvatars.Unload(); }
+                catch (System.Exception e) { ReduxTSOAvatarSet = null; System.Console.WriteLine("[SimsRedux] Sims Online clothes: " + e.Message); }
                 Jobs = new TS1JobProvider(TS1Global);
                 Neighborhood = new TS1NeighborhoodProvider(this);
             } else

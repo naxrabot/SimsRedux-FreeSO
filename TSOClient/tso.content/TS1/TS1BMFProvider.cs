@@ -16,6 +16,8 @@ namespace FSO.Content.TS1
 
         public override Mesh Get(string name)
         {
+            // SimsRedux: a Sims Online outfit's mesh ("xtsob~...", see ReduxTSOAvatars)
+            if (ReduxTSOAvatars.IsTSOFile(name)) return ReduxTSOAvatars.Instance?.GetMesh(name);
             var s = name.Replace(".mesh", "").ToLowerInvariant();
             return base.Get(s + ".bmf") ?? base.Get(s + ".skn");
         }
