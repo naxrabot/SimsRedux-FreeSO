@@ -27,7 +27,7 @@ namespace FSO.SimAntics.Utils
 
         private static readonly Rule[] Rules =
         {
-            new Rule(VMPersonDataVariable.CookingSkill, "Cooking", 1f, "cook", "prepare", "make breakfast", "make lunch", "make dinner", "grill", "bake", "barbecue", "flip"),
+            new Rule(VMPersonDataVariable.CookingSkill, "Cooking", 1f, "have a meal", "serve meal", "have lite meal", "cook", "prepare", "make breakfast", "make lunch", "make dinner", "grill", "bake", "barbecue", "flip"),
             new Rule(VMPersonDataVariable.MechanicalSkill, "Mechanical", 1f, "repair", "fix", "unclog", "tinker"),
             new Rule(VMPersonDataVariable.CharismaSkill, "Charisma", 0.3f, "talk", "joke", "entertain", "tell ", "flirt", "compliment", "brag", "chat", "gossip"),
             new Rule(VMPersonDataVariable.BodySkill, "Body", 0.7f, "swim", "dance", "jog"),
@@ -37,6 +37,49 @@ namespace FSO.SimAntics.Utils
         /// <summary>Raised when a Sim reaches a new level (sim, skill name, level 1-10).</summary>
         public static Action<VMAvatar, string, int> OnLevelUp;
 
+        // (marks the skill bar as this one's, so the game's own balloons are never touched)
+        private const ushort BarMark = 0x5B5B;
+
+        private static bool IsOurBar(VMAvatar ava)
+        {
+            return ava.Headline != null && ava.Headline.Operand != null && ava.Headline.Operand.Flags2 == BarMark;
+        }
+
+        private static void HideBar(VMAvatar ava)
+        {
+            if (!IsOurBar(ava)) return;
+            try { ava.HeadlineRenderer?.Dispose(); } catch { }
+            ava.Headline = null;
+            ava.HeadlineRenderer = null;
+        }
+
+        /// <summary>The Sims 1 skill bar (the one studying shows) over a Sim practising a skill.</summary>
+        private static void ShowBar(VMAvatar ava, VMPersonDataVariable skill)
+        {
+            try
+            {
+                var vm = ava.Thread?.Context?.VM;
+                if (vm == null) return;
+                int level = Math.Max(0, Math.Min(9, ava.GetPersonData(skill) / 100));
+                if (ava.Headline != null && !IsOurBar(ava)) return; // (something else is showing - a talk balloon, say)
+                // which skill the bar shows, at full speed
+                ava.SetPersonData(VMPersonDataVariable.SkillEfficiency, (short)(((int)skill << 8) | 100));
+                if (IsOurBar(ava) && ava.Headline.Index == level) return;
+                HideBar(ava);
+                var op = new Primitives.VMSetBalloonHeadlineOperand
+                {
+                    Flags2 = BarMark,
+                    Index = (sbyte)level,
+                    Group = Primitives.VMSetBalloonHeadlineOperandGroup.Progress,
+                    Duration = -1,
+                    Type = 3,
+                };
+                ava.Headline = new VMRuntimeHeadline(op, ava, null, (sbyte)level);
+                ava.HeadlineRenderer = vm.Headline?.Get(ava.Headline);
+            }
+            catch (Exception) { }
+        }
+
         public static void Tick(VMAvatar ava)
         {
             try
@@ -44,13 +87,15 @@ namespace FSO.SimAntics.Utils
                 if (ava?.Thread == null || ava.IsPet) return;
                 var action = ava.Thread.ActiveAction;
                 var name = action?.Name;
-                if (string.IsNullOrEmpty(name) || action.Callee == null) return;
+                if (string.IsNullOrEmpty(name) || action.Callee == null) { HideBar(ava); return; }
                 name = name.ToLowerInvariant();
                 int found = -1;
                 for (int i = 0; i < Rules.Length && found < 0; i++)
                     foreach (var w in Rules[i].Words)
                         if (name.Contains(w)) { found = i; break; }
-                if (found < 0) return;
+                if (found < 0) { HideBar(ava); return; }
+                // the skill bar over their head while they're at it (like studying)
+                ShowBar(ava, Rules[found].Skill);
                 // only while actually doing it (not walking from the fridge to the counter, say)
                 foreach (var f in ava.Thread.Stack) if (f is VMRoutingFrame) return;
                 var clock = ava.Thread.Context?.Clock;

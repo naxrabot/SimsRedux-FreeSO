@@ -112,6 +112,7 @@ namespace FSO.SimAntics.Engine
                     var level = avatar.GetPersonData(FSO.SimAntics.Model.VMPersonDataVariable.JobPromotionLevel);
 
                     var job = Content.Content.Get().Jobs.GetJobLevel(jtype, level);
+                    if (job == null) return new VMOutfitReference(bodyStrings, false); // (SimsRedux: no such job - they keep their clothes)
 
                     var bskn = job.MaleUniformMesh;
                     if (string.IsNullOrWhiteSpace(bskn)) return new VMOutfitReference(bodyStrings, false);

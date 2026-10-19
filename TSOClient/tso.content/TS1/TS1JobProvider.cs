@@ -1,3 +1,4 @@
+using System;
 ﻿using FSO.Content.Framework;
 using FSO.Files.Formats.IFF;
 using FSO.Files.Formats.IFF.Chunks;
@@ -47,7 +48,10 @@ namespace FSO.Content.TS1
         public JobLevel GetJobLevel(short jobID, int jobLevel)
         {
             var job = JobResource.Get<CARR>((ushort)jobID);
-            return job?.JobLevels[jobLevel];
+            // SimsRedux: a level past the end of the job (military school sets one) used to crash the Sim -
+            // the nearest real level is used instead
+            if (job?.JobLevels == null || job.JobLevels.Length == 0) return null;
+            return job.JobLevels[Math.Max(0, Math.Min(job.JobLevels.Length - 1, jobLevel))];
         }
     }
 }
