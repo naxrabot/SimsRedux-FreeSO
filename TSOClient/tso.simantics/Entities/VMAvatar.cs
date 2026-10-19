@@ -959,7 +959,7 @@ namespace FSO.SimAntics
                     }
                     break;
                 case VMPersonDataVariable.CurrentOutfit:
-                    if (Thread.Context.VM.TS1) BodyOutfit = VMSuitProvider.GetPersonSuitTS1(this, (ushort)value);
+                    if (Thread.Context.VM.TS1) { var ts1Suit = VMSuitProvider.GetPersonSuitTS1(this, (ushort)value); if (ts1Suit != null) BodyOutfit = ts1Suit; } // (SimsRedux: no outfit for it - keep what they wear)
                     else
                     {
                         var suit = VMSuitProvider.GetSuit(Thread.Stack.LastOrDefault(), Engine.Scopes.VMSuitScope.Person, (ushort)value);

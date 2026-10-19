@@ -175,20 +175,20 @@ namespace FSO.SimAntics.Engine
                 case VMPersonSuits.TS1Rave:
                 case VMPersonSuits.TS1Costume: //person strings 27. hands: 28, 29
                 case VMPersonSuits.TS1ExpandedFormal: //person strings 30 (f###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(30), false);
+                    if (IsValid(bodyStrings.GetString(30))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(30), false); // (SimsRedux: an empty one made the Sim invisible - they keep what they wear)
                     break;
                 case VMPersonSuits.TS1ExpandedSwimsuit: //person strings 31 (s###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(31), false);
+                    if (IsValid(bodyStrings.GetString(31))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(31), false); // (SimsRedux: an empty one made the Sim invisible - they keep what they wear)
                     break;
                 case VMPersonSuits.TS1ExpandedPajamas: //person strings 32 (l###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(32), false);
+                    if (IsValid(bodyStrings.GetString(32))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(32), false); // (SimsRedux: an empty one made the Sim invisible - they keep what they wear)
                     break;
                 case VMPersonSuits.TS1Disco: //???
                 case VMPersonSuits.TS1Winter: //person strings 33 (w###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(33), false);
+                    if (IsValid(bodyStrings.GetString(33))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(33), false); // (SimsRedux: an empty one made the Sim invisible - they keep what they wear)
                     break;
                 case VMPersonSuits.TS1HighFashion: //person strings 34 (h###)
-                    toHandCopy = new VMOutfitReference(bodyStrings.GetString(34), false);
+                    if (IsValid(bodyStrings.GetString(34))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(34), false); // (SimsRedux: an empty one made the Sim invisible - they keep what they wear)
                     break;
             }
 

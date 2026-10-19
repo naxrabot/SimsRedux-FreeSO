@@ -1219,6 +1219,10 @@ namespace FSO.SimAntics
 
         public VMPlacementResult PositionValid(LotTilePos pos, Direction direction, VMContext context, VMPlaceRequestFlags flags)
         {
+            // SimsRedux: a passing car (Utils/ReduxTraffic.cs) drives smoothly along the street, off the
+            // tile grid and outside the buildable area - only the lot's edge stops it
+            if (Utils.ReduxTraffic.Moving && this is VMGameObject)
+                return new VMPlacementResult(context.IsOutOfBounds(pos) ? VMPlacementError.LocationOutOfBounds : VMPlacementError.Success);
             var result = PositionValidInner(pos, direction, context, flags);
             // SimsRedux: the placeanywhere cheat - a player placing a Buy or Build item can put it anywhere
             // on the lot (through walls, over other objects, off the floor). Slots still catch it when it

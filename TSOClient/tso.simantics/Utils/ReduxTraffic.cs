@@ -20,6 +20,8 @@ namespace FSO.SimAntics.Utils
     public static class ReduxTraffic
     {
         public const short Marker = 99;
+        /// <summary>Set while a traffic car is being moved (placement rules don't apply to it).</summary>
+        [ThreadStatic] public static bool Moving;
         /// <summary>1/16ths of a tile a car moves each tick (about 3.75 tiles a second at normal speed).</summary>
         private const int Speed = 2;
         /// <summary>Set if the cars turn out to drive backwards (their front is the other way).</summary>
@@ -58,7 +60,7 @@ namespace FSO.SimAntics.Utils
                 int hour = clock.Hours;
                 bool night = hour >= 22 || hour < 6;
                 bool evening = hour >= 19 || hour < 7;
-                int chance = night ? 160 : evening ? 70 : 35; // one in this many game minutes or so
+                int chance = night ? 240 : evening ? 120 : 60; // one in this many game minutes or so
                 uint h = Hash((uint)(clock.Ticks / 30) * 2654435761u ^ (uint)vm.GetGlobalValue(10) * 40503u);
                 if (h % (uint)chance != 0) return;
 
@@ -152,14 +154,14 @@ namespace FSO.SimAntics.Utils
             // put it there, then line its middle up with the lane
             var pos = road.AlongX ? LotTilePos.FromBigTile((short)along, (short)lane, 1) : LotTilePos.FromBigTile((short)lane, (short)along, 1);
             pos = new LotTilePos((short)(pos.x + 8), (short)(pos.y + 8), 1);
-            if (group.ChangePosition(pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return; }
+            if (Move(group, pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return; }
             int cx = 0, cy = 0, n = 0;
             foreach (var o in group.Objects) { if (o.Position == LotTilePos.OUT_OF_WORLD) continue; cx += o.Position.x; cy += o.Position.y; n++; }
             if (n == 0) { group.Delete(ctx); return; }
             cx /= n; cy /= n;
             int want = lane * 16 + 8;
             var fixedPos = road.AlongX ? new LotTilePos(pos.x, (short)(pos.y + (want - cy)), 1) : new LotTilePos((short)(pos.x + (want - cx)), pos.y, 1);
-            if (group.ChangePosition(fixedPos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) group.Delete(ctx);
+            if (Move(group, fixedPos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) group.Delete(ctx);
         }
 
         private static void Drive(VM vm, VMMultitileGroup group)
@@ -190,8 +192,15 @@ namespace FSO.SimAntics.Utils
                 int tx = (p.x + dx) / 16, ty = (p.y + dy) / 16;
                 if (tx < 1 || ty < 1 || tx >= arch.Width - 1 || ty >= arch.Height - 1) { group.Delete(ctx); return; }
             }
-            if (group.ChangePosition(next, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success)
+            if (Move(group, next, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success)
                 group.Delete(ctx);
+        }
+
+        private static VMPlacementResult Move(VMMultitileGroup group, LotTilePos pos, Direction dir, VMContext ctx, VMPlaceRequestFlags flags)
+        {
+            Moving = true;
+            try { return group.ChangePosition(pos, dir, ctx, flags); }
+            finally { Moving = false; }
         }
 
         private static uint Hash(uint x)
