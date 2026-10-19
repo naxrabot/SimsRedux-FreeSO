@@ -104,7 +104,7 @@ namespace FSO.Content.Model
         }
     }
 
-    public abstract class AbstractTextureRef : ITextureRef
+    public abstract class AbstractTextureRef : ITextureRef, ITimedCachable, ITimedCachableDead
     {
         public string ReplacePath { get; set; }
         public delegate TexBitmap SimpleBitmapProvider(Stream stream, AbstractTextureRef texRef);
@@ -119,16 +119,55 @@ namespace FSO.Content.Model
 
 
         private bool WasReferenced = true;
+        /// <summary>SimsRedux: cleaned up for good - a cache must not hand it out again (its texture is going away).</summary>
+        public bool ReduxDead { get; private set; }
         ~AbstractTextureRef()
         {
-            if (WasReferenced)
+            // (SimsRedux: an error here would end the whole program)
+            try
             {
-                TimedReferenceController.KeepAlive(this, KeepAliveType.DEREFERENCED);
-                WasReferenced = false;
-                GC.ReRegisterForFinalize(this);
+                if (WasReferenced)
+                {
+                    TimedReferenceController.KeepAlive(this, KeepAliveType.DEREFERENCED);
+                    WasReferenced = false;
+                    GC.ReRegisterForFinalize(this);
+                }
+                else
+                {
+                    // SimsRedux: the last pass. The texture's own finalizer is switched off (SuppressFinalize in Get),
+                    // and now that the file caches let go of these refs nothing else would ever free the GPU memory.
+                    // The texture points back at this ref (its Tag), so if anything still drew with it this ref
+                    // would still be reachable and we wouldn't be here - it's safe to free it on the game thread.
+                    var tex = _Instance;
+                    if (tex == null || tex.IsDisposed) return;
+                    ReduxDead = true;
+                    GameThread.NextUpdate(x =>
+                    {
+                        if (WasReferenced)
+                        {
+                            // (picked up again in the meantime - keep it, and let the finalizer run again later)
+                            ReduxDead = false;
+                            GC.ReRegisterForFinalize(this);
+                            return;
+                        }
+                        try
+                        {
+                            var hidef = tex.Tag as Texture2D;
+                            if (hidef != null && !hidef.IsDisposed) hidef.Dispose();
+                            if (!tex.IsDisposed) tex.Dispose();
+                        }
+                        catch { }
+                    });
+                }
             }
+            catch { }
         }
         public void Rereferenced()
+        {
+            WasReferenced = true;
+        }
+        // SimsRedux: the timed cache calls this when the ref is handed out again
+        public void Rereferenced(bool save)
         {
             WasReferenced = true;
         }

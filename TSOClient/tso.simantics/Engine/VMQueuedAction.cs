@@ -39,6 +39,13 @@ namespace FSO.SimAntics.Engine
 
         /// <summary>SimsRedux: "Have Leftovers" has taken its serving out of the fridge.</summary>
         public bool ReduxCounted;
+        /// <summary>
+        /// SimsRedux: which "skill by doing" rule this action's name matched (-1 none, -2 not worked out yet), and
+        /// the name it was worked out for. Not saved - it only depends on the name, so it's worked out again the
+        /// same way after a load or on a player who joined part way.
+        /// </summary>
+        public sbyte ReduxSkillRule = -2;
+        public string ReduxSkillRuleName;
         public ushort UID; //a wraparound ID that is just here so that a specific interaction can be reliably "cancelled" by a client.
 
         public VMActionCallback Callback;

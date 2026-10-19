@@ -127,10 +127,11 @@ namespace FSO.SimAntics.Engine
                     btex = btexPattern.Replace("$g", code[0].ToString()).Replace("$b", code.Substring(1)).Replace("$c", skn);
                     // SimsRedux: some uniforms were only made for some builds (fit, fat, skinny) - if this
                     // Sim's build doesn't have one, try the others; if none exists, they keep their own clothes
-                    // (instead of the uniform being invisible)
-                    if (VM.UseWorld)
+                    // (instead of the uniform being invisible). (This is only a look at the game's files, so it runs
+                    // without graphics too - a server picked the missing uniform while players picked their own clothes.)
+                    var apr = Content.Content.Get().AvatarAppearances;
+                    if (apr != null)
                     {
-                        var apr = Content.Content.Get().AvatarAppearances;
                         if (apr.Get(new FSO.Common.Content.ContentID(bskn + ".apr")) == null)
                         {
                             string found = null;

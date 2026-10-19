@@ -109,8 +109,6 @@ namespace FSO.SimAntics.Utils
             catch { }
         }
 
-        private static readonly ReduxWeakMap<VMRoutine, int> DueRoutines = new ReduxWeakMap<VMRoutine, int>();
-        private static readonly object Lock = new object();
 
         /// <summary>
         /// Called for each script call. Sims 1's car pool asks "was stack object due at work?" - on a day off
@@ -124,18 +122,9 @@ namespace FSO.SimAntics.Utils
             {
                 var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
                 if (routine == null) return 0;
-                int kind;
-                lock (Lock)
-                {
-                    if (!DueRoutines.TryGetValue(routine, out kind))
-                    {
-                        var label = routine.Chunk?.ChunkLabel ?? "";
-                        kind = label.IndexOf("due at work", StringComparison.OrdinalIgnoreCase) >= 0 ? 1
-                            : (label.IndexOf("warnings car pool", StringComparison.OrdinalIgnoreCase) >= 0 ? 2
-                            : (label.IndexOf("school bus schedule", StringComparison.OrdinalIgnoreCase) >= 0 ? 3 : 0));
-                        DueRoutines[routine] = kind;
-                    }
-                }
+                // (1 due at work, 2 car pool warnings, 3 school bus - worked out once per script, see VMRoutine.ReduxKind)
+                var rk = routine.GetReduxKind();
+                int kind = rk == VMRoutine.ReduxKindDueAtWork ? 1 : (rk == VMRoutine.ReduxKindCarPool ? 2 : (rk == VMRoutine.ReduxKindSchoolBus ? 3 : 0));
                 if (kind == 0) return 0;
                 var vm = frame.VM;
                 if (vm == null) return 0;

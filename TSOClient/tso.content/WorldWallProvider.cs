@@ -195,7 +195,7 @@ namespace FSO.Content
             //load *.wll iffs from both the TS1 provider and folder
 
             ushort wallID = 256;
-            var files = new FileProvider<IffFile>(ContentManager, new IffCodec(), new Regex(".*/Walls.*\\.wll"));
+            var files = new FileProvider<IffFile>(ContentManager, new IffCodec(), new Regex(".*/Walls.*\\.wll$") /* (SimsRedux: "$" - not "x.wll.bak") */);
             files.UseTS1 = true;
             var ts1 = new TS1SubProvider<IffFile>(ContentManager.TS1Global, ".wll");
             files.Init();

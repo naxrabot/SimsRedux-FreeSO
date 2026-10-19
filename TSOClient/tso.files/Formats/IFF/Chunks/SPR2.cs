@@ -833,7 +833,13 @@ namespace FSO.Files.Formats.IFF.Chunks
                         {
                             DecodeIfRequired(true);
 
-                            return new TextureData<byte>[] { new TextureData<byte>(0, this.ZBufferData) };
+                            var zData = new TextureData<byte>[] { new TextureData<byte>(0, this.ZBufferData) };
+                            // SimsRedux: let go of the depth bytes once they're handed to the texture, same as the
+                            // compressed path above. Only the 3D mesh builder (DGRP.GetDepth) reads them later, and
+                            // that only runs with 3D on. (Not in the keep-everything cache mode: there the packed
+                            // data is gone after decoding, so the bytes couldn't be made again.)
+                            if (!IffFile.RETAIN_CHUNK_DATA && !FSOEnvironment.Enable3D && TimedReferenceController.CurrentType != CacheType.PERMANENT) ZBufferData = null;
+                            return zData;
                         });
                 }
                 ZCache = new WeakReference<Texture2D>(result);

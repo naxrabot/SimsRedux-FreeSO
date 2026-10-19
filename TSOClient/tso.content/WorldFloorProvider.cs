@@ -122,7 +122,7 @@ namespace FSO.Content
             //load *.flr iffs from both the TS1 provider and folder
 
             ushort floorID = 256;
-            var files = new FileProvider<IffFile>(ContentManager, new IffCodec(), new Regex(".*/Floors.*\\.flr"));
+            var files = new FileProvider<IffFile>(ContentManager, new IffCodec(), new Regex(".*/Floors.*\\.flr$") /* (SimsRedux: "$" - not "x.flr.bak") */);
             files.UseTS1 = true;
             var ts1 = new TS1SubProvider<IffFile>(ContentManager.TS1Global, ".flr");
             files.Init();

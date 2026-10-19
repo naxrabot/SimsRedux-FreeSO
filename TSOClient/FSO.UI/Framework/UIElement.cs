@@ -27,6 +27,9 @@ namespace FSO.Client.UI.Framework
     /// </summary>
     public abstract class UIElement : IDepthProvider
     {
+        // SimsRedux: how many times in a row this piece failed to draw / update (see UIContainer), and how many
+        // more frames it's left out for after failing again and again (an error every frame slowed the browser right down)
+        internal int ReduxDrawFails, ReduxDrawSkip, ReduxUpdateFails, ReduxUpdateSkip;
 
         /// <summary>
         /// ID of the element, this is not used by any functional code.

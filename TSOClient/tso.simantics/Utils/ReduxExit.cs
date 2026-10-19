@@ -13,8 +13,6 @@ namespace FSO.SimAntics.Utils
     /// </summary>
     public static class ReduxExit
     {
-        private static readonly ReduxWeakMap<VMRoutine, bool> IsSkillExit = new ReduxWeakMap<VMRoutine, bool>();
-        private static readonly object Lock = new object();
 
         /// <summary>True: answer the script's "should I stop?" with yes (a need is low).</summary>
         public static bool StopSkill(VMStackFrame frame, ushort opcode)
@@ -27,16 +25,7 @@ namespace FSO.SimAntics.Utils
                 if (level < 1) return false;
                 var routine = frame.Global?.Resource?.GetRoutine(opcode) as VMRoutine; // (a global script)
                 if (routine == null) return false;
-                bool skill;
-                lock (Lock)
-                {
-                    if (!IsSkillExit.TryGetValue(routine, out skill))
-                    {
-                        skill = (routine.Chunk?.ChunkLabel ?? "").Equals("Exit Skill Object", StringComparison.OrdinalIgnoreCase);
-                        IsSkillExit[routine] = skill;
-                    }
-                }
-                if (!skill) return false;
+                if (routine.GetReduxKind() != VMRoutine.ReduxKindExitSkill) return false; // (worked out once per script, see VMRoutine.ReduxKind)
                 var sim = frame.Caller as VMAvatar;
                 if (sim == null || sim.IsPet) return false;
                 if (sim.GetPersonData((VMPersonDataVariable)32) != 0) return false; // (visitors: the game's own rules)

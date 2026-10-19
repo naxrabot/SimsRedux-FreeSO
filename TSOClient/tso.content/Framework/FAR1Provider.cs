@@ -127,7 +127,10 @@ namespace FSO.Content.Framework
 
         public T Get(Far1ProviderEntry<T> entry)
         {
-            return Cache.GetOrAdd(entry.FarEntry.Filename, (name) =>
+            // SimsRedux: the cache is keyed by archive + file name, so two archives that both hold a file called
+            // (say) "walls.iff" don't hand back each other's file. Which archive wins a plain-name lookup is still
+            // decided by EntriesByName (last archive loaded), exactly as before.
+            return Cache.GetOrAdd(entry.Archive.ArchivePath + "|" + entry.FarEntry.Filename, (name) =>
             {
                 byte[] data = entry.Archive.GetEntry(entry.FarEntry);
                 using (var stream = new MemoryStream(data, false))
