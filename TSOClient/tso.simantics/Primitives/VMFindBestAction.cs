@@ -339,6 +339,9 @@ namespace FSO.SimAntics.Primitives
                     //TODO: special logic for socials?
                 }
             }
+            // SimsRedux: food that's already made comes first - a hungry Sim finishes their plate, takes a
+            // serving from the group meal or has the leftovers, instead of cooking a whole new meal
+            if (context.VM.TS1) ReduxPreferReadyFood(validActions);
             List<VMPieMenuInteraction> sorted = validActions.OrderByDescending(x => x.Score).ToList();
             sorted = TakeTopActions(sorted, 4);
             var selection = sorted.FirstOrDefault();
@@ -484,6 +487,27 @@ namespace FSO.SimAntics.Primitives
                 Array.Copy(tempXL, thread.TempXL, Math.Min(tempXL.Length, thread.TempXL.Length));
                 sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = hide;
             }
+        }
+
+        private static readonly string[] ReduxCookNames = { "have a meal", "serve meal", "have lite meal" };
+
+        private static void ReduxPreferReadyFood(List<VMPieMenuInteraction> actions)
+        {
+            try
+            {
+                bool ready = false;
+                foreach (var a in actions)
+                {
+                    var name = (a.Name ?? "").ToLowerInvariant();
+                    if (name.StartsWith("have leftovers")) { ready = true; break; }
+                    var label = a.Callee?.Object?.OBJ?.ChunkLabel ?? "";
+                    if (label.StartsWith("Food -", StringComparison.OrdinalIgnoreCase)
+                        && (name == "eat" || name == "serve" || name.StartsWith("grab a slice"))) { ready = true; break; }
+                }
+                if (!ready) return;
+                actions.RemoveAll(a => { var n = (a.Name ?? "").ToLowerInvariant(); return ReduxCookNames.Any(c => n.StartsWith(c)); });
+            }
+            catch (Exception) { }
         }
 
         private List<VMPieMenuInteraction> TakeTopActions(List<VMPieMenuInteraction> list, int count)

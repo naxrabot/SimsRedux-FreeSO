@@ -1426,6 +1426,10 @@ namespace FSO.SimAntics
             {
                 return null;
             }
+            // SimsRedux: Unleashed's Old Town trolley isn't used here - it kept being made in front of every
+            // lot (and taken away a moment later, so it flashed up on the street). It's never made at all now.
+            if (VM.TS1 && (objDefinition.OBJ?.ChunkLabel ?? "").IndexOf("trolley", StringComparison.OrdinalIgnoreCase) >= 0)
+                return null;
 
             var catalog = Content.Content.Get().WorldCatalog;
             var item = catalog.GetItemByGUID(GUID);

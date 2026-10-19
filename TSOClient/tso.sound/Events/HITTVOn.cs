@@ -69,7 +69,7 @@ namespace FSO.HIT.Events
 
             VolumeSet = false;
 
-            if (Instance == null || (IsMusic && MusicInstance.IsEnded()) || Instance.State == SoundState.Stopped)
+            if (Instance == null || (IsMusic && MusicInstance.IsEnded()) || Instance.SafeState() == SoundState.Stopped)
             {
                 if (PlayNext()) return true;
                 else {
@@ -291,7 +291,7 @@ namespace FSO.HIT.Events
         public float Volume { get => Inst.Volume; set => Inst.Volume = value; }
         public float Pan { get => Inst.Pan; set => Inst.Pan = value; }
 
-        public SoundState State => Inst.State;
+        public SoundState State => Inst.SafeState();
 
         public bool IsLooped { get => Inst.IsLooped; set => Inst.IsLooped = value; }
 

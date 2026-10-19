@@ -54,7 +54,7 @@ namespace FSO.HIT
         public void Tick(float time) {
             for (int i = 0; i < SoundEffects.Count; i++) //dispose and remove sound effect instances that are finished
             {
-                if (SoundEffects[i].State != SoundState.Playing)
+                if (SoundEffects[i].SafeState() != SoundState.Playing)
                 {
                     SoundEffects[i].Dispose();
                     SoundEffects.RemoveAt(i--);

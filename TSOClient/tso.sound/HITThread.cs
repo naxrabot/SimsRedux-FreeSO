@@ -113,15 +113,20 @@ namespace FSO.HIT
                 {
                     var note = Notes[i];
                     var inst = note.instance;
-                    if (note.EndTick != -1 && TickN > note.EndTick) inst.Stop();
-                    if (!note.started && inst.State == SoundState.Stopped)
+                    if (inst == null) continue;
+                    try
                     {
-                        if (!inst.IsDisposed) inst.Dispose();
-                        continue;
+                        if (note.EndTick != -1 && TickN > note.EndTick) inst.Stop();
+                        if (!note.started && inst.SafeState() == SoundState.Stopped)
+                        {
+                            if (!inst.IsDisposed) inst.Dispose();
+                            continue;
+                        }
+                        if (Emitter3D == null) inst.Pan = Pan;
+                        else Apply3D(inst);
+                        inst.Volume = Math.Min(1.0f, Volume);
                     }
-                    if (Emitter3D == null) inst.Pan = Pan;
-                    else Apply3D(inst);
-                    inst.Volume = Math.Min(1.0f, Volume);
+                    catch (Exception) { } // (SimsRedux: a sound the browser already cleaned up)
                 }
             }
 
@@ -387,7 +392,7 @@ namespace FSO.HIT
         public bool NoteActive(int note)
         {
             if (note == -1 || note >= Notes.Count) return false;
-            return !Notes[note].started || (Notes[note].instance.State != SoundState.Stopped);
+            return !Notes[note].started || (Notes[note].instance.SafeState() != SoundState.Stopped);
         }
 
         /// <summary>
@@ -495,7 +500,7 @@ namespace FSO.HIT
             {
                 // SimsRedux: a sound that has already gone (the browser drops finished sounds) is skipped,
                 // instead of stopping the whole game when it pauses or carries on
-                try { if (note.instance != null && note.instance.State != SoundState.Stopped) note.instance.Pause(); }
+                try { if (note.instance != null && note.instance.SafeState() != SoundState.Stopped) note.instance.Pause(); }
                 catch (System.Exception) { }
             }
         }
@@ -507,7 +512,7 @@ namespace FSO.HIT
             {
                 // SimsRedux: a sound that has already gone (the browser drops finished sounds) is skipped,
                 // instead of stopping the whole game when it pauses or carries on
-                try { if (note.instance != null && note.instance.State != SoundState.Stopped) note.instance.Resume(); }
+                try { if (note.instance != null && note.instance.SafeState() != SoundState.Stopped) note.instance.Resume(); }
                 catch (System.Exception) { }
             }
         }
