@@ -150,7 +150,9 @@ namespace FSO.SimAntics.Utils
                     {
                         var ava = a as VMAvatar;
                         if (ava == null) continue;
-                        if (fam != null && !fam.RuntimeSubset.Contains(ava.Object.OBJ.GUID)) continue;
+                        // (by the family number every game has - the family's "who's here" list isn't saved, so a
+                        //  player joining part way would see it empty)
+                        if (fam != null && ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != fam.ChunkID) continue;
                         var c = ava.GetPersonData(VMPersonDataVariable.JobType);
                         if (c > 0 && Works(c, day)) return 0;
                     }

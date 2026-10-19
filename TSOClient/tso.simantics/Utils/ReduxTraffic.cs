@@ -38,6 +38,9 @@ namespace FSO.SimAntics.Utils
         private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; }
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars> Seen = new System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars>();
 
+        /// <summary>The lot was loaded again (a resync, an undo): the cars are looked for again straight away.</summary>
+        public static void Forget(VM vm) { if (vm != null) Seen.Remove(vm); }
+
         public static void Tick(VM vm)
         {
             try

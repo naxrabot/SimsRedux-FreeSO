@@ -198,8 +198,6 @@ namespace FSO.SimAntics.Utils
                     held.SetValue(VMStackObjectVariable.Graphic, CookedGraphic);
                     return;
                 }
-                // none left after all (eaten by someone else on the way): don't make a meal out of nothing
-                if (held == null && !action.NotifyIdle && Stored(ava.Thread.Context.VM) <= 0) ava.Thread.CancelAction(action.UID);
             }
             catch (Exception e) { Console.WriteLine("[SimsRedux] leftovers: " + e.Message); }
         }
