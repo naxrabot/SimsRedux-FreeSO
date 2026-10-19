@@ -42,6 +42,8 @@
         DynamicCostume = 25,
         signnotepad = 26,
 
+        ReduxCostume = 40, // SimsRedux: the costume picked in Create-a-Sim (person strings 35; the game's own scripts never use it)
+
         FSOInvisible = 128,
 
         Head = 65535 //internal

@@ -6,9 +6,10 @@ using FSO.SimAntics.Engine.Scopes;
 namespace FSO.SimAntics.NetPlay.Model.Commands
 {
     /// <summary>
-    /// SimsRedux: a Sim changes into one of their own outfits (click your Sim: Change Into...). The
-    /// outfits are the ones picked in Create-A-Sim (everyday, formal, swimwear, sleepwear, outdoors,
-    /// high fashion). Only ever the Sim sending it (on an online lot: a player's own Sim).
+    /// SimsRedux: a Sim changes into one of their own outfits (click your Sim: Change Into..., or a dresser:
+    /// Change into Costume / Change Back). The outfits are the ones picked in Create-A-Sim (everyday, formal,
+    /// swimwear, sleepwear, outdoors, high fashion, costume). Only ever the Sim sending it (on an online lot: a
+    /// player's own Sim - the lot sets who sent it).
     /// </summary>
     public class VMNetReduxOutfitCmd : VMNetCommandBodyAbstract
     {
@@ -18,7 +19,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public static readonly ushort[] Allowed =
         {
             (ushort)VMPersonSuits.DefaultDaywear, (ushort)VMPersonSuits.TS1Formal, (ushort)VMPersonSuits.DefaultSwimwear,
-            (ushort)VMPersonSuits.DefaultSleepwear, (ushort)VMPersonSuits.TS1Winter, (ushort)VMPersonSuits.TS1HighFashion
+            (ushort)VMPersonSuits.DefaultSleepwear, (ushort)VMPersonSuits.TS1Winter, (ushort)VMPersonSuits.TS1HighFashion,
+            (ushort)VMPersonSuits.ReduxCostume
         };
 
         public override bool Execute(VM vm, VMAvatar caller)

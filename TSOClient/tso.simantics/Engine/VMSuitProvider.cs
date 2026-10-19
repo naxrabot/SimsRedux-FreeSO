@@ -192,6 +192,9 @@ namespace FSO.SimAntics.Engine
                 case VMPersonSuits.TS1HighFashion: //person strings 34 (h###)
                     if (IsValid(bodyStrings.GetString(34))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(34), false); // (SimsRedux: an empty one made the Sim invisible - they keep what they wear)
                     break;
+                case VMPersonSuits.ReduxCostume: //SimsRedux: person strings 35 - the costume picked in Create-a-Sim (none: they keep what they wear)
+                    if (IsValid(bodyStrings.GetString(CostumeString))) toHandCopy = new VMOutfitReference(bodyStrings.GetString(CostumeString), false);
+                    break;
             }
 
             if (toHandCopy == null) return null;
@@ -211,6 +214,21 @@ namespace FSO.SimAntics.Engine
         private static bool IsValid(string suitName)
         {
             return !(suitName == null || suitName == "" || suitName == "ADDED");
+        }
+
+        /// <summary>SimsRedux: the person string a Sims 1 Sim keeps their costume in (after the game's own 0-34;
+        /// Sims made before it have none - SimitoneNeighbourGenerator adds it).</summary>
+        public const int CostumeString = 35;
+
+        /// <summary>SimsRedux: does this Sim have a costume (picked in Create-a-Sim)?</summary>
+        public static bool HasCostume(VMAvatar avatar)
+        {
+            try
+            {
+                var bodyStrings = avatar?.Object.Resource.Get<STR>(avatar.Object.OBJ.BodyStringID);
+                return bodyStrings != null && IsValid(bodyStrings.GetString(CostumeString));
+            }
+            catch { return false; }
         }
 
         public static object GetSuit(VMStackFrame context, VMSuitScope scope, ushort id)

@@ -24,12 +24,17 @@ namespace FSO.Content.TS1
     ///
     /// The Sims 1 side only knows outfits by name, so each TSO outfit gets a stable Sims 1-style name that is
     /// saved in character files as text, like any other outfit:
-    ///   bodies  b{nnn}{f|m}a{fit|fat|skn}_xtso{key}    texture b{nnn}{f|m}a{build}{lgt|med|drk}_xtso{key}
+    ///   bodies  {o}{nnn}{f|m}a{fit|fat|skn}_xtso{key}  texture {o}{nnn}{f|m}a{build}{lgt|med|drk}_xtso{key}
     ///   heads   c{nnn}{f|m}a_xtso{key}                  texture c{nnn}{f|m}a{lgt|med|drk}_xtso{key}
-    /// (nnn: TSO's own number for it; key: 8 hex digits worked out from TSO's own name for the outfit, so the name
+    /// (o: the occasion, as Sims 1 names its outfits - f formal, s swimwear, l sleepwear, b everyday and costumes;
+    /// nnn: TSO's own number for it; key: 8 hex digits worked out from TSO's own name for the outfit, so the name
     /// never changes and never clashes with a Sims 1 or downloaded one). It follows the Sims 1 pattern on purpose:
     /// the body type is where Create-a-Sim, the wardrobe and the occasion outfits look for it, and a game without
-    /// these files gives the Sim a Sims 1 stand-in of the same kind (ReduxAvatarFallback) while keeping the name.
+    /// these files gives the Sim a Sims 1 stand-in of the same kind and occasion (ReduxAvatarFallback; a costume
+    /// gets an everyday one) while keeping the name.
+    /// The few TSO outfits made in more than one body size (the same textures and meshes for fit, fat and skinny)
+    /// share one key and number, so Create-a-Sim shows them once with its size buttons, like the Sims 1 ones. The
+    /// names 13.5 gave them (all "b", one key per size) are still found (Find), so Sims saved then keep them.
     /// The skin tone travels in the texture name (as in Sims 1): Avatar.AddAppearance swaps in the appearance
     /// made for that skin tone (ForSkin), since a TSO outfit's parts can change with the skin.
     ///
@@ -48,6 +53,9 @@ namespace FSO.Content.TS1
         public const string BodyFilePrefix = "xtsob~";
         public const string HeadFilePrefix = "xtsoh~";
         public static readonly string[] Skins = { "lgt", "med", "drk" };
+        /// <summary>The Create-a-Sim occasion of a costume (a Sims 1 Sim keeps one, as person string 35 - see
+        /// VMSuitProvider). Its name starts with "b", so without these files it gets an everyday stand-in.</summary>
+        public const char CostumeKind = 'x';
 
         /// <summary>One mesh of an outfit with its texture (both "xtsob~"/"xtsoh~" names) and the bone it hangs off.</summary>
         public class Part
@@ -63,15 +71,23 @@ namespace FSO.Content.TS1
             public string TsoName;
             /// <summary>The TSO collection it was found in first ("costumes_female").</summary>
             public string Collection;
+            /// <summary>Every TSO collection it's in.</summary>
+            public List<string> Collections = new List<string>();
             public bool Head;
             /// <summary>'f' or 'm'.</summary>
             public char Gender;
-            /// <summary>The Create-a-Sim occasion: 'b' everyday, 'f' formal, 's' swimwear, 'l' sleepwear ('c' for heads).</summary>
+            /// <summary>The Create-a-Sim occasion: 'b' everyday, 'f' formal, 's' swimwear, 'l' sleepwear,
+            /// CostumeKind costume ('c' for heads).</summary>
             public char Kind;
             /// <summary>fit, fat or skn (bodies; "" for heads).</summary>
             public string Build;
             /// <summary>Its Sims 1-style appearance name (no ".apr").</summary>
             public string Name;
+            /// <summary>The name 13.5 gave it, when that was different (still found by Find).</summary>
+            public string OldName;
+            /// <summary>The same outfit in the other body sizes (including this one; null: it only comes in one).</summary>
+            public List<TSOOutfit> Sizes;
+            internal string Number;
             /// <summary>Its parts for each skin tone (lgt, med, drk).</summary>
             public Part[][] Parts = new Part[3][];
             /// <summary>The part whose texture changes with the skin tone (what the texture name stands for).</summary>
@@ -91,6 +107,8 @@ namespace FSO.Content.TS1
         public int MeshCount, TextureCount, Skipped;
 
         private readonly Dictionary<string, TSOOutfit> ByName = new Dictionary<string, TSOOutfit>();
+        /// <summary>The names 13.5 gave outfits that are named differently now (they're in saved Sims).</summary>
+        private readonly Dictionary<string, TSOOutfit> OldNames = new Dictionary<string, TSOOutfit>();
         private readonly List<TSOOutfit> All = new List<TSOOutfit>();
         private readonly Dictionary<string, Tuple<Far3, Far3.Entry>> MeshEntries = new Dictionary<string, Tuple<Far3, Far3.Entry>>();
         private readonly Dictionary<string, Tuple<Far3, Far3.Entry>> TexEntries = new Dictionary<string, Tuple<Far3, Far3.Entry>>();
@@ -163,11 +181,29 @@ namespace FSO.Content.TS1
 
         public int Count { get { return All.Count; } }
 
+        /// <summary>
+        /// The outfits a dresser offers a Sim for one occasion ('b' everyday, 'f', 's', 'l'): grown-ups only, the
+        /// Sim's gender and build, in loading order. Only what the content stamp covers decides it (the archives'
+        /// file lists), so a lot worker and its players get the same list.
+        /// </summary>
+        public List<TSOOutfit> ForDresser(char gender, string build, char kind)
+        {
+            build = (build ?? "").ToLowerInvariant();
+            return All.Where(x => !x.Head && x.Gender == gender && x.Build == build && x.Kind == kind).ToList();
+        }
+
         public TSOOutfit Find(string name)
         {
             TSOOutfit o;
             name = NoExt(name, ".apr");
-            return ByName.TryGetValue(name, out o) ? o : null;
+            if (ByName.TryGetValue(name, out o)) return o;
+            return OldNames.TryGetValue(name, out o) ? o : null;
+        }
+
+        /// <summary>The first letter of a TSO outfit's name for an occasion (what a stand-in is picked by).</summary>
+        public static char NameLetter(char kind)
+        {
+            return (kind == 'f' || kind == 's' || kind == 'l') ? kind : 'b';
         }
 
         /// <summary>The appearance by its Sims 1-style name (light skin; ForSkin gives the others). Null: not known.</summary>
@@ -347,8 +383,10 @@ namespace FSO.Content.TS1
             Open.Clear();
         }
 
-        // collections and the occasion their outfits are for ('\0': not used). Everything else in TSO
-        // (costumes, togas, sports, uniforms, the old west...) is everyday wear.
+        // collections and the occasion their outfits are for ('\0': not used). Costumes: TSO's costumes, old
+        // world, sci-fi, togas, Vaudeville and the old west, Vegas, and its work uniforms (dressing-up and
+        // role-play clothes - a Sims 1 Sim already changes into their own job's uniform for work). Everything
+        // else - TSO's everyday clothes and its sportswear (jerseys, softball and track kit) - is everyday wear.
         private static char OccasionOf(string collection, bool head)
         {
             if (collection.Contains("internal") || collection.StartsWith("naked")) return '\0';
@@ -356,7 +394,65 @@ namespace FSO.Content.TS1
             if (collection.StartsWith("formalwear") || collection.StartsWith("wedding")) return 'f';
             if (collection.StartsWith("swimwear")) return 's';
             if (collection.StartsWith("sleepwear")) return 'l';
+            foreach (var c in CostumeCollections) if (collection.StartsWith(c)) return CostumeKind;
             return 'b';
+        }
+
+        private static readonly string[] CostumeCollections = { "costumes", "oldworld", "scifi", "toga", "vaudwest", "vegas", "uniforms" };
+
+        // which occasion wins when an outfit is in more than one collection
+        private static int Rank(char kind)
+        {
+            return kind == 'b' ? 0 : kind == CostumeKind ? 1 : 2;
+        }
+
+        // costumes TSO keeps with its everyday clothes ("ea_..." collections): those it names as costumes itself
+        // ("fab710_ct", "fab110_ct-luau-01" - its House Party ones), and the unmistakable ones (superheroes,
+        // knights, animal suits, robots, a legionary, Cleopatra, a mime...)
+        private static readonly Regex CostumeNameRx = new Regex(
+            "^[mf]ab\\d{3}_(ct([_-]|$)|hero|ironhero|caped|capeggplant|trident|supersim$|cleo$|legio$|quelknight|infoverlord$|hypnotist$|robot$|bears$|polarbear$|mnst$|purpgorilla$|mime_)",
+            RegexOptions.Compiled);
+
+        /// <summary>Is this TSO outfit name (TSO's own, "fab113_ct__tragclown") a costume by its name alone?</summary>
+        public static bool IsCostumeName(string tsoName)
+        {
+            return tsoName != null && CostumeNameRx.IsMatch(tsoName.ToLowerInvariant());
+        }
+
+        // a TSO file name without its number and body size ("xtsob~ct_uf_b852fafitlgt_military_01" -> "ct_uf_*_military_01")
+        private static readonly Regex SizeRx = new Regex("b\\d{3}[mf]a(fit|fat|skn)(lgt|med|drk)?", RegexOptions.Compiled);
+        private static string NoSize(string file)
+        {
+            file = file ?? "";
+            var t = file.IndexOf('~');
+            if (t >= 0) file = file.Substring(t + 1);
+            return SizeRx.Replace(file, "*");
+        }
+
+        /// <summary>
+        /// TSO made a few outfits in more than one body size: the same meshes and textures (apart from the number
+        /// and size in their file names) for fit, fat and skinny, as separate outfits ("fab851_uf__military_01" fat,
+        /// "fab852_..." fit, "fab853_..." skinny). They get one key (from those shared file names) and the lowest
+        /// number, so their names only differ in the size - what Create-a-Sim groups by. Only when each size is
+        /// there once, for the same gender and occasion.
+        /// </summary>
+        private static void SizeGroups(List<TSOOutfit> outfits)
+        {
+            var groups = outfits.GroupBy(o => o.Gender + "|" + o.Kind + "|"
+                + string.Join("+", o.Parts[0].Select(p => NoSize(p.Mesh) + "=" + NoSize(p.Texture)))).ToList();
+            foreach (var g in groups)
+            {
+                var list = g.ToList();
+                if (list.Count < 2 || !g.Key.Contains("*") || list.Select(x => x.Build).Distinct().Count() != list.Count) continue;
+                var key = Key("size|" + g.Key);
+                var number = list.Select(x => x.Number).OrderBy(x => x, StringComparer.Ordinal).First();
+                foreach (var o in list)
+                {
+                    o.Number = number;
+                    o.Name = NameLetter(o.Kind) + number + o.Gender + "a" + o.Build + Marker + key;
+                    o.Sizes = list;
+                }
+            }
         }
 
         // the order they're listed in: TSO's everyday clothes first, then the rest
@@ -440,8 +536,10 @@ namespace FSO.Content.TS1
                             TSOOutfit known;
                             if (found.TryGetValue(oe.ID, out known))
                             {
-                                // in more than one collection: a special occasion wins over everyday
-                                if (known.Kind == 'b' && kind != 'b') known.Kind = kind;
+                                // in more than one collection: an occasion (formal, swimwear, sleepwear) wins over
+                                // costume, and that over everyday
+                                if (!known.Collections.Contains(c.name)) known.Collections.Add(c.name);
+                                if (Rank(kind) > Rank(known.Kind)) known.Kind = kind;
                                 continue;
                             }
                             var tsoName = NoExt(oe.Name, ".oft");
@@ -450,6 +548,7 @@ namespace FSO.Content.TS1
                             var oft = new Outfit();
                             using (var str = new MemoryStream(fars["outfits"].Read(oe), false)) oft.Read(str);
                             var o = new TSOOutfit { TsoName = tsoName, Collection = c.name, Head = head, Gender = tsoName[0], Kind = kind };
+                            o.Collections.Add(c.name);
                             found[oe.ID] = o;
                             oftIDs[o] = oft;
                             newOutfits.Add(o);
@@ -459,6 +558,7 @@ namespace FSO.Content.TS1
                 }
 
                 // outfits -> one appearance per skin tone -> bindings -> mesh + texture
+                var ready = new List<TSOOutfit>();
                 foreach (var o in newOutfits)
                 {
                     var oft = oftIDs[o];
@@ -481,19 +581,30 @@ namespace FSO.Content.TS1
 
                     var main = o.Parts[0][o.Primary];
                     var num = NumberRx.Match(o.TsoName);
-                    var number = num.Success ? num.Groups[1].Value : "900";
+                    o.Number = num.Success ? num.Groups[1].Value : "900";
+                    // (costumes TSO keeps with its everyday clothes)
+                    if (!head && o.Kind == 'b' && IsCostumeName(o.TsoName)) o.Kind = CostumeKind;
                     if (head)
                     {
                         o.Build = "";
-                        o.Name = "c" + number + o.Gender + "a" + Marker + Key(o.TsoName);
+                        o.Name = "c" + o.Number + o.Gender + "a" + Marker + Key(o.TsoName);
                     }
                     else
                     {
                         var b = BuildRx.Match(main.Texture);
                         if (!b.Success) b = BuildRx.Match(main.Mesh);
                         o.Build = b.Success ? b.Groups[1].Value : "fit";
-                        o.Name = "b" + number + o.Gender + "a" + o.Build + Marker + Key(o.TsoName);
+                        o.Name = NameLetter(o.Kind) + o.Number + o.Gender + "a" + o.Build + Marker + Key(o.TsoName);
+                        o.OldName = "b" + o.Number + o.Gender + "a" + o.Build + Marker + Key(o.TsoName);
                     }
+                    ready.Add(o);
+                }
+
+                // the same outfit in other body sizes: one key and number for all of them (see SizeGroups)
+                if (!head) SizeGroups(ready);
+
+                foreach (var o in ready)
+                {
                     if (ByName.ContainsKey(o.Name))
                     {
                         Skipped++;
@@ -503,6 +614,11 @@ namespace FSO.Content.TS1
                     ByName[o.Name] = o;
                     All.Add(o);
                 }
+                // (the names 13.5 saved, for those named differently now)
+                foreach (var o in ready)
+                    if (o.OldName != null && o.OldName != o.Name && ByName.ContainsKey(o.Name) && ByName[o.Name] == o
+                        && !ByName.ContainsKey(o.OldName) && !OldNames.ContainsKey(o.OldName))
+                        OldNames[o.OldName] = o;
             }
             finally
             {

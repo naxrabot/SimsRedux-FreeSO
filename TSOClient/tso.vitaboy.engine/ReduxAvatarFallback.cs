@@ -11,7 +11,7 @@ namespace FSO.Vitaboy
     /// out of the game, a uniform the game files don't have) - instead of being drawn pitch black or not
     /// at all:
     ///   - a missing texture: another texture made for the same outfit (any skin tone), else the mesh's own
-    ///   - a missing outfit: the first everyday outfit of the same kind (same gender, age and build)
+    ///   - a missing outfit: one for the same occasion (else an everyday one) of the same kind (same gender, age and build)
     /// Each fallback is worked out once and remembered.
     /// </summary>
     public static class ReduxAvatarFallback
@@ -171,8 +171,8 @@ namespace FSO.Vitaboy
         }
 
         /// <summary>
-        /// An outfit (appearance name, texture) that exists, for one that doesn't: the first of the same
-        /// kind ("b" bodies or "c" heads, same gender/age/build), in the same skin tone.
+        /// An outfit (appearance name, texture) that exists, for one that doesn't: one of the same kind ("c"
+        /// heads, or bodies for the same occasion - same gender/age/build), in the same skin tone.
         /// </summary>
         public static Tuple<string, string> Outfit(string appearance, string texture)
         {
@@ -192,13 +192,23 @@ namespace FSO.Vitaboy
                 var us = name.IndexOf('_');
                 var type = (us > d) ? name.Substring(d, us - d) : "";
                 foreach (var s in new[] { "lgt", "med", "drk" }) if (type.EndsWith(s)) type = type.Substring(0, type.Length - 3);
-                var kind = (name.Length > 0 && (name[0] == 'c' || name[0] == 'b')) ? name[0].ToString() : "b";
-                FSO.Content.TS1.TS1ClothingCollection col;
-                if (type.Length >= 2 && content.BCFGlobal != null && content.BCFGlobal.CollectionsByName.TryGetValue(kind, out col))
+                // (the occasion is the first letter, as Sims 1 names them - f formal, s swimwear, l sleepwear,
+                //  w outdoors, h high fashion: a stand-in for the same occasion, else an everyday one. The Sims
+                //  Online's outfits are named the same way, their costumes with a "b" - see ReduxTSOAvatars)
+                var kind = (name.Length > 0 && "cbfslwh".IndexOf(name[0]) >= 0) ? name[0].ToString() : "b";
+                FSO.Content.TS1.TS1ClothingCollection col = null;
+                List<string> list = null;
+                if (type.Length >= 2 && content.BCFGlobal != null)
+                    foreach (var occasion in (kind == "c" || kind == "b") ? new[] { kind } : new[] { kind, "b" })
+                    {
+                        if (!content.BCFGlobal.CollectionsByName.TryGetValue(occasion, out col) || col == null) continue;
+                        list = col.GeneralAvatarType(type);
+                        if (list.Count == 0) list = col.GeneralAvatarType(type.Substring(0, 2));
+                        if (list.Count > 0) break;
+                    }
+                if (list != null && list.Count > 0)
                 {
                     var skin = SkinOf(texture);
-                    var list = col.GeneralAvatarType(type);
-                    if (list.Count == 0) list = col.GeneralAvatarType(type.Substring(0, 2));
                     var names = AllTextures();
                     // (each missing outfit gets its own stand-in, picked by its name - the first one in the list
                     //  for everyone made every Sim with a missing head look like the same old lady)

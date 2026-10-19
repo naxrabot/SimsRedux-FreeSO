@@ -43,7 +43,10 @@ namespace FSO.SimAntics.Utils
             }
             
             var col = Content.Content.Get().BCFGlobal.CollectionsByName[collectionType];
-            var bodies = col.ClothesByAvatarType[simtype];
+            // (SimsRedux: a copy - the ones without a picture are taken out below, and that used to take them out of
+            //  the game's own list for good, for every Sim; a Sim type with none of this kind has an empty list)
+            List<string> ofType;
+            var bodies = col.ClothesByAvatarType.TryGetValue(simtype, out ofType) ? ofType.ToList() : new List<string>();
 
             var tex = (TS1AvatarTextureProvider)Content.Content.Get().AvatarTextures;
             var texnames = tex.GetAllNames();
@@ -66,6 +69,19 @@ namespace FSO.SimAntics.Utils
                         handgroupTex[i]
                         ));
                 }
+            }
+
+            // SimsRedux: then The Sims Online's for this occasion (grown-ups of this gender and build; everyday, formal,
+            // swimwear, sleepwear - not its costumes), after the Sims 1 ones, with the Sims 1 hands in the Sim's skin
+            // tone. Only when this game loaded them - which the lot's content stamp makes the same for a lot worker
+            // and all its players, so everyone builds the same list (the dresser picks from it by number).
+            var tso = Content.Content.Get().ReduxTSOAvatarSet;
+            var type = (simtype ?? "").ToLowerInvariant();
+            if (tso != null && avatar != null && !avatar.IsPet && outfitType >= 0 && outfitType <= 3 && type.Length == 5 && type[1] == 'a')
+            {
+                var tsoSkin = (ReduxTSOAvatars.SkinIndex(skin) >= 0) ? skin.ToLowerInvariant() : "lgt";
+                foreach (var o in tso.ForDresser(type[0], type.Substring(2), OutfitTypes[outfitType][0]))
+                    result.Add(new Tuple<string, string>(o.Name + ",BODY=" + o.TextureName(tsoSkin), tsoSkin));
             }
 
             return result.ToArray();

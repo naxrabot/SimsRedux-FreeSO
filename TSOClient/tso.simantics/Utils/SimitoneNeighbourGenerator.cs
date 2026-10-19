@@ -57,6 +57,10 @@ namespace FSO.SimAntics.Utils
             var bodyStrings = tempObj.Resource.Get<STR>(200);
             foreach (var item in info.BodyStringReplace)
             {
+                // SimsRedux: a string past the template's own (the costume, 35) is added - it used to be dropped.
+                // (An empty one there needs nothing.)
+                if (item.Key >= bodyStrings.Length && !string.IsNullOrEmpty(item.Value))
+                    while (bodyStrings.Length <= item.Key) bodyStrings.InsertString(bodyStrings.Length, new STRItem(""));
                 bodyStrings.SetString(item.Key, item.Value);
             }
 
@@ -220,6 +224,7 @@ namespace FSO.SimAntics.Utils
                 {32, "l100"+code+"_original,BODY=l100"+code+skin+"_original" },
                 {33, "w100"+code+"_original,BODY=w100"+code+skin+"_original" },
                 {34, (Child)?"ADDED":("h533"+code+"_zoot,BODY=h533"+code+skin+"_zoot") },
+                {35, "" }, // SimsRedux: the costume (none unless one is picked - the template keeps the last Sim's)
             };
 
             Gender = (short)((gender == 'f') ? 1 : 0);
