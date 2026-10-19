@@ -106,6 +106,7 @@ namespace FSO.SimAntics.Utils
             var oldSuit = bodyStrings.GetString(bsInd).Split(';')[0];
             var prevInd = Array.FindIndex(validSuits, x => x.Item1.ToLowerInvariant() == bodyStrings.GetString(bsInd).Split(';')[0].ToLowerInvariant());
 
+            if (newIndex < 0 || newIndex >= validSuits.Length) return (short)prevInd; // (SimsRedux: an outfit number this game's list doesn't have - keep the current one instead of crashing)
             var newSuit = validSuits[newIndex];
             bodyStrings.SetString(bsInd, newSuit.Item1, STRLangCode.EnglishUS);
 
