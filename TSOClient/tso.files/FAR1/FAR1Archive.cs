@@ -28,6 +28,14 @@ namespace FSO.Files.FAR1
         }
 
         /// <summary>
+        /// SimsRedux: the archive file's size in bytes.
+        /// </summary>
+        public long ArchiveLength
+        {
+            get { lock (m_Reader) return m_Reader.BaseStream.Length; }
+        }
+
+        /// <summary>
         /// The offset into the archive of the manifest.
         /// </summary>
         public uint ManifestOffset

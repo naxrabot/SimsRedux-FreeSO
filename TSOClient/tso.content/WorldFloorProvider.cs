@@ -127,10 +127,24 @@ namespace FSO.Content
             var ts1 = new TS1SubProvider<IffFile>(ContentManager.TS1Global, ".flr");
             files.Init();
             ts1.Init();
-            var compo = new CompositeProvider<IffFile>(new List<IContentProvider<IffFile>>() {
+            var sources = new List<IContentProvider<IffFile>>() {
                 ts1,
                 files
-                });
+                };
+            // SimsRedux: The Sims Online's floors come after all the Sims 1 and custom ones (so those keep
+            // the same numbers whether or not TSO is loaded). Lots save them by name ("tso_..."), not number.
+            if (Content.HasTSO)
+            {
+                try
+                {
+                    var tso = new TS1.ReduxTSOFarProvider(ContentManager, "floors", ".flr");
+                    tso.InitTSO();
+                    sources.Add(tso);
+                    Content.ReduxAddTSOStamp(tso.ArchiveCount, tso.ArchiveBytes);
+                }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] Sims Online floors couldn't be loaded: " + e.Message); }
+            }
+            var compo = new CompositeProvider<IffFile>(sources);
 
             Floors = compo;
             var all = compo.ListGeneric();
@@ -266,6 +280,69 @@ namespace FSO.Content
         }
         private HashSet<ushort> ReduxRuntime = new HashSet<ushort>();
 
+        /// <summary>
+        /// SimsRedux: a lot names a floor this game doesn't have (a missing download, or The Sims Online's
+        /// files aren't loaded). It gets a plain grey stand-in registered under that same name, so saving the
+        /// lot keeps the name - the real one is back once its file is. Stand-ins are never offered in the
+        /// catalog. Returns its ID (the existing one if the name is known).
+        /// </summary>
+        public ushort ReduxAddPlaceholder(string name)
+        {
+            name = (name ?? "").ToLowerInvariant();
+            ushort existing;
+            if (DynamicFloorFromID.TryGetValue(name, out existing)) return existing;
+            var look = PlaceholderLook();
+            if (look == null) throw new InvalidDataException("no floor to make a stand-in from");
+            var id = (ushort)NumFloors;
+            if (id >= 65000) throw new InvalidOperationException("too many floors");
+            NumFloors++;
+            ById[id] = new Floor { ID = id, Far = look.Far, Medium = look.Medium, Near = look.Near };
+            Entries[id] = new FloorReference(this) { ID = id, FileName = name + ".flr", Name = "Missing floor", Price = 0, Description = name };
+            DynamicFloorFromID[name] = id;
+            ReduxRuntime.Add(id);
+            ReduxPlaceholders.Add(id);
+            Console.WriteLine("[SimsRedux] floor '" + name + "' is missing - a grey stand-in keeps its place");
+            return id;
+        }
+        private HashSet<ushort> ReduxPlaceholders = new HashSet<ushort>();
+        private Floor ReduxPlaceholderFloor;
+
+        /// <summary>A grey copy of one of the game's own floors (or, failing that, the floor itself).</summary>
+        private Floor PlaceholderLook()
+        {
+            if (ReduxPlaceholderFloor != null) return ReduxPlaceholderFloor;
+            try
+            {
+                var src = FSO.Common.IO.FSOFile.ReadAllBytes(ReduxGlobalsPath);
+                for (ushort p = 1; p < 16 && ReduxPlaceholderFloor == null; p++)
+                {
+                    try
+                    {
+                        var bytes = ReduxPatternFile.MakeTinted(src, "SPR2", new List<Tuple<ushort, ushort>> {
+                            Tuple.Create(p, (ushort)1), Tuple.Create((ushort)(p + 256), (ushort)257), Tuple.Create((ushort)(p + 512), (ushort)513) },
+                            WorldWallProvider.ReduxGrey, "Missing floor", 0, "");
+                        var iff = new IffFile();
+                        using (var ms = new MemoryStream(bytes)) iff.Read(ms);
+                        var far = iff.Get<SPR2>(1); var medium = iff.Get<SPR2>(257); var near = iff.Get<SPR2>(513);
+                        if (far != null && medium != null && near != null)
+                        {
+                            far.FloorCopy = 1; medium.FloorCopy = 1; near.FloorCopy = 1;
+                            ReduxPlaceholderFloor = new Floor { Far = far, Medium = medium, Near = near };
+                        }
+                    }
+                    catch (InvalidDataException) { } // (that pattern isn't there: try the next)
+                }
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] grey stand-in floor: " + e.Message); }
+            if (ReduxPlaceholderFloor == null)
+            {
+                // the game's own first floor as it is
+                foreach (var f in ById.Values)
+                    if (f.ID > 0 && f.ID < 256 && f.Near != null && f.Medium != null && f.Far != null) { ReduxPlaceholderFloor = f; break; }
+            }
+            return ReduxPlaceholderFloor;
+        }
+
 
         public Texture2D GetFloorThumb(ushort id, GraphicsDevice device)
         {
@@ -368,7 +445,9 @@ namespace FSO.Content
 
         public List<IContentReference<Floor>> List()
         {
-            return new List<IContentReference<Floor>>(Entries.Values);
+            // (SimsRedux: stand-ins for missing floors are never offered)
+            if (ReduxPlaceholders.Count == 0) return new List<IContentReference<Floor>>(Entries.Values);
+            return new List<IContentReference<Floor>>(Entries.Values.Where(x => !ReduxPlaceholders.Contains((ushort)x.ID)));
         }
 
         public Floor Get(string name)

@@ -200,10 +200,24 @@ namespace FSO.Content
             var ts1 = new TS1SubProvider<IffFile>(ContentManager.TS1Global, ".wll");
             files.Init();
             ts1.Init();
-            var compo =  new CompositeProvider<IffFile>(new List<IContentProvider<IffFile>>() {
+            var sources = new List<IContentProvider<IffFile>>() {
                 ts1,
                 files
-                });
+                };
+            // SimsRedux: The Sims Online's wallpapers come after all the Sims 1 and custom ones (so those keep
+            // the same numbers whether or not TSO is loaded). Lots save them by name ("tso_..."), not number.
+            if (Content.HasTSO)
+            {
+                try
+                {
+                    var tso = new TS1.ReduxTSOFarProvider(ContentManager, "walls", ".wll");
+                    tso.InitTSO();
+                    sources.Add(tso);
+                    Content.ReduxAddTSOStamp(tso.ArchiveCount, tso.ArchiveBytes);
+                }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] Sims Online walls couldn't be loaded: " + e.Message); }
+            }
+            var compo =  new CompositeProvider<IffFile>(sources);
 
             Walls = compo;
             var all = compo.ListGeneric();
@@ -350,6 +364,73 @@ namespace FSO.Content
         }
         private HashSet<ushort> ReduxRuntime = new HashSet<ushort>();
 
+        /// <summary>
+        /// SimsRedux: a lot names a wallpaper this game doesn't have (a missing download, or The Sims Online's
+        /// files aren't loaded). It gets a plain grey stand-in registered under that same name, so the walls
+        /// still look like walls and saving the lot keeps the name - the real one is back once its file is.
+        /// Stand-ins are never offered in the catalog. Returns its ID (the existing one if the name is known).
+        /// </summary>
+        public ushort ReduxAddPlaceholder(string name)
+        {
+            name = (name ?? "").ToLowerInvariant();
+            ushort existing;
+            if (DynamicWallFromID.TryGetValue(name, out existing)) return existing;
+            var look = PlaceholderLook();
+            if (look == null) throw new InvalidDataException("no wallpaper to make a stand-in from");
+            var id = (ushort)NumWalls;
+            if (id >= 65000) throw new InvalidOperationException("too many wallpapers");
+            NumWalls++;
+            ById[id] = new Wall { ID = id, Far = look.Far, Medium = look.Medium, Near = look.Near };
+            Entries[id] = new WallReference(this) { ID = id, FileName = name + ".wll", Name = "Missing wallpaper", Price = 0, Description = name };
+            DynamicWallFromID[name] = id;
+            ReduxRuntime.Add(id);
+            ReduxPlaceholders.Add(id);
+            Console.WriteLine("[SimsRedux] wallpaper '" + name + "' is missing - a grey stand-in keeps its place");
+            return id;
+        }
+        private HashSet<ushort> ReduxPlaceholders = new HashSet<ushort>();
+        private Wall ReduxPlaceholderWall;
+
+        /// <summary>A grey copy of one of the game's own wallpapers (or, failing that, the wallpaper itself).</summary>
+        private Wall PlaceholderLook()
+        {
+            if (ReduxPlaceholderWall != null) return ReduxPlaceholderWall;
+            try
+            {
+                var src = FSO.Common.IO.FSOFile.ReadAllBytes(ReduxGlobalsPath);
+                for (ushort p = 1; p < 16 && ReduxPlaceholderWall == null; p++)
+                {
+                    try
+                    {
+                        var bytes = ReduxPatternFile.MakeTinted(src, "SPR#", new List<Tuple<ushort, ushort>> {
+                            Tuple.Create((ushort)(p + 1536), (ushort)1), Tuple.Create((ushort)(p + 1792), (ushort)1793), Tuple.Create((ushort)(p + 2048), (ushort)2049) },
+                            ReduxGrey, "Missing wallpaper", 0, "");
+                        var iff = new IffFile();
+                        using (var ms = new MemoryStream(bytes)) iff.Read(ms);
+                        var far = iff.Get<SPR>(1); var medium = iff.Get<SPR>(1793); var near = iff.Get<SPR>(2049);
+                        if (far != null && medium != null && near != null) ReduxPlaceholderWall = new Wall { Far = far, Medium = medium, Near = near };
+                    }
+                    catch (InvalidDataException) { } // (that pattern isn't there: try the next)
+                }
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] grey stand-in wallpaper: " + e.Message); }
+            if (ReduxPlaceholderWall == null)
+            {
+                // the game's own first wallpaper as it is
+                foreach (var w in ById.Values)
+                    if (w.ID > 0 && w.ID < 256 && w.Near != null && w.Medium != null && w.Far != null) { ReduxPlaceholderWall = w; break; }
+            }
+            return ReduxPlaceholderWall;
+        }
+
+        /// <summary>Any colour as a light grey of the same brightness (the stand-ins for missing walls and floors).</summary>
+        public static Microsoft.Xna.Framework.Color ReduxGrey(Microsoft.Xna.Framework.Color c)
+        {
+            var l = (c.R * 299 + c.G * 587 + c.B * 114) / 1000;
+            var v = (byte)Math.Max(0, Math.Min(255, 150 + (l - 128) / 4));
+            return new Microsoft.Xna.Framework.Color(v, v, v, c.A);
+        }
+
         private void AddWallStyle(WallStyle wall)
         {
             WallStyles.Add(wall);
@@ -437,7 +518,9 @@ namespace FSO.Content
 
         public List<IContentReference<Wall>> List()
         {
-            return new List<IContentReference<Wall>>(Entries.Values);
+            // (SimsRedux: stand-ins for missing wallpapers are never offered)
+            if (ReduxPlaceholders.Count == 0) return new List<IContentReference<Wall>>(Entries.Values);
+            return new List<IContentReference<Wall>>(Entries.Values.Where(x => !ReduxPlaceholders.Contains((ushort)x.ID)));
         }
 
         public Wall Get(string name)

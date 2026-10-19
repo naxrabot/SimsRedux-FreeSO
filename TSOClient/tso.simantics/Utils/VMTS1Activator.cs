@@ -549,8 +549,16 @@ namespace FSO.SimAntics.Utils
             foreach (var entry in entries)
             {
                 ushort newID;
-                if (c.TryGetValue(new string(entry.Name.TakeWhile(x => x != '.').ToArray()).ToLowerInvariant(), out newID)) {
+                var name = new string(entry.Name.TakeWhile(x => x != '.').ToArray()).ToLowerInvariant();
+                if (c.TryGetValue(name, out newID)) {
                     result[entry.ID] = newID;
+                }
+                else if (name.Length > 0)
+                {
+                    // SimsRedux: a missing one gets a grey stand-in under its own name (it used to show some other
+                    // pattern, whose name the next save then wrote down instead)
+                    try { result[entry.ID] = Content.Content.Get().WorldFloors.ReduxAddPlaceholder(name); }
+                    catch (Exception e) { Console.WriteLine("[SimsRedux] no stand-in for " + name + ": " + e.Message); }
                 }
             }
             return result;
@@ -563,8 +571,16 @@ namespace FSO.SimAntics.Utils
             foreach (var entry in entries)
             {
                 ushort newID;
-                if (c.TryGetValue(new string(entry.Name.TakeWhile(x => x != '.').ToArray()).ToLowerInvariant(), out newID)) {
+                var name = new string(entry.Name.TakeWhile(x => x != '.').ToArray()).ToLowerInvariant();
+                if (c.TryGetValue(name, out newID)) {
                     result[entry.ID] = newID;
+                }
+                else if (name.Length > 0)
+                {
+                    // SimsRedux: a missing one gets a grey stand-in under its own name (it used to show some other
+                    // pattern, whose name the next save then wrote down instead)
+                    try { result[entry.ID] = Content.Content.Get().WorldWalls.ReduxAddPlaceholder(name); }
+                    catch (Exception e) { Console.WriteLine("[SimsRedux] no stand-in for " + name + ": " + e.Message); }
                 }
             }
             return result;

@@ -83,8 +83,11 @@ namespace FSO.SimAntics.Marshals
 
         public void Apply(VM vm)
         {
-            var wallMap = BuildDict(WallNamesByID, Content.Content.Get().WorldWalls.DynamicWallFromID, vm.LoadErrors, VMLoadErrorCode.MISSING_WALL);
-            var floorMap = BuildDict(FloorNamesByID, Content.Content.Get().WorldFloors.DynamicFloorFromID, vm.LoadErrors, VMLoadErrorCode.MISSING_FLOOR);
+            // (SimsRedux: "wallProvider"/"floorProvider" - the loops below already use "walls" and "floors")
+            var wallProvider = Content.Content.Get().WorldWalls;
+            var floorProvider = Content.Content.Get().WorldFloors;
+            var wallMap = BuildDict(WallNamesByID, wallProvider.DynamicWallFromID, vm.LoadErrors, VMLoadErrorCode.MISSING_WALL, wallProvider.ReduxAddPlaceholder);
+            var floorMap = BuildDict(FloorNamesByID, floorProvider.DynamicFloorFromID, vm.LoadErrors, VMLoadErrorCode.MISSING_FLOOR, floorProvider.ReduxAddPlaceholder);
 
             var arch = vm.Context.Architecture;
             foreach (var floors in arch.Floors)
@@ -158,7 +161,7 @@ namespace FSO.SimAntics.Marshals
             arch.SignalAllDirty();
         }
 
-        private Dictionary<ushort, ushort> BuildDict(Dictionary<ushort, string> oldIDToName, Dictionary<string, ushort> nameToID, List<VMLoadError> errors, VMLoadErrorCode code)
+        private Dictionary<ushort, ushort> BuildDict(Dictionary<ushort, string> oldIDToName, Dictionary<string, ushort> nameToID, List<VMLoadError> errors, VMLoadErrorCode code, System.Func<string, ushort> placeholder)
         {
             var result = new Dictionary<ushort, ushort>();
             foreach (var entry in oldIDToName)
@@ -170,6 +173,14 @@ namespace FSO.SimAntics.Marshals
                 } else
                 {
                     errors.Add(new VMLoadError(code, entry.Value));
+                    // SimsRedux: a missing wall or floor used to keep its old number - which is some other
+                    // wallpaper in this game, and the next save wrote that one's name over the real one.
+                    // Now it gets a grey stand-in under the same name (so saving keeps the name).
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(entry.Value)) result[entry.Key] = placeholder(entry.Value);
+                    }
+                    catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] no stand-in for " + entry.Value + ": " + e.Message); }
                 }
             }
             return result;
