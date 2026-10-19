@@ -37,9 +37,9 @@ namespace FSO.SimAntics.Primitives
                 var skin = ColorNames[color];
                 var code = simtype;
 
-                var heads = Content.Content.Get().BCFGlobal.CollectionsByName["c"].ClothesByAvatarType[simtype];
+                var heads = Content.Content.Get().BCFGlobal.CollectionsByName["c"].ClothesByAvatarType[simtype].ToList(); // (SimsRedux: a copy - the unusable ones are taken out below, and that used to empty the game's own lists)
                 if (simtype[1] == 'c') simtype += "chd";
-                var bodies = Content.Content.Get().BCFGlobal.CollectionsByName["b"].ClothesByAvatarType[simtype];
+                var bodies = Content.Content.Get().BCFGlobal.CollectionsByName["b"].ClothesByAvatarType[simtype].ToList();
 
                 //pick a random head and body.
 
