@@ -102,9 +102,10 @@ namespace FSO.SimAntics
         private short ObjectId = 1;
         /// <summary>
         /// SimsRedux: objects on this lot whose files this game doesn't have (Utils/ReduxHeldObjects). They're kept
-        /// out of the game but saved with the lot, their object IDs aren't reused and their tiles stay free.
+        /// out of the game but saved with the lot, their object IDs aren't reused and the space they take stays free.
         /// </summary>
         public FSO.SimAntics.Utils.ReduxHeldObjects ReduxHeld = new FSO.SimAntics.Utils.ReduxHeldObjects();
+        private string ReduxHeldNoticed; // (which held objects the player was last told about - once per lot, not on every reload)
 
         internal VMNetDriver Driver;
         public VMHeadlineRendererProvider Headline;
@@ -499,6 +500,7 @@ namespace FSO.SimAntics
         /// <param name="entity">The entity to add.</param>
         public void AddEntity(VMEntity entity)
         {
+            if (ReduxHeld.Any && ReduxHeld.Holds(ObjectId)) ObjectId = NextObjID(); // (SimsRedux: a held object keeps its ID)
             entity.ObjectID = ObjectId;
             ObjectsById.Add(entity.ObjectID, entity);
             AddToObjList(this.Entities, entity);
@@ -697,6 +699,7 @@ namespace FSO.SimAntics
             Entities = new List<VMEntity>();
             ObjectsById = new Dictionary<short, VMEntity>();
             ObjectId = 1;
+            if (ReduxHeld.Any && ReduxHeld.Holds(ObjectId)) ObjectId = NextObjID(); // (SimsRedux: a held object keeps its ID)
 
             return state;
         }
@@ -971,6 +974,18 @@ namespace FSO.SimAntics
             }
             ObjectId = input.ObjectId;
             if (ReduxHeld.Holds(ObjectId)) ObjectId = NextObjID(); // (SimsRedux: a held object keeps its ID)
+            // SimsRedux: tell the player (once) that some objects here are kept but not shown
+            if (ReduxHeld.Any)
+            {
+                var key = string.Join(",", ReduxHeld.Entities.Select(x => x.ObjectID + ":" + x.GUID.ToString("X8")).OrderBy(x => x));
+                if (key != ReduxHeldNoticed)
+                {
+                    ReduxHeldNoticed = key;
+                    Console.WriteLine("[SimsRedux] " + FSO.SimAntics.Utils.ReduxHeldObjects.Notice);
+                    try { FSO.SimAntics.Utils.ReduxHeldObjects.OnLotLoaded?.Invoke(this, ReduxHeld); }
+                    catch (Exception e) { Console.WriteLine("[SimsRedux] couldn't show the held-objects notice: " + e.Message); }
+                }
+            }
 
             //just a few final changes to refresh everything, and avoid signalling objects
             var clock = Context.Clock;

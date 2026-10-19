@@ -1102,7 +1102,8 @@ namespace FSO.SimAntics
         public bool CheckWallValid(LotTilePos pos, WallTile wall)
         {
             if (wall.Segments > 0 && Architecture.GetTerrainSloped(pos.TileX, pos.TileY)) return false;
-            if (VM?.ReduxHeld != null && VM.ReduxHeld.HoldsTile(pos)) return false; // (SimsRedux: a held-back object's tile)
+            // (SimsRedux: a held-back object here keeps the walls it needs, and keeps out ones it can't have)
+            if (VM?.ReduxHeld != null && VM.ReduxHeld.Any && !VM.ReduxHeld.WallChangeOk(pos, (int)wall.Segments)) return false;
             var objs = ObjectQueries.GetObjectsAt(pos);
             if (objs == null) return true;
             foreach (var obj in objs)
@@ -1114,8 +1115,8 @@ namespace FSO.SimAntics
 
         public bool CheckFloorValid(LotTilePos pos, FloorTile floor)
         {
-            // (SimsRedux: the floor under a held-back object upstairs stays)
-            if (floor.Pattern == 0 && pos.Level > 1 && VM?.ReduxHeld != null && VM.ReduxHeld.HoldsTile(pos)) return false;
+            // (SimsRedux: a held-back object here keeps a floor it can stand on - the floor under one upstairs stays)
+            if (VM?.ReduxHeld != null && VM.ReduxHeld.Any && !VM.ReduxHeld.FloorChangeOk(pos, floor.Pattern)) return false;
             var objs = ObjectQueries.GetObjectsAt(pos);
             if (objs == null) return true;
             foreach (var obj in objs)
@@ -1291,12 +1292,18 @@ namespace FSO.SimAntics
             VMPlacementError status = (noFloor)?VMPlacementError.HeightNotAllowed:VMPlacementError.Success;
             VMEntity statusObj = null;
 
-            // SimsRedux: a held-back object's tile (Utils/ReduxHeldObjects) stays free for it
+            // SimsRedux: a held-back object (Utils/ReduxHeldObjects) keeps only the space it would really take:
+            // floor space for floor objects, its side of the wall for wall objects - on its own level
             var held = VM?.ReduxHeld;
-            if (held != null && held.Any && pos != LotTilePos.OUT_OF_WORLD && pos.Level >= 1
-                && ((footprint != null) ? held.Blocks(footprint, pos.Level) : held.HoldsTile(pos)))
+            if (held != null && held.Any && pos != LotTilePos.OUT_OF_WORLD && pos.Level >= 1)
             {
-                return new VMPlacementResult { Status = VMPlacementError.CantIntersectOtherObjects };
+                var exclusiveSides = ((target.GetValue(VMStackObjectVariable.ExclusivePlacementFlags) & 2) != 0)
+                    ? FSO.SimAntics.Utils.ReduxHeldObjects.WallSides(target.GetValue(VMStackObjectVariable.WallPlacementFlags), dir) : 0;
+                var takesFloor = FSO.SimAntics.Utils.ReduxHeldObjects.HasFloorFootprint((short)flags,
+                    target.GetValue(VMStackObjectVariable.FlagField2), target.GetValue(VMStackObjectVariable.WallPlacementFlags));
+                var hit = held.BlocksPlacement(footprint, pos, takesFloor, exclusiveSides);
+                if (hit == 1) return new VMPlacementResult { Status = VMPlacementError.CantIntersectOtherObjects };
+                if (hit == 2) return new VMPlacementResult { Status = VMPlacementError.MustBeAgainstUnusedWall };
             }
 
             if (footprint == null || pos.Level < 1)

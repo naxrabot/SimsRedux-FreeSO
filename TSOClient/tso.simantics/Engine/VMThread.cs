@@ -1273,7 +1273,11 @@ namespace FSO.SimAntics.Engine
             // SimsRedux: code or an interaction belonging to an object this game doesn't have (its files are
             // missing - e.g. a Sims Online object without The Sims Online's files) can't run: this thread forgets
             // what it was doing and starts over, instead of the whole lot failing to load
-            if (Stack.Any(f => f.CodeOwner == null) || Queue.Any(q => q.CodeOwner == null))
+            // - and the same when it was busy with an object held back (Utils/ReduxHeldObjects: e.g. a Sims 1 table
+            // with a missing sculpture on it) or no longer there, like a missing object dropped from a Sim's hands.
+            // (Only on a lot with such objects - other lots load exactly as before.)
+            if (Stack.Any(f => f.CodeOwner == null) || Queue.Any(q => q.CodeOwner == null)
+                || ReduxBusyWithMissing(input, context))
             {
                 System.Console.WriteLine("[SimsRedux] Something was saved busy with an object that isn't in this game; it starts over.");
                 Stack.Clear();
@@ -1290,6 +1294,26 @@ namespace FSO.SimAntics.Engine
             ActionUID = input.ActionUID;
             DialogCooldown = input.DialogCooldown;
             ScheduleIdleStart = input.ScheduleIdleStart;
+        }
+
+        /// <summary>
+        /// SimsRedux: was this thread saved busy with an object held back for missing files (as the one acted on,
+        /// the stack object or the interaction's icon), or acting on an object that isn't there (it would crash on
+        /// its first tick)? Only asked on a lot that has held-back or dropped objects - false everywhere else.
+        /// </summary>
+        private static bool ReduxBusyWithMissing(VMThreadMarshal input, VMContext context)
+        {
+            var held = context?.VM?.ReduxHeld;
+            if (held == null || !held.AnyMissing) return false;
+            Func<short, bool> isHeld = (id) => id != 0 && (held.Holds(id) || held.Dropped.Contains(id));
+            Func<short, bool> isGone = (id) => id > 0 && context.VM.GetObjectById(id) == null;
+            if (input.Stack != null)
+                foreach (var f in input.Stack)
+                    if (f != null && (isHeld(f.Callee) || isHeld(f.StackObject) || isHeld(f.Caller) || isGone(f.Callee))) return true;
+            if (input.Queue != null)
+                foreach (var q in input.Queue)
+                    if (q != null && (isHeld(q.Callee) || isHeld(q.StackObject) || isHeld(q.IconOwner) || isGone(q.Callee))) return true;
+            return false;
         }
 
         public VMThread(VMThreadMarshal input, VMContext context, VMEntity entity)
