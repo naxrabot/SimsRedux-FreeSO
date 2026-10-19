@@ -263,6 +263,11 @@ namespace FSO.SimAntics
         /// </summary>
         public Dictionary<uint, short> ReduxFamilyControl = new Dictionary<uint, short>();
         /// <summary>
+        /// SimsRedux online (host only): players whose town account is an Admin (the dedicated server says so
+        /// when they join a town lot). Test cheats like "burglar" only work online for them.
+        /// </summary>
+        public HashSet<uint> ReduxAdmins = new HashSet<uint>();
+        /// <summary>
         /// SimsRedux online: the lot never pauses (set on the server and on every player's game alike).
         /// A question only holds up the Sim it's about; everyone else carries on, as in The Sims Online.
         /// </summary>

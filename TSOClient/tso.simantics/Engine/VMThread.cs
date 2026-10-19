@@ -82,6 +82,28 @@ namespace FSO.SimAntics.Engine
 
         public static readonly int MAX_LOOP_COUNT = 500000;
 
+        // SimsRedux: walks started by this thread in the current tick (see ReduxWalkShouldWait). Not saved -
+        // it starts again from 0 on every tick, the same on every machine.
+        private uint ReduxWalkTick = uint.MaxValue;
+        private int ReduxWalksThisTick;
+        public const int ReduxMaxWalksPerTick = 8;
+
+        /// <summary>
+        /// SimsRedux: a script that loops "find the thief, walk to him" (the police officer chasing a burglar)
+        /// gets a walk that ends at once when he's already standing there, so the loop never gives up its turn.
+        /// 12.4 let it go until 5000 primitives in the tick - that's over a thousand walk set-ups (slot search,
+        /// route planning) every tick, which dropped the game to about 1 frame a second. Now, after a few walks
+        /// in one tick, the next walk waits for the next tick.
+        /// </summary>
+        public bool ReduxWalkShouldWait(VMStackFrame frame)
+        {
+            var vm = Context?.VM;
+            if (IsCheck || vm?.Scheduler == null) return false;
+            var tick = vm.Scheduler.CurrentTickID;
+            if (ReduxWalkTick != tick) { ReduxWalkTick = tick; ReduxWalksThisTick = 0; }
+            return ++ReduxWalksThisTick > ReduxMaxWalksPerTick;
+        }
+
         public static VMPrimitiveExitCode EvaluateCheck(VMContext context, VMEntity entity, VMStackFrame initFrame)
         {
             return EvaluateCheck(context, entity, initFrame, null, null);
@@ -225,6 +247,9 @@ namespace FSO.SimAntics.Engine
             return false;
         }
 
+        private static string ReduxLastQueueNote; // (the last drop noted, and how many times in a row since)
+        private static int ReduxQueueNoteRepeats;
+
         /// <summary>
         /// SimsRedux: a player's order that was dropped before it ran (it shows in the queue for a moment,
         /// then goes) - noted in the console and queue_debug.log, so we can see why.
@@ -234,8 +259,12 @@ namespace FSO.SimAntics.Engine
             try
             {
                 if (t == null || a == null || t.IsCheck || !(t.Entity is VMAvatar) || a.Priority < (short)VMQueuePriority.UserDriven) return;
-                var line = DateTime.Now.ToString("HH:mm:ss") + " " + t.Entity.ToString() + ": '" + (a.Name ?? "?") + "' on " + (a.Callee?.ToString() ?? "?")
-                    + " was dropped - " + why;
+                var what = t.Entity.ToString() + ": '" + (a.Name ?? "?") + "' on " + (a.Callee?.ToString() ?? "?") + " was dropped - " + why;
+                // the same drop over and over (a script pushing an action that keeps failing): noted a few times, not
+                // every time - each note is a write to the log file
+                if (what == ReduxLastQueueNote) { if (++ReduxQueueNoteRepeats > 3) return; }
+                else { ReduxLastQueueNote = what; ReduxQueueNoteRepeats = 0; }
+                var line = DateTime.Now.ToString("HH:mm:ss") + " " + what;
                 Console.WriteLine("[SimsRedux] " + line);
                 FSO.Common.IO.FSOFile.AppendAllText(System.IO.Path.Combine(FSO.Common.FSOEnvironment.UserDir, "queue_debug.log"), line + "\r\n");
             }
@@ -415,7 +444,9 @@ namespace FSO.SimAntics.Engine
 #endif
 
                 if (e is ThreadAbortException) throw e;
-                Console.WriteLine("[SimsRedux] SimAntics exception in " + Entity?.ToString() + ": " + e); // full details for the console
+                // full details for the console - once per error dialog: a script failing every tick wrote its whole
+                // stack trace every tick (slow, especially in the browser), while the dialog was shown once (SimsRedux)
+                if (DialogCooldown == 0) Console.WriteLine("[SimsRedux] SimAntics exception in " + Entity?.ToString() + ": " + e);
                 if (Stack.Count == 0) return;
                 var context = Stack[Stack.Count - 1];
                 bool Delete = ((Entity is VMGameObject) && (DialogCooldown > 30 * 20 - 10));
@@ -654,6 +685,13 @@ namespace FSO.SimAntics.Engine
                 return;
             }
 
+
+            // SimsRedux: a walk loop that ends at once waits for the next tick (see ReduxWalkShouldWait)
+            if ((opcode == 27 || opcode == 45) && ReduxWalkShouldWait(frame))
+            {
+                HandleResult(frame, instruction, VMPrimitiveExitCode.CONTINUE_NEXT_TICK);
+                return;
+            }
 
             var primitive = VMContext.Primitives[opcode];
             if (primitive == null)

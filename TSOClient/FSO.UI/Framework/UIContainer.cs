@@ -273,11 +273,11 @@ namespace FSO.Client.UI.Framework
                             // game - it's skipped and noted once in the console (and the problem log)
                             if (child == null) continue;
                             if (child.ReduxDrawSkip > 0) { child.ReduxDrawSkip--; continue; }
-                            try { child.Draw(batch); child.ReduxDrawFails = 0; }
+                            try { child.Draw(batch); child.ReduxDrawFails = 0; if (child.ReduxDrawSkip == 0) child.ReduxDrawStrikes = 0; }
                             catch (Exception e)
                             {
-                                // (failing every frame: left out for a while before it's tried again)
-                                if (++child.ReduxDrawFails >= ReduxFailsInARow) { child.ReduxDrawFails = 0; child.ReduxDrawSkip = ReduxSkipFrames; }
+                                // (failing every frame: left out for a while before it's tried again - longer each time)
+                                if (++child.ReduxDrawFails >= ReduxFailsInARow) { child.ReduxDrawFails = 0; child.ReduxDrawSkip = ReduxSkipFor(child.ReduxDrawStrikes++); }
                                 ReduxDrawFailed(child, e, "draw");
                             }
                         }
@@ -292,7 +292,11 @@ namespace FSO.Client.UI.Framework
         }
 
         private UIElement[] DrawCopy;
-        private const int ReduxFailsInARow = 30, ReduxSkipFrames = 60;
+        // SimsRedux: a piece failing every frame was tried 30 frames out of every 90 - a thrown error (with its
+        // stack trace) on a third of all frames, for ever, is slow (very slow in the browser). Now it's tried 3
+        // times, then left out for 2 seconds, then 4, 8 ... up to a minute while it keeps failing.
+        private const int ReduxFailsInARow = 3, ReduxSkipFrames = 60, ReduxSkipFramesMax = 60 * 60;
+        private static int ReduxSkipFor(int strikes) { return Math.Min(ReduxSkipFramesMax, ReduxSkipFrames << Math.Min(strikes, 6)); }
         private static readonly System.Collections.Generic.HashSet<string> ReduxDrawFailures = new System.Collections.Generic.HashSet<string>();
         /// <summary>SimsRedux: where a screen piece that failed to draw is reported (the web build: the problem log).</summary>
         public static Action<string, string> ReduxReportProblem;
@@ -320,10 +324,10 @@ namespace FSO.Client.UI.Framework
                     // SimsRedux: same as drawing - one broken piece is skipped and reported, the game goes on
                     if (child == null) continue;
                     if (child.ReduxUpdateSkip > 0) { child.ReduxUpdateSkip--; continue; }
-                    try { child.Update(state); child.ReduxUpdateFails = 0; }
+                    try { child.Update(state); child.ReduxUpdateFails = 0; if (child.ReduxUpdateSkip == 0) child.ReduxUpdateStrikes = 0; }
                     catch (Exception e)
                     {
-                        if (++child.ReduxUpdateFails >= ReduxFailsInARow) { child.ReduxUpdateFails = 0; child.ReduxUpdateSkip = ReduxSkipFrames; }
+                        if (++child.ReduxUpdateFails >= ReduxFailsInARow) { child.ReduxUpdateFails = 0; child.ReduxUpdateSkip = ReduxSkipFor(child.ReduxUpdateStrikes++); }
                         ReduxDrawFailed(child, e, "update");
                     }
                 }

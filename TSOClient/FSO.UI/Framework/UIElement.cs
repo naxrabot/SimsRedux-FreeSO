@@ -30,6 +30,8 @@ namespace FSO.Client.UI.Framework
         // SimsRedux: how many times in a row this piece failed to draw / update (see UIContainer), and how many
         // more frames it's left out for after failing again and again (an error every frame slowed the browser right down)
         internal int ReduxDrawFails, ReduxDrawSkip, ReduxUpdateFails, ReduxUpdateSkip;
+        // (how many times it's been left out already: each time it fails again it's left out for longer)
+        internal int ReduxDrawStrikes, ReduxUpdateStrikes;
 
         /// <summary>
         /// ID of the element, this is not used by any functional code.
