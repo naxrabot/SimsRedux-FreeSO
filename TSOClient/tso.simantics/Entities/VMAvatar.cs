@@ -541,7 +541,8 @@ namespace FSO.SimAntics
                 // SimsRedux: a family Sim left standing with nothing to do finds something (see there)
                 if (KillTimeout == -1) FSO.SimAntics.Primitives.VMFindBestAction.ReduxIdleCheck(this);
                 // SimsRedux: the new computer activities (writing, novels, chat, hacking) do their part
-                FSO.SimAntics.Utils.ReduxComputer.Tick(this);
+                // (one going wrong must never stop the rest of this tick for every Sim after this one)
+                try { FSO.SimAntics.Utils.ReduxComputer.Tick(this); } catch (Exception e) { Console.WriteLine("[SimsRedux] computer: " + e.Message); }
                 FSO.SimAntics.Utils.ReduxWeek.Tick(this); // (no car pool on a day off)
                 FSO.SimAntics.Utils.ReduxLeftovers.Tick(this); // (a serving out of the fridge)
                 // SimsRedux: skills grow by doing (cooking raises Cooking, repairing Mechanical...)

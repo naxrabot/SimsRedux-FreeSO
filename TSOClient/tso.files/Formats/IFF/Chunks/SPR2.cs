@@ -306,14 +306,26 @@ namespace FSO.Files.Formats.IFF.Chunks
                 }
                 else
                 {
-                    using (IoBuffer buf = IoBuffer.FromStream(new MemoryStream(ToDecode), ByteOrder.LITTLE_ENDIAN))
+                    // (SimsRedux: always let go of the "decoding" flag - a damaged picture left it set, and the next
+                    //  try waited on it forever, freezing the game; a damaged one isn't tried over and over either)
+                    try
                     {
-                        ReadDeferred(Version, buf);
+                        using (IoBuffer buf = IoBuffer.FromStream(new MemoryStream(ToDecode), ByteOrder.LITTLE_ENDIAN))
+                        {
+                            ReadDeferred(Version, buf);
+                        }
+
+                        if (TimedReferenceController.CurrentType == CacheType.PERMANENT) ToDecode = null;
                     }
-
-                    if (TimedReferenceController.CurrentType == CacheType.PERMANENT) ToDecode = null;
-
-                    Interlocked.Exchange(ref _decoding, 0);
+                    catch
+                    {
+                        ToDecode = null;
+                        throw;
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _decoding, 0);
+                    }
                 }
             }
         }

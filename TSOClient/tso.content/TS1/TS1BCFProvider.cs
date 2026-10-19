@@ -42,7 +42,11 @@ namespace FSO.Content.TS1
             var allBCFs = BCFProvider.ListGeneric();
             foreach (var bcf in allBCFs)
             {
-                var file = (BCF)bcf.GetThrowawayGeneric();
+                // (SimsRedux: one damaged or missing skin/animation file is skipped, not the end of loading)
+                BCF file;
+                try { file = (BCF)bcf.GetThrowawayGeneric(); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] skipped a damaged skin/animation file (" + bcf + "): " + e.Message); continue; }
+                if (file == null) continue;
                 foreach (var anim in file.Animations)
                 {
                     AnimHostBCF[anim.Name.ToLowerInvariant()] = Path.GetFileName(bcf.ToString().ToLowerInvariant().Replace('\\', '/'));
@@ -54,15 +58,16 @@ namespace FSO.Content.TS1
                 }
                 foreach (var skel in file.Skeletons)
                 {
-                    SkelHostBCF.Add(skel.Name.ToLowerInvariant(), Path.GetFileName(bcf.ToString().ToLowerInvariant().Replace('\\', '/')));
+                    SkelHostBCF[skel.Name.ToLowerInvariant()] = Path.GetFileName(bcf.ToString().ToLowerInvariant().Replace('\\', '/'));
                 }
             }
             
             foreach (var item in SkinHostBCF.Keys)
             {
-                if (char.IsDigit(item[1]) && char.IsDigit(item[2]) && char.IsDigit(item[3])) {
+                if (item.Length > 4 && char.IsDigit(item[1]) && char.IsDigit(item[2]) && char.IsDigit(item[3])) {
                     var uindex = item.IndexOf('_');
                     if (uindex == -1) uindex = item.Length;
+                    if (uindex < 4) continue; // (SimsRedux: a downloaded skin named oddly)
                     var type = item.Substring(4, uindex - 4);
                     if (type.EndsWith("lgt") || type.EndsWith("med") || type.EndsWith("drk")) type = type.Substring(0, type.Length - 3);
                     AddItem(item[0].ToString(), type, item);

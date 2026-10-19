@@ -109,7 +109,7 @@ namespace FSO.SimAntics.Utils
             catch { }
         }
 
-        private static readonly Dictionary<VMRoutine, int> DueRoutines = new Dictionary<VMRoutine, int>();
+        private static readonly ReduxWeakMap<VMRoutine, int> DueRoutines = new ReduxWeakMap<VMRoutine, int>();
         private static readonly object Lock = new object();
 
         /// <summary>
@@ -144,10 +144,13 @@ namespace FSO.SimAntics.Utils
                 if (kind == 3) return day >= 5 ? 1 : 0;
                 if (kind == 2)
                 {
+                    // (only the family living here counts - not visiting neighbours or the maid)
+                    var fam = vm.TS1State?.CurrentFamily;
                     foreach (var a in vm.Context.ObjectQueries.Avatars)
                     {
                         var ava = a as VMAvatar;
                         if (ava == null) continue;
+                        if (fam != null && !fam.RuntimeSubset.Contains(ava.Object.OBJ.GUID)) continue;
                         var c = ava.GetPersonData(VMPersonDataVariable.JobType);
                         if (c > 0 && Works(c, day)) return 0;
                     }

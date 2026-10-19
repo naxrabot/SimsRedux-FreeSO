@@ -103,8 +103,12 @@ namespace FSO.Common.Utils
                 {
                     if (becomes != oldring)
                     {
+                        // SimsRedux: moved to the newest ring. (This removed the wrong key and never added it to the
+                        // new ring, so anything used twice stayed in ObjectToRing - kept forever - until a lot change:
+                        // the main reason the browser ran out of memory.)
                         ReferenceRing[oldring].Remove(o);
-                        ObjectToRing.Remove(oldring);
+                        ReferenceRing[becomes].Add(o);
+                        ObjectToRing[o] = becomes;
                     }
                 }
                 else
@@ -145,7 +149,7 @@ namespace FSO.Common.Utils
                 //ConcurrentDictionary does not ensure we don't accidentally create things twice. This lock will help us, but I don't think it ensures a perfect world.
                 lock (this) {
                     WeakReference prev;
-                    if (Cache.TryGetValue(key, out prev) && prev.IsAlive) return prev; //already created this value.
+                    if (Cache.TryGetValue(key, out prev) && prev.IsAlive && !IsDead(prev.Target)) return prev; //already created this value.
                     created = valueFactory(k);
                     didCreate = true;
                     return new WeakReference(created, true);
@@ -163,7 +167,7 @@ namespace FSO.Common.Utils
                 }
                 return created;
             }
-            else if (refVal != null || value.IsAlive)
+            else if ((refVal != null || value.IsAlive) && !IsDead(refVal))
                 return (VALUE)refVal;
             else
             {
@@ -173,6 +177,9 @@ namespace FSO.Common.Utils
                 return GetOrAddInternal(key, valueFactory);
             }
         }
+
+        // SimsRedux: cleaned up for good (see ITimedCachableDead) - made again instead of handed out
+        private static bool IsDead(object o) { return o is ITimedCachableDead d && d.ReduxDead; }
 
         public VALUE GetOrAdd(KEY key, Func<KEY, VALUE> valueFactory)
         {

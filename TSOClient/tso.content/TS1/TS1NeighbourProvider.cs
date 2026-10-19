@@ -245,10 +245,19 @@ namespace FSO.Content.TS1
         {
             var found = new List<uint>();
             var objs = (TS1ObjectProvider)ContentManager.WorldObjects;
-            var file = new IffFile(filename);
-            file.MarkThrowaway();
-
-            var objects = file.List<OBJD>();
+            // (SimsRedux: one damaged character file is skipped - the rest of the neighbourhood still loads)
+            List<OBJD> objects;
+            try
+            {
+                var file = new IffFile(filename);
+                file.MarkThrowaway();
+                objects = file.List<OBJD>();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[SimsRedux] skipped a damaged character file (" + filename + "): " + e.Message);
+                return found;
+            }
             if (objects != null)
             {
                 foreach (var obj in objects)

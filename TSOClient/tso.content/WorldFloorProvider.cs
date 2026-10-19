@@ -342,6 +342,9 @@ namespace FSO.Content
                 var far = iff.Get<SPR2>(1);
                 var medium = iff.Get<SPR2>(257);
                 var near = iff.Get<SPR2>(513);
+                // (SimsRedux: a downloaded floor missing a zoom level uses another of its own instead of crashing)
+                near = near ?? medium ?? far; medium = medium ?? near ?? far; far = far ?? medium ?? near;
+                if (near == null) return null;
 
                 far.FloorCopy = 1;
                 medium.FloorCopy = 1;

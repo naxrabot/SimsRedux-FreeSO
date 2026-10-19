@@ -31,7 +31,7 @@ namespace FSO.SimAntics.Utils
             new Rule(VMPersonDataVariable.MechanicalSkill, "Mechanical", 1f, "repair", "fix", "unclog", "tinker"),
             new Rule(VMPersonDataVariable.CharismaSkill, "Charisma", 0.3f, "talk", "joke", "entertain", "tell ", "flirt", "compliment", "brag", "chat", "gossip"),
             new Rule(VMPersonDataVariable.BodySkill, "Body", 0.7f, "swim", "dance", "jog"),
-            new Rule(VMPersonDataVariable.LogicSkill, "Logic", 0.7f, "stargaze", "look through"),
+            // (no Logic rule: the telescope already teaches Logic by itself)
         };
 
         /// <summary>Raised when a Sim reaches a new level (sim, skill name, level 1-10).</summary>
@@ -88,12 +88,14 @@ namespace FSO.SimAntics.Utils
                 var action = ava.Thread.ActiveAction;
                 var name = action?.Name;
                 if (string.IsNullOrEmpty(name) || action.Callee == null) { HideBar(ava); return; }
-                name = name.ToLowerInvariant();
+                name = name.ToLowerInvariant(); // (short, once per tick)
                 int found = -1;
                 for (int i = 0; i < Rules.Length && found < 0; i++)
                     foreach (var w in Rules[i].Words)
                         if (name.Contains(w)) { found = i; break; }
                 if (found < 0) { HideBar(ava); return; }
+                // the game is already teaching a skill here (its own skill bar is up - studying, say): no extra
+                if (ava.Headline != null && !IsOurBar(ava) && ava.Headline.Operand?.Group == Primitives.VMSetBalloonHeadlineOperandGroup.Progress) return;
                 // the skill bar over their head while they're at it (like studying)
                 ShowBar(ava, Rules[found].Skill);
                 // only while actually doing it (not walking from the fridge to the counter, say)

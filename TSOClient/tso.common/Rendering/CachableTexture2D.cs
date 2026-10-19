@@ -4,7 +4,7 @@ using System;
 
 namespace FSO.Common.Rendering
 {
-    public class CachableTexture2D : Texture2D, ITimedCachable
+    public class CachableTexture2D : Texture2D, ITimedCachable, ITimedCachableDead
     {
         /// <summary>
         /// Creates a new texture of the given size
@@ -46,6 +46,7 @@ namespace FSO.Common.Rendering
 
         private bool WasReferenced = true;
         public bool BeingDisposed = false;
+        public bool ReduxDead => IsDisposed;
         private bool Resurrect = true;
         public object Parent; //set if you want a parent object to be tied to this object (don't kill parent til we die)
         ~CachableTexture2D() {
@@ -62,7 +63,13 @@ namespace FSO.Common.Rendering
                 else
                 {
                     BeingDisposed = true;
-                    GameThread.NextUpdate(x => this.Dispose());
+                    // (SimsRedux: only if nothing picked it up again in the meantime - drawing a texture that was
+                    //  thrown away under the game's feet stopped it)
+                    GameThread.NextUpdate(x =>
+                    {
+                        if (!WasReferenced) this.Dispose();
+                        else BeingDisposed = false; // (its finalizer is already set to run again)
+                    });
                     GC.ReRegisterForFinalize(this);
                     Resurrect = true; //one more final
                 }

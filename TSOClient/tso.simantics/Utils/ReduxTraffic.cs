@@ -35,6 +35,9 @@ namespace FSO.SimAntics.Utils
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>> RoadCache
             = new System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>>();
 
+        private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars> Seen = new System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars>();
+
         public static void Tick(VM vm)
         {
             try
@@ -42,20 +45,28 @@ namespace FSO.SimAntics.Utils
                 if (vm == null || !vm.TS1 || vm.Context?.Architecture == null || !vm.Context.Ready) return;
                 var ctx = vm.Context;
 
-                // drive the cars already out there
-                List<VMMultitileGroup> traffic = null;
-                bool otherCar = false;
-                foreach (var e in vm.Entities)
+                // drive the cars already out there (the lot's objects are looked through only once a game
+                // minute - every tick was hundreds of objects, 30 times a second)
+                var clock = ctx.Clock;
+                var st = Seen.GetValue(vm, _ => new LotCars());
+                if (st.Traffic == null || clock.Ticks % 30 == 0)
                 {
-                    if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject) continue;
-                    if (!IsCar(e)) continue;
-                    if (e.GetAttribute(0) == Marker) (traffic ?? (traffic = new List<VMMultitileGroup>())).Add(e.MultitileGroup);
-                    else otherCar = true;
+                    st.Traffic = new List<VMMultitileGroup>();
+                    st.OtherCar = false;
+                    foreach (var e in vm.Entities)
+                    {
+                        if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject) continue;
+                        if (!IsCar(e)) continue;
+                        if (e.GetAttribute(0) == Marker) st.Traffic.Add(e.MultitileGroup);
+                        else st.OtherCar = true;
+                    }
                 }
+                st.Traffic.RemoveAll(g => g.BaseObject == null || g.BaseObject.Dead);
+                var traffic = st.Traffic.Count > 0 ? st.Traffic.ToList() : null;
+                bool otherCar = st.OtherCar;
                 if (traffic != null) foreach (var g in traffic) Drive(vm, g);
 
                 // a new one now and then (decided from the game clock, the same for everyone)
-                var clock = ctx.Clock;
                 if (clock.Ticks % 30 != 0 || otherCar || (traffic != null && traffic.Count >= 2)) return;
                 int hour = clock.Hours;
                 bool night = hour >= 22 || hour < 6;
@@ -70,6 +81,7 @@ namespace FSO.SimAntics.Utils
                 bool forward = ((h >> 16) & 1) == 0;
                 uint guid = Cars[(h >> 20) % (uint)Cars.Length];
                 Spawn(vm, road, forward, guid);
+                st.Traffic = null; // (the new car is picked up on the next tick)
             }
             catch (Exception ex) { Console.WriteLine("[SimsRedux] traffic: " + ex.Message); }
         }
@@ -81,7 +93,7 @@ namespace FSO.SimAntics.Utils
             if (AllCarGUIDs.Contains(guid)) return true;
             // any other carpool car (the game's carpools and visitors' cars) - by its name
             var label = e.Object?.OBJ?.ChunkLabel ?? "";
-            return label.StartsWith("Car - ");
+            return label.StartsWith("Car - ", StringComparison.Ordinal);
         }
 
         /// <summary>The streets on the lot: 5+ tiles of road side by side (the Sims 1 street is 7 tiles wide,

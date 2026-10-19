@@ -81,10 +81,10 @@ namespace FSO.SimAntics.Utils
         private class Entry { public Kind Kind; public int Genre; public uint PlayIndex; public string Label; }
         // per kind of computer: its new entries by pie menu number, and by name (a running action is
         // recognised by its name - it runs as the computer's own "Play", see Adjust)
-        private static readonly Dictionary<TTAB, Dictionary<uint, Entry>> Patched = new Dictionary<TTAB, Dictionary<uint, Entry>>();
-        private static readonly Dictionary<TTAB, Dictionary<string, Entry>> ByName = new Dictionary<TTAB, Dictionary<string, Entry>>();
+        private static readonly ReduxWeakMap<TTAB, Dictionary<uint, Entry>> Patched = new ReduxWeakMap<TTAB, Dictionary<uint, Entry>>();
+        private static readonly ReduxWeakMap<TTAB, Dictionary<string, Entry>> ByName = new ReduxWeakMap<TTAB, Dictionary<string, Entry>>();
         // each computer's own "Play" (its pie menu number), which is shown under Play Games
-        private static readonly Dictionary<TTAB, uint> PlayIndex = new Dictionary<TTAB, uint>();
+        private static readonly ReduxWeakMap<TTAB, uint> PlayIndex = new ReduxWeakMap<TTAB, uint>();
         /// <summary>The computer's own Play, as it shows in the Play Games menu.</summary>
         public const string ComputerGamesLabel = "Play Games/Computer Games";
         private static readonly object Lock = new object();
@@ -187,7 +187,7 @@ namespace FSO.SimAntics.Utils
         }
 
         // which of the computers' own routines is "tweak play happy enough" (looked up once each)
-        private static readonly Dictionary<VMRoutine, bool> HappyEnoughRoutines = new Dictionary<VMRoutine, bool>();
+        private static readonly ReduxWeakMap<VMRoutine, bool> HappyEnoughRoutines = new ReduxWeakMap<VMRoutine, bool>();
 
         /// <summary>
         /// Called as a routine is about to call one of its object's own routines. A computer's play loop
@@ -254,7 +254,9 @@ namespace FSO.SimAntics.Utils
 
                 int genre;
                 VMQueuedAction action;
-                switch (Current(ava, out genre, out action))
+                var current = Current(ava, out genre, out action);
+                if (action != null && action.NotifyIdle) return -1; // (cancelled: get up)
+                switch (current)
                 {
                     case Kind.PracticeWriting:
                     case Kind.WriteNovel:
@@ -312,6 +314,8 @@ namespace FSO.SimAntics.Utils
             VMQueuedAction action;
             var kind = Current(ava, out genre, out action);
             if (kind == Kind.None) return;
+            // (cancelled: they're getting up - no more questions or skill while they do)
+            if (action != null && action.NotifyIdle) return;
             var ctx = ava.Thread.Context;
             var clock = ctx?.Clock;
             if (clock == null) return;

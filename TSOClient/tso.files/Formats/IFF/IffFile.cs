@@ -13,7 +13,7 @@ namespace FSO.Files.Formats.IFF
     /// Interchange File Format (IFF) is a chunk-based file format for binary resource data 
     /// intended to promote a common model for store and use by an executable.
     /// </summary>
-    public class IffFile : IFileInfoUtilizer, ITimedCachable
+    public class IffFile : IFileInfoUtilizer, ITimedCachable, ITimedCachableDead
     {
         /// <summary>
         /// Set to true to force the game to retain a copy of all chunk data at time of loading (used to generate piffs)
@@ -121,21 +121,29 @@ namespace FSO.Files.Formats.IFF
 
 
         private bool WasReferenced = true;
+        /// <summary>SimsRedux: cleaned up for good - a cache must not hand it out again (its pictures are gone).</summary>
+        public bool ReduxDead { get; private set; }
         ~IffFile()
         {
-            if (WasReferenced)
+            // (SimsRedux: an error here would end the whole program - a damaged download must never do that)
+            try
             {
-                TimedReferenceController.KeepAlive(this, KeepAliveType.DEREFERENCED);
-                WasReferenced = false;
-                GC.ReRegisterForFinalize(this);
-            } else
-            {
-                var all = SilentListAll();
-                foreach (var chunk in all)
+                if (WasReferenced)
                 {
-                    chunk.Dispose();
+                    TimedReferenceController.KeepAlive(this, KeepAliveType.DEREFERENCED);
+                    WasReferenced = false;
+                    GC.ReRegisterForFinalize(this);
+                } else
+                {
+                    ReduxDead = true;
+                    var all = SilentListAll();
+                    foreach (var chunk in all)
+                    {
+                        try { chunk.Dispose(); } catch { }
+                    }
                 }
             }
+            catch { }
         }
         public void Rereferenced(bool saved)
         {
@@ -199,7 +207,10 @@ namespace FSO.Files.Formats.IFF
             var chunkID = io.ReadUInt16();
             var chunkFlags = io.ReadUInt16();
             var chunkLabel = io.ReadCString(64).TrimEnd('\0');
-            var chunkDataSize = chunkSize - 76;
+            // (SimsRedux: a damaged header can't ask for more than the file has left - a size under 76 wrapped
+            //  round to 4 GB, a huge one set aside that much memory before reading a byte)
+            if (chunkSize < 76) { stream.Position = stream.Length; return null; } // (the rest of the file can't be read: keep what came before)
+            var chunkDataSize = (uint)Math.Min(chunkSize - 76, Math.Max(0, stream.Length - stream.Position));
 
             /** Do we understand this chunk type? **/
             if (!CHUNK_TYPES.ContainsKey(chunkType))

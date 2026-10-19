@@ -994,6 +994,10 @@ namespace FSO.SimAntics
         public void LoadComplete()
         {
             FSOVAsyncLoading = false;
+            // SimsRedux: the question waiting for an answer isn't saved, but who asked is (their thread waits on it):
+            // worked out again, so a player joining part way agrees with everyone else about what may happen next
+            if (TS1 && GlobalBlockingDialog == null)
+                GlobalBlockingDialog = Entities.Where(e => e?.Thread?.BlockingState is FSO.SimAntics.Primitives.VMDialogResult).OrderBy(e => e.ObjectID).FirstOrDefault();
             if (!TS1 && VM.UseWorld)
             {
                 Context.Blueprint.Weather?.SetWeather(GetGlobalValue(18));

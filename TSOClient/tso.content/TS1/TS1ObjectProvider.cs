@@ -61,8 +61,9 @@ namespace FSO.Content.TS1
                     }
                 }
                 file.MarkThrowaway();
-                var objects = file.List<OBJD>();
-                var slots = file.List<SLOT>();
+                List<OBJD> objects;
+                try { objects = file.List<OBJD>(); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] skipped a damaged object file (" + iff + "): " + e.Message); continue; }
                 if (objects != null)
                 {
                     foreach (var obj in objects)
@@ -87,6 +88,7 @@ namespace FSO.Content.TS1
                             //todo: room sort
                             var cat = (sbyte)Math.Log(obj.FunctionFlags, 2);
                             if (obj.FunctionFlags == 0) cat = (sbyte)(obj.BuildModeType+7);
+                            if (cat < 0 || cat >= 30) continue; // (SimsRedux: a download with odd catalog flags - not in the catalog, but still usable)
                             var item = new ObjectCatalogItem()
                             {
                                 Category = (sbyte)(cat), //0-7 buy categories. 8-15 build mode categories

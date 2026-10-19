@@ -146,6 +146,10 @@ namespace FSO.Content.Interfaces
         {
             lock (Entries)
             {
+                // (SimsRedux: the file it came from is read again next time - a re-saved Sim at the same path
+                //  used to come back as it was before)
+                if (Entries.TryGetValue(GUID, out var old) && old?.FileName != null)
+                    lock (ProcessedFiles) ProcessedFiles.TryRemove(old.FileName, out _);
                 Entries.Remove(GUID);
             }
             lock (Cache)

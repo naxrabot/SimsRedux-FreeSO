@@ -407,13 +407,17 @@ namespace FSO.Content
             {
                 //get from iff
                 WallReference entry = null;
-                if (!Entries.TryGetValue((ushort)id, out entry)) entry = Entries.Values.First(x => x.ID > 255);
+                if (!Entries.TryGetValue((ushort)id, out entry)) entry = Entries.Values.FirstOrDefault(x => x.ID > 255);
+                if (entry == null) return null;
                 IffFile iff = this.Walls.Get(entry.FileName);
                 if (iff == null) return null;
 
                 var far = iff.Get<SPR>(1);
                 var medium = iff.Get<SPR>(1793);
                 var near = iff.Get<SPR>(2049);
+                // (SimsRedux: a downloaded wall missing a zoom level uses another of its own instead of crashing)
+                near = near ?? medium ?? far; medium = medium ?? near ?? far; far = far ?? medium ?? near;
+                if (near == null) return null;
 
                 ById[(ushort)id] = new Wall
                 {

@@ -190,14 +190,19 @@ namespace FSO.Files.Formats.IFF.Chunks
                 }
                 else
                 {
-                    using (IoBuffer buf = IoBuffer.FromStream(new MemoryStream(ToDecode), Parent.ByteOrd))
+                    // (SimsRedux: always let go of the "decoding" flag - see SPR2)
+                    try
                     {
-                        ReadDeferred(Version, buf);
+                        using (IoBuffer buf = IoBuffer.FromStream(new MemoryStream(ToDecode), Parent.ByteOrd))
+                        {
+                            ReadDeferred(Version, buf);
+                        }
                     }
-
-                    ToDecode = null;
-
-                    Interlocked.Exchange(ref _decoding, 0);
+                    finally
+                    {
+                        ToDecode = null;
+                        Interlocked.Exchange(ref _decoding, 0);
+                    }
                 }
             }
         }

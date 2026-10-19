@@ -13,7 +13,7 @@ namespace FSO.SimAntics.Utils
     /// </summary>
     public static class ReduxExit
     {
-        private static readonly Dictionary<VMRoutine, bool> IsSkillExit = new Dictionary<VMRoutine, bool>();
+        private static readonly ReduxWeakMap<VMRoutine, bool> IsSkillExit = new ReduxWeakMap<VMRoutine, bool>();
         private static readonly object Lock = new object();
 
         /// <summary>True: answer the script's "should I stop?" with yes (a need is low).</summary>

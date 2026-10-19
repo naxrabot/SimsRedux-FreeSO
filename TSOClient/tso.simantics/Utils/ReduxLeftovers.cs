@@ -30,7 +30,7 @@ namespace FSO.SimAntics.Utils
         private static readonly HashSet<uint> GroupMeals = new HashSet<uint> { 0x15866694, 0xa9fe9873 }; // regular group meal, BBQ group meal
 
         private class Entry { public uint Source; public string Label; }
-        private static readonly Dictionary<TTAB, Dictionary<uint, Entry>> Patched = new Dictionary<TTAB, Dictionary<uint, Entry>>();
+        private static readonly ReduxWeakMap<TTAB, Dictionary<uint, Entry>> Patched = new ReduxWeakMap<TTAB, Dictionary<uint, Entry>>();
         private static readonly object Lock = new object();
 
         public static bool IsGroupMeal(VMEntity e) { return e?.Object?.OBJ != null && GroupMeals.Contains(e.Object.OBJ.GUID); }
@@ -164,39 +164,44 @@ namespace FSO.SimAntics.Utils
             catch (Exception e) { Console.WriteLine("[SimsRedux] leftovers: " + e.Message); }
         }
 
-        /// <summary>Every tick, for every Sim: a Sim starting on "Have Leftovers" takes one serving out.</summary>
+        /// <summary>
+        /// Every tick, for every Sim. Decided only from what's on the lot (the platter, the plate in hand, the
+        /// fridges) - never from anything kept on the side - so every player's game agrees, a save made part way
+        /// is fine, and a Sim who's stopped on the way to the fridge doesn't use up a serving.
+        /// </summary>
         public static void Tick(VMAvatar ava)
         {
-            var action = ava?.Thread?.ActiveAction;
-            if (action == null || action.Name == null) return;
-            // the plate taken out for leftovers is already cooked: straight to eating it (at a table, like any
-            // meal) - it used to count as raw, so the Sim went looking to prepare it and dropped it on the floor
-            if (action.ReduxCounted && action.Name.StartsWith(HaveLabel))
+            try
             {
+                var action = ava?.Thread?.ActiveAction;
+                var name = action?.Name;
+                if (name == null) return;
+                if (name == PutAwayLabel)
+                {
+                    // putting the platter away: remember how many servings it has (clearing up can empty it first)
+                    var meal = action.Callee;
+                    if (!IsGroupMeal(meal)) return;
+                    short servings = meal.GetAttribute(2);
+                    if (servings > 0 && meal.GetAttribute(StoreAttr) != servings) meal.SetAttribute(StoreAttr, servings);
+                    return;
+                }
+                if (!name.StartsWith(HaveLabel, StringComparison.Ordinal) || !IsFridge(action.Callee)) return;
                 var held = ava.GetSlot(0);
-                if (held != null && (held.Object?.OBJ?.ChunkLabel ?? "").StartsWith("Food - Regular Meal", StringComparison.OrdinalIgnoreCase)
+                if (held != null && (held.Object?.OBJ?.ChunkLabel ?? "").StartsWith("Food - Regular Meal", StringComparison.Ordinal)
                     && held.GetAttribute(1) < CookedState)
                 {
+                    // the plate is out: it's a serving from the fridge, already cooked - straight to eating it
+                    // (at a table, like any meal; counted as raw, the Sim went looking to cook it and dropped it)
+                    var fridge = Fridges(ava.Thread.Context.VM).FirstOrDefault(f => f.GetAttribute(StoreAttr) > 0);
+                    if (fridge != null) fridge.SetAttribute(StoreAttr, (short)(fridge.GetAttribute(StoreAttr) - 1));
                     held.SetAttribute(1, CookedState);
                     held.SetValue(VMStackObjectVariable.Graphic, CookedGraphic);
+                    return;
                 }
-                return;
+                // none left after all (eaten by someone else on the way): don't make a meal out of nothing
+                if (held == null && !action.NotifyIdle && Stored(ava.Thread.Context.VM) <= 0) ava.Thread.CancelAction(action.UID);
             }
-            if (action.ReduxCounted) return;
-            if (action.Name == PutAwayLabel && IsGroupMeal(action.Callee))
-            {
-                // remember how many servings it had
-                action.ReduxCounted = true;
-                action.Callee.SetAttribute(StoreAttr, action.Callee.GetAttribute(2));
-                return;
-            }
-            if (!action.Name.StartsWith(HaveLabel)) return;
-            if (!IsFridge(action.Callee)) return;
-            action.ReduxCounted = true;
-            var vm = ava.Thread.Context.VM;
-            var fridge = Fridges(vm).FirstOrDefault(f => f.GetAttribute(StoreAttr) > 0);
-            if (fridge == null) { ava.Thread.CancelAction(action.UID); return; } // (none left after all)
-            fridge.SetAttribute(StoreAttr, (short)(fridge.GetAttribute(StoreAttr) - 1));
+            catch (Exception e) { Console.WriteLine("[SimsRedux] leftovers: " + e.Message); }
         }
     }
 }
