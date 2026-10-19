@@ -19,7 +19,10 @@ namespace FSO.Content.Framework
         protected Dictionary<string, string> EntriesByName;
         protected Dictionary<ulong, string> EntryNamesById;
         protected IContentCodec<T> Codec;
-        protected Dictionary<string, T> Cache;
+        // SimsRedux: files are let go once nothing uses them (like the archives are) - this used to keep every
+        // loose file ever opened (every custom object, wall, floor and skin looked at) for the whole game
+        protected FSO.Common.Utils.TimedReferenceCache<string, T> Cache;
+        private readonly object CacheLock = new object();
         protected List<FileContentReference<T>> Items;
         private Regex FilePattern;
         public bool UseContent;
@@ -45,11 +48,11 @@ namespace FSO.Content.Framework
         public void Init()
         {
             this.Items = new List<FileContentReference<T>>();
-            this.Cache = new Dictionary<string, T>();
+            this.Cache = new FSO.Common.Utils.TimedReferenceCache<string, T>();
             this.EntriesByName = new Dictionary<string, string>();
             this.EntryNamesById = new Dictionary<ulong, string>();
 
-            lock (Cache)
+            lock (CacheLock)
             {
                 List<string> matchedFiles = new List<string>();
                 var files = UseContent ? ContentManager.ContentFiles : (UseTS1?ContentManager.TS1AllFiles:ContentManager.AllFiles);
@@ -101,28 +104,19 @@ namespace FSO.Content.Framework
         public T Get(string name)
         {
             name = name.ToLowerInvariant();
-            lock (Cache)
+            if (!EntriesByName.ContainsKey(name)) return default(T);
+            return Cache.GetOrAdd(name, (key) =>
             {
-                if (Cache.ContainsKey(name))
+                var fullPath = UseContent? ("Content/"+EntriesByName[key]):(UseTS1?ContentManager.TS1Path(EntriesByName[key]):ContentManager.GetPath(EntriesByName[key]));
+                using (var reader = FSOFile.OpenRead(fullPath))
                 {
-                    return Cache[name];
+                    T item;
+                    if (Codec == null) item = (T)SmartCodec.Decode(reader, Path.GetExtension(fullPath));
+                    else item = Codec.Decode(reader);
+                    if (item is IFileInfoUtilizer) ((IFileInfoUtilizer)item).SetFilename(Path.GetFileName(fullPath));
+                    return item;
                 }
-
-                if (EntriesByName.ContainsKey(name))
-                {
-                    var fullPath = UseContent? ("Content/"+EntriesByName[name]):(UseTS1?ContentManager.TS1Path(EntriesByName[name]):ContentManager.GetPath(EntriesByName[name]));
-                    using (var reader = FSOFile.OpenRead(fullPath))
-                    {
-                        T item;
-                        if (Codec == null) item = (T)SmartCodec.Decode(reader, Path.GetExtension(fullPath));
-                        else item = Codec.Decode(reader);
-                        if (item is IFileInfoUtilizer) ((IFileInfoUtilizer)item).SetFilename(Path.GetFileName(fullPath));
-                        Cache.Add(name, item);
-                        return item;
-                    }
-                }
-                return default(T);
-            }
+            });
         }
 
         public T ThrowawayGet(string name)
