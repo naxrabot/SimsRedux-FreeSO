@@ -28,6 +28,14 @@ namespace FSO.Files.FAR1
         }
 
         /// <summary>
+        /// SimsRedux: the archive file's size in bytes.
+        /// </summary>
+        public long ArchiveLength
+        {
+            get { lock (m_Reader) return m_Reader.BaseStream.Length; }
+        }
+
+        /// <summary>
         /// The offset into the archive of the manifest.
         /// </summary>
         public uint ManifestOffset
@@ -65,6 +73,9 @@ namespace FSO.Files.FAR1
                 throw (new Exception("Archive wasn't a valid FAR V.1 archive! (" + Path + ", starts " + BitConverter.ToString(headBytes) + ", version " + Version + ")"));
             }
 
+            // SimsRedux: a damaged archive (cut short) closes its file before saying so, instead of keeping it open
+            try
+            {
             //File table offset - A 4-byte unsigned integer specifying the offset to the file table 
             //from the beginning of the archive.
             m_ManifestOffset = m_Reader.ReadUInt32();
@@ -85,6 +96,12 @@ namespace FSO.Files.FAR1
 
                 m_Entries.Add(Entry);
             }                  
+            }
+            catch
+            {
+                m_Reader.Dispose();
+                throw;
+            }
         }
 
         /// <summary>

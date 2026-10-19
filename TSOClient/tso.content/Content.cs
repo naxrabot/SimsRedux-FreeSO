@@ -96,6 +96,61 @@ namespace FSO.Content
         public const string ReduxCreatorTag = "~redux-creator/";
         public static string ReduxCreatorDir { get { return Path.Combine(FSOEnvironment.ContentDir, "redux/creator/"); } }
 
+        /// <summary>
+        /// SimsRedux: The Sims Online's own folder (TSOClient - the one with housedata and objectdata in it),
+        /// "" = none. In the browser it's "/tso/" (downloaded from the server by Admins and Testers).
+        /// Its content is only used while ReduxTSOContent is on (set before the content loads, like
+        /// ReduxCreatorContent). Stage 1: TSO's walls and floors join the build catalogs.
+        /// </summary>
+        public static string TSOBasePath = "";
+        public static bool ReduxTSOContent;
+        /// <summary>How much of The Sims Online is brought in (part of the online content stamp).</summary>
+        public const int ReduxTSOStage = 1;
+
+        /// <summary>A file in The Sims Online's folder, e.g. TSOPath("housedata/walls/walls.far").</summary>
+        public static string TSOPath(string rel)
+        {
+            return Path.Combine(TSOBasePath ?? "", (rel ?? "").TrimStart('/', '\\'));
+        }
+
+        /// <summary>The Sims Online's content is switched on and its folder has what stage 1 needs.</summary>
+        public static bool HasTSO
+        {
+            get
+            {
+                if (!ReduxTSOContent || string.IsNullOrEmpty(TSOBasePath)) return false;
+                try
+                {
+                    foreach (var f in new[] { "objectdata/globals/build.iff", "housedata/walls/walls.far", "housedata/floors/floors.far" })
+                        if (FSOFile.Exists(TSOPath(f))) return true;
+                }
+                catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] Sims Online folder check: " + e.Message); }
+                return false;
+            }
+        }
+
+        private static readonly object TSOStampLock = new object();
+        private static int ReduxTSOFiles;
+        private static long ReduxTSOBytes;
+
+        /// <summary>Called by the TSO providers with the archives they loaded (for ReduxTSOStamp).</summary>
+        public static void ReduxAddTSOStamp(int files, long bytes)
+        {
+            lock (TSOStampLock) { ReduxTSOFiles += files; ReduxTSOBytes += bytes; }
+        }
+
+        /// <summary>
+        /// What Sims Online content this game loaded: "" = none, else stage, archive count and their bytes
+        /// ("tso1:8:31000000"). Two games playing one lot must have the same stamp.
+        /// </summary>
+        public static string ReduxTSOStamp
+        {
+            get
+            {
+                lock (TSOStampLock) return ReduxTSOFiles == 0 ? "" : "tso" + ReduxTSOStage + ":" + ReduxTSOFiles + ":" + ReduxTSOBytes;
+            }
+        }
+
         /// <summary>A file from the game's file list as a real path (the game's folder, or the shipped mods).</summary>
         public string TS1Path(string file)
         {
@@ -232,6 +287,7 @@ namespace FSO.Content
                 ((TS1ObjectProvider)WorldObjects).Init();
                 LoadProgress = ContentLoadingProgress.InitArch;
 
+                lock (TSOStampLock) { ReduxTSOFiles = 0; ReduxTSOBytes = 0; } // (the walls and floors add theirs)
                 WorldWalls.InitTS1();
                 WorldFloors.InitTS1();
             }
