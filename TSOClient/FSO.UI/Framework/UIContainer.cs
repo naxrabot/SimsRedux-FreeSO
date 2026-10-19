@@ -258,18 +258,41 @@ namespace FSO.Client.UI.Framework
             {
                 lock (Children)
                 {
-                    foreach (var child in Children)
+                    // SimsRedux: drawn from a copy, so a piece that adds or removes others while drawing (closing a
+                    // dialog, say) doesn't stop the rest of this container drawing ("collection was modified").
+                    // (A copy of its own - Update's copy may be in use further up.)
+                    if (DrawCopy == null || DrawCopy.Length != Children.Count) DrawCopy = Children.ToArray();
+                    else if (Children.Count > 0) Children.CopyTo(DrawCopy);
+                    var copy = DrawCopy;
+                    DrawCopy = null; // (if this container is drawn again from inside a child, it makes its own)
+                    try
                     {
-                        // SimsRedux: one broken piece of the screen (a panel, a button) no longer stops the whole
-                        // game - it's skipped and noted once in the console (and the problem log)
-                        if (child == null) continue;
-                        try { child.Draw(batch); }
-                        catch (Exception e) { ReduxDrawFailed(child, e, "draw"); }
+                        foreach (var child in copy)
+                        {
+                            // SimsRedux: one broken piece of the screen (a panel, a button) no longer stops the whole
+                            // game - it's skipped and noted once in the console (and the problem log)
+                            if (child == null) continue;
+                            if (child.ReduxDrawSkip > 0) { child.ReduxDrawSkip--; continue; }
+                            try { child.Draw(batch); child.ReduxDrawFails = 0; }
+                            catch (Exception e)
+                            {
+                                // (failing every frame: left out for a while before it's tried again)
+                                if (++child.ReduxDrawFails >= ReduxFailsInARow) { child.ReduxDrawFails = 0; child.ReduxDrawSkip = ReduxSkipFrames; }
+                                ReduxDrawFailed(child, e, "draw");
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        Array.Clear(copy, 0, copy.Length); // (don't keep removed pieces alive through the copy)
+                        DrawCopy = copy;
                     }
                 }
             }
         }
 
+        private UIElement[] DrawCopy;
+        private const int ReduxFailsInARow = 30, ReduxSkipFrames = 60;
         private static readonly System.Collections.Generic.HashSet<string> ReduxDrawFailures = new System.Collections.Generic.HashSet<string>();
         /// <summary>SimsRedux: where a screen piece that failed to draw is reported (the web build: the problem log).</summary>
         public static Action<string, string> ReduxReportProblem;
@@ -296,8 +319,13 @@ namespace FSO.Client.UI.Framework
                 {
                     // SimsRedux: same as drawing - one broken piece is skipped and reported, the game goes on
                     if (child == null) continue;
-                    try { child.Update(state); }
-                    catch (Exception e) { ReduxDrawFailed(child, e, "update"); }
+                    if (child.ReduxUpdateSkip > 0) { child.ReduxUpdateSkip--; continue; }
+                    try { child.Update(state); child.ReduxUpdateFails = 0; }
+                    catch (Exception e)
+                    {
+                        if (++child.ReduxUpdateFails >= ReduxFailsInARow) { child.ReduxUpdateFails = 0; child.ReduxUpdateSkip = ReduxSkipFrames; }
+                        ReduxDrawFailed(child, e, "update");
+                    }
                 }
             }
         }

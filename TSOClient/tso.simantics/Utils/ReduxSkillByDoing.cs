@@ -80,6 +80,15 @@ namespace FSO.SimAntics.Utils
             catch (Exception) { }
         }
 
+        private static int FindRule(string name)
+        {
+            name = name.ToLowerInvariant();
+            for (int i = 0; i < Rules.Length; i++)
+                foreach (var w in Rules[i].Words)
+                    if (name.Contains(w)) return i;
+            return -1;
+        }
+
         public static void Tick(VMAvatar ava)
         {
             try
@@ -88,11 +97,14 @@ namespace FSO.SimAntics.Utils
                 var action = ava.Thread.ActiveAction;
                 var name = action?.Name;
                 if (string.IsNullOrEmpty(name) || action.Callee == null) { HideBar(ava); return; }
-                name = name.ToLowerInvariant(); // (short, once per tick)
-                int found = -1;
-                for (int i = 0; i < Rules.Length && found < 0; i++)
-                    foreach (var w in Rules[i].Words)
-                        if (name.Contains(w)) { found = i; break; }
+                // (the matching rule is worked out once per action name and kept on the action - this lower-cased
+                //  the name and searched it for ~30 words every tick for every Sim)
+                if (action.ReduxSkillRule < -1 || !ReferenceEquals(action.ReduxSkillRuleName, name))
+                {
+                    action.ReduxSkillRule = (sbyte)FindRule(name);
+                    action.ReduxSkillRuleName = name;
+                }
+                int found = action.ReduxSkillRule;
                 if (found < 0) { HideBar(ava); return; }
                 // the game is already teaching a skill here (its own skill bar is up - studying, say): no extra
                 if (ava.Headline != null && !IsOurBar(ava) && ava.Headline.Operand?.Group == Primitives.VMSetBalloonHeadlineOperandGroup.Progress) return;

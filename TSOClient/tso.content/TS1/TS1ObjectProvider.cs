@@ -1,4 +1,5 @@
-﻿using FSO.Common.Utils;
+﻿using FSO.Common.Content;
+using FSO.Common.Utils;
 using FSO.Content.Framework;
 using FSO.Content.Interfaces;
 using FSO.Files.Formats.IFF;
@@ -37,6 +38,10 @@ namespace FSO.Content.TS1
             for (int i = 0; i < 30; i++) ItemsByCategory[i] = new List<ObjectCatalogItem>();
 
             var allIffs = GameObjects.ListGeneric();
+            // SimsRedux: when two files hold an object with the same GUID, which one wins (see GuidRank)
+            var guidRank = new Dictionary<uint, int>();
+            var guidKey = new Dictionary<uint, string>();
+            var guidLogged = new HashSet<uint>();
             ReduxModFiles = 0; ReduxModCatalogItems = 0; DownloadsCatalogItems = 0;
             foreach (var iff in allIffs)
             {
@@ -61,6 +66,8 @@ namespace FSO.Content.TS1
                     }
                 }
                 file.MarkThrowaway();
+                int rank = GuidRank(iff);
+                string rankKey = GuidRankKey(iff);
                 List<OBJD> objects;
                 try { objects = file.List<OBJD>(); }
                 catch (Exception e) { Console.WriteLine("[SimsRedux] skipped a damaged object file (" + iff + "): " + e.Message); continue; }
@@ -68,6 +75,31 @@ namespace FSO.Content.TS1
                 {
                     foreach (var obj in objects)
                     {
+                        // SimsRedux: a GUID that's already taken. This used to silently swap the object for the later
+                        // file but leave two catalog items, and which one won depended on the order the files were
+                        // listed in - so two players (or the server) could get different objects. Now one fixed rule
+                        // picks it: Overrides > shipped mods > the game's own archives > the player's Downloads, then
+                        // the file name, whatever the order.
+                        int prevRank;
+                        if (guidRank.TryGetValue(obj.GUID, out prevRank))
+                        {
+                            var prevKey = guidKey[obj.GUID];
+                            bool newWins = rank > prevRank || (rank == prevRank && string.CompareOrdinal(rankKey, prevKey) < 0);
+                            if (guidLogged.Add(obj.GUID))
+                                Console.WriteLine("[SimsRedux] two objects share GUID 0x" + obj.GUID.ToString("X8") + " (" + prevKey + ", " + rankKey + ") - using " + (newWins ? rankKey : prevKey));
+                            if (!newWins) continue;
+                            // the old one's catalog item goes, the new one's (if any) is added below
+                            ObjectCatalogItem oldItem;
+                            if (ItemsByGUID.TryGetValue(obj.GUID, out oldItem))
+                            {
+                                var guid = obj.GUID;
+                                ItemsByCategory[oldItem.Category].RemoveAll(x => x.GUID == guid);
+                                ItemsByGUID.Remove(guid);
+                            }
+                        }
+                        guidRank[obj.GUID] = rank;
+                        guidKey[obj.GUID] = rankKey;
+
                         Entries[obj.GUID] = new GameObjectReference(this)
                         {
                             FileName = filename,
@@ -121,6 +153,29 @@ namespace FSO.Content.TS1
             ControllerObjects.AddRange(globalSims);
 
             ContentManager.Neighborhood.LoadCharacters(false);
+        }
+
+        /// <summary>
+        /// SimsRedux: which file wins a GUID that two files share - higher wins. Overrides (3), shipped mods and
+        /// creator content (2), the game's own archives (1), the player's Downloads folder (0).
+        /// </summary>
+        private static int GuidRank(IContentReference iff)
+        {
+            var fileIff = iff as FileContentReference<object>;
+            if (fileIff == null) return 1; // inside one of the game's .far archives
+            var path = (fileIff.Filename ?? "").Replace('\\', '/');
+            if (path.IndexOf("redux/mods/Overrides/", StringComparison.OrdinalIgnoreCase) >= 0) return 3;
+            if (path.IndexOf("redux/mods/", StringComparison.OrdinalIgnoreCase) >= 0
+                || path.IndexOf("redux/creator/", StringComparison.OrdinalIgnoreCase) >= 0) return 2;
+            return 0;
+        }
+
+        /// <summary>SimsRedux: the tie-break for files of the same rank - the file's name (the same on every machine).</summary>
+        private static string GuidRankKey(IContentReference iff)
+        {
+            var fileIff = iff as FileContentReference<object>;
+            var name = (fileIff != null) ? fileIff.Name : iff.ToString();
+            return (name ?? "").Replace('\\', '/').ToLowerInvariant();
         }
 
         protected override Func<string, GameObjectResource> GenerateResource(GameObjectReference reference)

@@ -186,8 +186,7 @@ namespace FSO.SimAntics.Utils
             action.Name = e.Label;
         }
 
-        // which of the computers' own routines is "tweak play happy enough" (looked up once each)
-        private static readonly ReduxWeakMap<VMRoutine, bool> HappyEnoughRoutines = new ReduxWeakMap<VMRoutine, bool>();
+        // (which of the computers' own routines is "tweak play happy enough" is kept on the routine: VMRoutine.ReduxKind)
 
         /// <summary>
         /// Called as a routine is about to call one of its object's own routines. A computer's play loop
@@ -231,24 +230,14 @@ namespace FSO.SimAntics.Utils
                 var ava = frame?.Caller as VMAvatar;
                 var callee = frame?.Callee;
                 if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return 0;
+                // (the cheap check first: is the script being called "happy enough"? - see VMRoutine.ReduxKind)
+                var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
+                if (routine == null || routine.GetReduxKind() != VMRoutine.ReduxKindHappyEnough) return 0;
                 lock (Lock)
                 {
                     Dictionary<uint, Entry> map;
                     if (!Patched.TryGetValue(callee.TreeTable, out map) || map == null) return 0; // (only computers)
                 }
-                var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
-                if (routine == null) return 0;
-                bool happy;
-                lock (Lock)
-                {
-                    if (!HappyEnoughRoutines.TryGetValue(routine, out happy))
-                    {
-                        var label = routine.Chunk?.ChunkLabel ?? "";
-                        happy = label.IndexOf("happy enough", StringComparison.OrdinalIgnoreCase) >= 0;
-                        HappyEnoughRoutines[routine] = happy;
-                    }
-                }
-                if (!happy) return 0;
                 // (a need is getting low: they get up, whatever they're doing)
                 if (NeedsSomething(ava)) return -1;
 
@@ -462,10 +451,12 @@ namespace FSO.SimAntics.Utils
         public static List<VMEntity> PlayingTwistedMetal(VM vm)
         {
             var list = new List<VMEntity>();
-            if (vm == null) return list;
-            foreach (var e in vm.Entities)
+            // (SimsRedux: only the Sims, not every object on the lot)
+            var avatars = vm?.Context?.ObjectQueries?.Avatars;
+            if (avatars == null) return list;
+            for (int i = 0; i < avatars.Count; i++)
             {
-                var ava = e as VMAvatar;
+                var ava = avatars[i] as VMAvatar;
                 if (ava == null) continue;
                 int genre;
                 VMQueuedAction action;

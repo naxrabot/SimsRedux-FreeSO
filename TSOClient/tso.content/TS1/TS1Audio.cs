@@ -145,7 +145,7 @@ namespace FSO.Content.TS1
             XASounds.Init();
             UTKSounds.Init();
 
-            var FilePattern = new Regex(@".*\.hot");
+            var FilePattern = new Regex(@".*\.hot$"); // (SimsRedux: "$" - a "x.hot.bak" was read as a sound list)
 
             List<string> matchedFiles = new List<string>();
             foreach (var file in ContentManager.TS1AllFiles)

@@ -21,6 +21,33 @@ namespace FSO.SimAntics
         public BHAV Chunk;
         public uint RuntimeVer;
 
+        /// <summary>
+        /// SimsRedux: what this script is to the Redux hooks (the computer's "happy enough", the work and school
+        /// checks, "Exit Skill Object"), worked out once from its name: -1 = not yet. Every script call used to take
+        /// a lock and a table lookup per hook to find this out; now it's a field read. (Only depends on the
+        /// script's name, so every player works out the same thing.)
+        /// </summary>
+        public sbyte ReduxKind = -1;
+        public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
+            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5;
+
+        public sbyte GetReduxKind()
+        {
+            var kind = ReduxKind;
+            if (kind < 0)
+            {
+                var label = Chunk?.ChunkLabel ?? "";
+                if (label.Equals("Exit Skill Object", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindExitSkill;
+                else if (label.IndexOf("happy enough", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindHappyEnough;
+                else if (label.IndexOf("due at work", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindDueAtWork;
+                else if (label.IndexOf("warnings car pool", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindCarPool;
+                else if (label.IndexOf("school bus schedule", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindSchoolBus;
+                else kind = ReduxKindNone;
+                ReduxKind = kind;
+            }
+            return kind;
+        }
+
         public virtual VMPrimitiveExitCode Execute(VMStackFrame frame, out VMInstruction instruction)
         {
             instruction = frame.GetCurrentInstruction();
@@ -31,13 +58,22 @@ namespace FSO.SimAntics
                 // SimsRedux: a Sim playing or writing on a computer keeps going (Utils/ReduxComputer.cs)
                 if (opcode >= 4096 && opcode < 8192)
                 {
-                    var keep = FSO.SimAntics.Utils.ReduxComputer.Decide(frame.Thread, frame, opcode);
-                    if (keep > 0) return VMPrimitiveExitCode.GOTO_TRUE;
-                    if (keep < 0) return VMPrimitiveExitCode.GOTO_FALSE; // (a need is low: they stop)
+                    // (only scripts with one of the hooks' names go any further - see ReduxKind)
+                    var target = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
+                    var kind = (target == null) ? ReduxKindNone : target.GetReduxKind();
+                    if (kind == ReduxKindHappyEnough)
+                    {
+                        var keep = FSO.SimAntics.Utils.ReduxComputer.Decide(frame.Thread, frame, opcode);
+                        if (keep > 0) return VMPrimitiveExitCode.GOTO_TRUE;
+                        if (keep < 0) return VMPrimitiveExitCode.GOTO_FALSE; // (a need is low: they stop)
+                    }
                     // SimsRedux: days off work (Utils/ReduxWeek.cs)
-                    var off = FSO.SimAntics.Utils.ReduxWeek.DayOff(frame, opcode);
-                    if (off < 0) return VMPrimitiveExitCode.GOTO_FALSE;
-                    if (off > 0) return VMPrimitiveExitCode.GOTO_TRUE;
+                    else if (kind == ReduxKindDueAtWork || kind == ReduxKindCarPool || kind == ReduxKindSchoolBus)
+                    {
+                        var off = FSO.SimAntics.Utils.ReduxWeek.DayOff(frame, opcode);
+                        if (off < 0) return VMPrimitiveExitCode.GOTO_FALSE;
+                        if (off > 0) return VMPrimitiveExitCode.GOTO_TRUE;
+                    }
                 }
                 // SimsRedux: no more than a couple of uninvited visitors a day (Utils/ReduxVisitCap.cs)
                 if (opcode < 4096 && FSO.SimAntics.Utils.ReduxVisitCap.Skip(frame, opcode)) return VMPrimitiveExitCode.GOTO_TRUE;

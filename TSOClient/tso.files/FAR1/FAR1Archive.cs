@@ -20,6 +20,14 @@ namespace FSO.Files.FAR1
         private bool V1b = true;
 
         /// <summary>
+        /// SimsRedux: the path this archive was opened from (used to tell apart two archives that hold a file with the same name).
+        /// </summary>
+        public string ArchivePath
+        {
+            get { return m_Path; }
+        }
+
+        /// <summary>
         /// The offset into the archive of the manifest.
         /// </summary>
         public uint ManifestOffset
@@ -90,8 +98,7 @@ namespace FSO.Files.FAR1
             {
                 if (Ent.Filename == Entry.Key)
                 {
-                    m_Reader.BaseStream.Seek(Ent.DataOffset, SeekOrigin.Begin);
-                    return m_Reader.ReadBytes(Ent.DataLength);
+                    return ReadEntryData(Ent);
                 }
             }
 
@@ -105,16 +112,30 @@ namespace FSO.Files.FAR1
         /// <returns>The entry's data.</returns>
         public byte[] GetEntry(FarEntry Entry)
         {
-            foreach (FarEntry Ent in m_Entries)
-            {
-                if (Ent.Filename == Entry.Filename)
-                {
-                    m_Reader.BaseStream.Seek(Ent.DataOffset, SeekOrigin.Begin);
-                    return m_Reader.ReadBytes(Ent.DataLength);
-                }
-            }
+            // SimsRedux: we were handed the entry itself, so jump straight to its data instead of
+            // searching every entry by name (that made loading a big archive slow at startup).
+            if (Entry == null) return null;
+            return ReadEntryData(Entry);
+        }
 
-            return null;
+        /// <summary>
+        /// Reads one entry's bytes from the archive.
+        /// </summary>
+        private byte[] ReadEntryData(FarEntry Entry)
+        {
+            // SimsRedux: textures can load on worker threads on Windows, and they all share this one reader,
+            // so the seek and the read have to happen together without anyone else moving the position.
+            lock (m_Reader)
+            {
+                var stream = m_Reader.BaseStream;
+                long length = stream.Length;
+                if (Entry.DataOffset < 0 || Entry.DataOffset > length) return new byte[0];
+                stream.Seek(Entry.DataOffset, SeekOrigin.Begin);
+                // SimsRedux: never ask for more than the file actually has left, so a damaged archive
+                // can't make us allocate gigabytes for one entry.
+                long count = Math.Min((long)Math.Max(Entry.DataLength, 0), length - Entry.DataOffset);
+                return m_Reader.ReadBytes((int)count);
+            }
         }
 
         /// <summary>
@@ -136,8 +157,7 @@ namespace FSO.Files.FAR1
 
             foreach (FarEntry Entry in m_Entries)
             {
-                m_Reader.BaseStream.Seek(Entry.DataOffset, SeekOrigin.Begin);
-                byte[] Data = m_Reader.ReadBytes(Entry.DataLength);
+                byte[] Data = ReadEntryData(Entry); // SimsRedux: same locked, size-checked read as GetEntry
 
                 KeyValuePair<string, byte[]> KvP = new KeyValuePair<string, byte[]>(Entry.Filename, Data);
                 Entries.Add(KvP);
@@ -148,7 +168,7 @@ namespace FSO.Files.FAR1
 
         public void Close()
         {
-            m_Reader.Close();
+            lock (m_Reader) m_Reader.Close(); // SimsRedux: don't close it out from under a read on another thread
         }
     }
 }
