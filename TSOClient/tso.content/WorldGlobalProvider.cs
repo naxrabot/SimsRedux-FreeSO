@@ -252,6 +252,18 @@ namespace FSO.Content
             Recache();
         }
 
+        /// <summary>
+        /// SimsRedux: one of The Sims Online's globals or semi-globals, loaded in Sims 1 mode (TS1/ReduxTSOObjects).
+        /// Its scripts are read as TSO scripts (see GameIffResource.ReduxTSO).
+        /// </summary>
+        public GameGlobalResource(IffFile iff, OTFFile tuning, bool reduxTSO)
+        {
+            this.Iff = iff;
+            this.Tuning = tuning;
+            this.ReduxTSO = reduxTSO;
+            Recache();
+        }
+
         public override void Recache()
         {
             base.Recache();

@@ -101,12 +101,13 @@ namespace FSO.Content
         /// "" = none. In the browser it's "/tso/" (downloaded from the server by Admins and Testers).
         /// Its content is only used while ReduxTSOContent is on (set before the content loads, like
         /// ReduxCreatorContent). Stage 1: TSO's walls and floors join the build catalogs. Stage 2: TSO's adult
-        /// clothes and heads join Create-a-Sim (TS1/ReduxTSOAvatars).
+        /// clothes and heads join Create-a-Sim (TS1/ReduxTSOAvatars). Stage 3: TSO's buy and build objects
+        /// without interactions join Buy and Build mode (TS1/ReduxTSOObjects).
         /// </summary>
         public static string TSOBasePath = "";
         public static bool ReduxTSOContent;
         /// <summary>How much of The Sims Online is brought in (part of the online content stamp).</summary>
-        public const int ReduxTSOStage = 2;
+        public const int ReduxTSOStage = 3;
 
         /// <summary>A file in The Sims Online's folder, e.g. TSOPath("housedata/walls/walls.far").</summary>
         public static string TSOPath(string rel)
@@ -142,8 +143,8 @@ namespace FSO.Content
 
         /// <summary>
         /// What Sims Online content this game loaded: "" = none, else stage, archive count and their bytes
-        /// ("tso2:22:115000000" - the walls, floors and the Sims' clothes and heads). Two games playing one lot
-        /// must have the same stamp.
+        /// ("tso3:...": the walls, floors, the Sims' clothes and heads, and the objects' archives and globals).
+        /// Two games playing one lot must have the same stamp.
         /// </summary>
         public static string ReduxTSOStamp
         {
@@ -293,6 +294,8 @@ namespace FSO.Content
 
                 lock (TSOStampLock) { ReduxTSOFiles = 0; ReduxTSOBytes = 0; } // (the walls and floors add theirs)
                 if (ReduxTSOAvatarSet != null) ReduxAddTSOStamp(ReduxTSOAvatarSet.ArchiveCount, ReduxTSOAvatarSet.ArchiveBytes); // (and the Sims' clothes)
+                var tsoObjects = ((TS1ObjectProvider)WorldObjects).ReduxTSOSet;
+                if (tsoObjects != null) ReduxAddTSOStamp(tsoObjects.ArchiveCount, tsoObjects.ArchiveBytes); // (and the objects)
                 WorldWalls.InitTS1();
                 WorldFloors.InitTS1();
             }

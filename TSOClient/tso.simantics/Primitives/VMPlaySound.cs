@@ -16,7 +16,7 @@ namespace FSO.SimAntics.Primitives
 
             var operand = (VMPlaySoundOperand)args;
             FWAV fwav = context.ScopeResource.Get<FWAV>(operand.EventID);
-            if (fwav == null) fwav = context.VM.Context.Globals.Resource.Get<FWAV>(operand.EventID);
+            if (fwav == null) fwav = context.Global.Resource.Get<FWAV>(operand.EventID); // (SimsRedux: TSO's for a Sims Online object)
 
             var owner = (operand.StackObjAsSource) ? context.StackObject : context.Caller;
             if (owner == null) return VMPrimitiveExitCode.GOTO_TRUE;

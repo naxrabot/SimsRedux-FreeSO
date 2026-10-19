@@ -1270,6 +1270,16 @@ namespace FSO.SimAntics.Engine
             QueueDirty = true;
             foreach (var item in input.Queue) Queue.Add(new VMQueuedAction(item, context));
             ActiveQueueBlock = input.ActiveQueueBlock;
+            // SimsRedux: code or an interaction belonging to an object this game doesn't have (its files are
+            // missing - e.g. a Sims Online object without The Sims Online's files) can't run: this thread forgets
+            // what it was doing and starts over, instead of the whole lot failing to load
+            if (Stack.Any(f => f.CodeOwner == null) || Queue.Any(q => q.CodeOwner == null))
+            {
+                System.Console.WriteLine("[SimsRedux] Something was saved busy with an object that isn't in this game; it starts over.");
+                Stack.Clear();
+                Queue.Clear();
+                ActiveQueueBlock = -1;
+            }
             TempRegisters = input.TempRegisters;
             TempXL = input.TempXL;
             LastStackExitCode = input.LastStackExitCode;

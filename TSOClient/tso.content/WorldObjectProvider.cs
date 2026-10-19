@@ -247,6 +247,16 @@ namespace FSO.Content
         }
         public GameGlobalResource SemiGlobal;
 
+        /// <summary>
+        /// SimsRedux: The Sims Online's content in Sims 1 mode (TS1/ReduxTSOObjects). Its scripts are read as TSO
+        /// scripts - a few primitive numbers mean something else in the Sims 1 (VMTranslator) - and an object's
+        /// global calls go to ReduxGlobal, TSO's own global.iff, never the Sims 1 one (VMStackFrame.Global).
+        /// Set before the scripts are read (Recache).
+        /// </summary>
+        public bool ReduxTSO;
+        /// <summary>SimsRedux: the globals this object's scripts call (null = the game's own).</summary>
+        public GameGlobal ReduxGlobal;
+
         public static Func<BHAV, GameIffResource, object> BHAVAssembler;
 
         public virtual void Recache()
@@ -303,6 +313,31 @@ namespace FSO.Content
         public override IffFile MainIff
         {
             get { return Iff; }
+        }
+
+        /// <summary>
+        /// SimsRedux: a Sims Online object in Sims 1 mode (TS1/ReduxTSOObjects): it runs against TSO's own global
+        /// (`tsoGlobal`) and semi-global (from `tsoSemiGlobals`, by the name in its GLOB) - never the Sims 1 ones,
+        /// whose scripts differ even where the names are the same.
+        /// </summary>
+        public GameObjectResource(IffFile iff, IffFile sprites, OTFFile tuning, string iname, Content content,
+            GameGlobal tsoGlobal, Func<string, GameGlobal> tsoSemiGlobals)
+        {
+            this.Iff = iff;
+            this.Sprites = sprites;
+            this.Tuning = tuning;
+            this.Name = iname;
+            this.ReduxTSO = true;
+            this.ReduxGlobal = tsoGlobal;
+
+            if (iff == null) return;
+            var GLOBChunks = iff.List<GLOB>();
+            if (GLOBChunks != null && GLOBChunks.Count > 0 && GLOBChunks[0].Name != "")
+            {
+                try { SemiGlobal = tsoSemiGlobals?.Invoke(GLOBChunks[0].Name)?.Resource; }
+                catch (Exception) { }
+            }
+            Recache();
         }
 
         public GameObjectResource(IffFile iff, IffFile sprites, OTFFile tuning, string iname, Content content)

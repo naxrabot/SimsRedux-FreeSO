@@ -99,15 +99,21 @@ namespace FSO.SimAntics.Engine
         {
             CodeOwner = FSO.Content.Content.Get().WorldObjects.Get(input.CodeOwnerGUID);
 
-            if (input.RoutineID >= 8192) ActionRoutine = (VMRoutine)CodeOwner.Resource.SemiGlobal.GetRoutine(input.RoutineID);
-            else if (input.RoutineID >= 4096) ActionRoutine = (VMRoutine)CodeOwner.Resource.GetRoutine(input.RoutineID);
-            else ActionRoutine = (VMRoutine)context.Globals.Resource.GetRoutine(input.RoutineID);
-
-            if (input.CheckRoutineID != 0)
+            // SimsRedux: an interaction on an object whose files this game doesn't have gets no routines (the
+            // thread drops it - VMThread.Load); a Sims Online object's global routines are TSO's (ReduxGlobal)
+            if (CodeOwner != null)
             {
-                if (input.CheckRoutineID >= 8192) CheckRoutine = (VMRoutine)CodeOwner.Resource.SemiGlobal.GetRoutine(input.CheckRoutineID);
-                else if (input.CheckRoutineID >= 4096) CheckRoutine = (VMRoutine)CodeOwner.Resource.GetRoutine(input.CheckRoutineID);
-                else CheckRoutine = (VMRoutine)context.Globals.Resource.GetRoutine(input.CheckRoutineID);
+                var globals = CodeOwner.Resource.ReduxGlobal ?? context.Globals;
+                if (input.RoutineID >= 8192) ActionRoutine = (VMRoutine)CodeOwner.Resource.SemiGlobal?.GetRoutine(input.RoutineID);
+                else if (input.RoutineID >= 4096) ActionRoutine = (VMRoutine)CodeOwner.Resource.GetRoutine(input.RoutineID);
+                else ActionRoutine = (VMRoutine)globals.Resource.GetRoutine(input.RoutineID);
+
+                if (input.CheckRoutineID != 0)
+                {
+                    if (input.CheckRoutineID >= 8192) CheckRoutine = (VMRoutine)CodeOwner.Resource.SemiGlobal?.GetRoutine(input.CheckRoutineID);
+                    else if (input.CheckRoutineID >= 4096) CheckRoutine = (VMRoutine)CodeOwner.Resource.GetRoutine(input.CheckRoutineID);
+                    else CheckRoutine = (VMRoutine)globals.Resource.GetRoutine(input.CheckRoutineID);
+                }
             }
 
             Callee = context.VM.GetObjectById(input.Callee);

@@ -148,11 +148,96 @@ namespace FSO.Content.TS1
 
             Console.WriteLine("[SimsRedux] custom content: " + ReduxModFiles + " shipped object files, " + ReduxModCatalogItems +
                 " shipped Buy/Build items, " + DownloadsCatalogItems + " from the Downloads folder");
+
+            // SimsRedux stage 3: The Sims Online's objects without interactions (TS1/ReduxTSOObjects), after all of
+            // the above - a GUID already taken by the Sims 1 game or a shipped mod keeps that object (TakenBeforeTSO).
+            ReduxTSOSet = null;
+            ReduxTSOCatalogItems = 0;
+            if (Content.HasTSO)
+            {
+                try { AddTSOObjects(); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] Sims Online objects: " + e.Message); }
+            }
             var globalSims = Entries.Values.Where(x => x.GlobalSimObject);
             ControllerObjects.Clear();
             ControllerObjects.AddRange(globalSims);
 
             ContentManager.Neighborhood.LoadCharacters(false);
+        }
+
+        /// <summary>SimsRedux: The Sims Online's objects (null: not loaded - no TSO folder, or it's switched off).</summary>
+        public ReduxTSOObjects ReduxTSOSet;
+        public static int ReduxTSOCatalogItems;
+
+        private void AddTSOObjects()
+        {
+            var set = ReduxTSOObjects.Open(ContentManager);
+            if (set == null) return;
+            ReduxTSOSet = set;
+            // a GUID the Sims 1 game or a shipped mod (or creator content) uses keeps that object. One only a
+            // player's own Downloads use goes to The Sims Online's object, so every game and lot worker has the same.
+            var found = set.Collect((guid) => TakenBeforeTSO(guid));
+            int replaced = 0;
+            foreach (var f in found)
+            {
+                var obj = f.Obj;
+                ObjectCatalogItem oldItem;
+                if (Entries.ContainsKey(obj.GUID))
+                {
+                    replaced++;
+                    if (ItemsByGUID.TryGetValue(obj.GUID, out oldItem))
+                    {
+                        var guid = obj.GUID;
+                        ItemsByCategory[oldItem.Category].RemoveAll(x => x.GUID == guid);
+                        ItemsByGUID.Remove(guid);
+                    }
+                }
+                Entries[obj.GUID] = new GameObjectReference(this)
+                {
+                    FileName = f.FileName,
+                    ID = obj.GUID,
+                    Name = obj.ChunkLabel,
+                    Source = GameObjectSource.Far,
+                    Group = (short)obj.MasterID,
+                    SubIndex = obj.SubIndex,
+                    GlobalSimObject = false
+                };
+                if (!f.Catalog) continue;
+                // TSO's objects have no Sims 1 room or lot sorts: they go under Miscellaneous (any room), and
+                // "Other"/Miscellaneous on community, downtown and vacation lots, so they can be found everywhere.
+                const byte misc = 1 << 7;
+                var item = new ObjectCatalogItem()
+                {
+                    Category = f.Category,
+                    RoomSort = (byte)(obj.RoomFlags != 0 ? obj.RoomFlags : (1 << 6)),
+                    GUID = obj.GUID,
+                    DisableLevel = 0,
+                    Price = f.Price,
+                    Name = f.Name,
+                    Subsort = (byte)obj.FunctionSubsort,
+                    CommunitySort = (byte)(obj.CommunitySubsort != 0 ? obj.CommunitySubsort : misc),
+                    DowntownSort = (byte)(obj.DTSubsort != 0 ? obj.DTSubsort : misc),
+                    MagictownSort = (byte)(obj.MTSubsort != 0 ? obj.MTSubsort : misc),
+                    StudiotownSort = (byte)(obj.STSubsort != 0 ? obj.STSubsort : misc),
+                    VacationSort = (byte)(obj.VacationSubsort != 0 ? obj.VacationSubsort : misc)
+                };
+                ItemsByCategory[item.Category].Add(item);
+                ItemsByGUID[item.GUID] = item;
+                ReduxTSOCatalogItems++;
+            }
+            if (replaced > 0) Console.WriteLine("[SimsRedux] " + replaced + " Downloads objects share a GUID with a Sims Online object - using the Sims Online one");
+            set.AddGlobalsToStamp();
+        }
+
+        /// <summary>SimsRedux: is this GUID used by the Sims 1 game, a shipped mod or creator content (not just a player's Downloads)?</summary>
+        private bool TakenBeforeTSO(uint guid)
+        {
+            GameObjectReference r;
+            if (!Entries.TryGetValue(guid, out r)) return false;
+            if (r.Source != GameObjectSource.Standalone) return true; // (the game's own archives)
+            var path = (r.FileName ?? "").Replace('\\', '/');
+            return path.IndexOf("redux/mods/", StringComparison.OrdinalIgnoreCase) >= 0
+                || path.IndexOf("redux/creator/", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>
@@ -184,6 +269,13 @@ namespace FSO.Content.TS1
             {
                 /** Better set this up! **/
                 IffFile iff = null;
+
+                // SimsRedux: one of The Sims Online's objects (its own archives, globals and pictures)
+                if (reference.FileName != null && reference.FileName.StartsWith(ReduxTSOObjects.FilePrefix, StringComparison.Ordinal))
+                {
+                    var tso = ReduxTSOSet;
+                    return (tso != null) ? tso.MakeResource(reference.FileName) : new GameObjectResource(null, null, null, reference.FileName, ContentManager);
+                }
 
                 if (reference.Source == GameObjectSource.Far)
                 {

@@ -110,11 +110,15 @@ namespace FSO.SimAntics.Engine
             }
         }
 
+        /// <summary>
+        /// The globals this code calls. SimsRedux: a Sims Online object's code (and the global code it calls)
+        /// uses TSO's own global.iff (GameIffResource.ReduxGlobal) - the owning object is passed down every call.
+        /// </summary>
         public GameGlobal Global
         {
             get
             {
-                return Thread.Context.Globals;
+                return CodeOwner?.Resource?.ReduxGlobal ?? Thread.Context.Globals;
             }
         }
 
@@ -157,7 +161,10 @@ namespace FSO.SimAntics.Engine
             CodeOwner = FSO.Content.Content.Get().WorldObjects.Get(input.CodeOwnerGUID);
 
             Routine = null;
-            if (input.RoutineID >= 8192) Routine = (VMRoutine)ScopeResource.SemiGlobal.GetRoutine(input.RoutineID);
+            // SimsRedux: the code's object isn't in this game (its files are missing): no routine - the thread
+            // starts over (VMThread.Load) instead of the lot failing to load
+            if (CodeOwner == null) { }
+            else if (input.RoutineID >= 8192) Routine = (VMRoutine)ScopeResource.SemiGlobal?.GetRoutine(input.RoutineID);
             else if (input.RoutineID >= 4096) Routine = (VMRoutine)ScopeResource.GetRoutine(input.RoutineID);
             else Routine = (VMRoutine)Global.Resource.GetRoutine(input.RoutineID);
 

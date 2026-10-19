@@ -275,16 +275,18 @@ namespace FSO.SimAntics
         {
             if (TreeTable != null) return;
             var GLOBChunks = obj.Resource.List<GLOB>();
-            GameGlobal SemiGlobal = null;
+            GameGlobalResource SemiGlobal = null;
 
-            if (GLOBChunks != null && GLOBChunks[0].Name != "") SemiGlobal = FSO.Content.Content.Get().WorldObjectGlobals.Get(GLOBChunks[0].Name);
+            // (SimsRedux: a Sims Online object's semi-global is TSO's own, already found for it)
+            if (obj.Resource.ReduxTSO) SemiGlobal = obj.Resource.SemiGlobal;
+            else if (GLOBChunks != null && GLOBChunks[0].Name != "") SemiGlobal = FSO.Content.Content.Get().WorldObjectGlobals.Get(GLOBChunks[0].Name)?.Resource;
 
             TreeTable = obj.Resource.Get<TTAB>(obj.OBJ.TreeTableID);
             if (TreeTable != null) TreeTableStrings = obj.Resource.Get<TTAs>(obj.OBJ.TreeTableID);
             if (TreeTable == null && SemiGlobal != null)
             {
-                TreeTable = SemiGlobal.Resource.Get<TTAB>(obj.OBJ.TreeTableID); //tree not in local, try semiglobal
-                TreeTableStrings = SemiGlobal.Resource.Get<TTAs>(obj.OBJ.TreeTableID);
+                TreeTable = SemiGlobal.Get<TTAB>(obj.OBJ.TreeTableID); //tree not in local, try semiglobal
+                TreeTableStrings = SemiGlobal.Get<TTAs>(obj.OBJ.TreeTableID);
             }
         }
 
@@ -666,8 +668,8 @@ namespace FSO.SimAntics
             VMRoutine routine = null;
             GameObject CodeOwner;
             if (ActionID < 4096)
-            { //global
-                routine = (VMRoutine)context.Globals.Resource.GetRoutine(ActionID);
+            { //global (SimsRedux: a Sims Online object's are TSO's own)
+                routine = (VMRoutine)(Object.Resource.ReduxGlobal ?? context.Globals).Resource.GetRoutine(ActionID);
             }
             else if (ActionID < 8192)
             { //local
@@ -703,8 +705,8 @@ namespace FSO.SimAntics
             BHAV bhav = null;
             GameObject CodeOwner;
             if (ActionID < 4096)
-            { //global
-                bhav = context.Globals.Resource.Get<BHAV>(ActionID);
+            { //global (SimsRedux: a Sims Online object's are TSO's own)
+                bhav = (Object.Resource.ReduxGlobal ?? context.Globals).Resource.Get<BHAV>(ActionID);
             }
             else if (ActionID < 8192)
             { //local

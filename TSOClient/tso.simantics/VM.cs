@@ -100,6 +100,11 @@ namespace FSO.SimAntics
         public VMTuningCache TuningCache = new VMTuningCache();
         private Dictionary<short, VMEntity> ObjectsById = new Dictionary<short, VMEntity>();
         private short ObjectId = 1;
+        /// <summary>
+        /// SimsRedux: objects on this lot whose files this game doesn't have (Utils/ReduxHeldObjects). They're kept
+        /// out of the game but saved with the lot, their object IDs aren't reused and their tiles stay free.
+        /// </summary>
+        public FSO.SimAntics.Utils.ReduxHeldObjects ReduxHeld = new FSO.SimAntics.Utils.ReduxHeldObjects();
 
         internal VMNetDriver Driver;
         public VMHeadlineRendererProvider Headline;
@@ -585,7 +590,7 @@ namespace FSO.SimAntics
         private short NextObjID()
         {
             for (short i = ObjectId; i > 0; i++)
-                if (!ObjectsById.ContainsKey(i)) return i;
+                if (!ObjectsById.ContainsKey(i) && !ReduxHeld.Holds(i)) return i; // (SimsRedux: a held object keeps its ID)
             return 0;
         }
 
@@ -741,7 +746,7 @@ namespace FSO.SimAntics
                 Array.Resize(ref threads, i);
             }
 
-            return new VMMarshal
+            var save = new VMMarshal
             {
                 Context = Context.Save(),
                 TS1 = TS1,
@@ -753,6 +758,8 @@ namespace FSO.SimAntics
                 ObjectId = ObjectId,
                 Tuning = Tuning
             };
+            ReduxHeld.AddTo(save); // SimsRedux: the objects held back go back into every save
+            return save;
         }
 
         public VMHollowMarshal HollowSave()
@@ -844,9 +851,22 @@ namespace FSO.SimAntics
             Scheduler.Reset();
             ObjectsById = new Dictionary<short, VMEntity>();
             FSOVObjTotal = input.Entities.Length;
+            // SimsRedux: objects whose files this game doesn't have are held back (kept and saved), not dropped
+            ReduxHeld = new FSO.SimAntics.Utils.ReduxHeldObjects();
+            if (TS1)
+            {
+                try { ReduxHeld = FSO.SimAntics.Utils.ReduxHeldObjects.Find(input, (guid) => FSO.Content.Content.Get().WorldObjects.Get(guid) != null); }
+                catch (Exception e) { ReduxHeld = new FSO.SimAntics.Utils.ReduxHeldObjects(); Console.WriteLine("[SimsRedux] couldn't work out the missing objects: " + e.Message); }
+            }
             foreach (var ent in input.Entities)
             {
                 VMEntity realEnt;
+                ent.LoadFailed = false; // (SimsRedux: the same saved lot can be loaded again - undo)
+                if (ReduxHeld.Holds(ent.ObjectID) && !(ent is VMAvatarMarshal))
+                {
+                    ent.LoadFailed = true;
+                    continue;
+                }
                 var objDefinition = FSO.Content.Content.Get().WorldObjects.Get(ent.GUID);
                 if (objDefinition == null)
                 {
@@ -906,6 +926,7 @@ namespace FSO.SimAntics
 
             foreach (var multi in input.MultitileGroups)
             {
+                if (ReduxHeld.Groups.Contains(multi)) continue; // (SimsRedux: held back, with its objects)
                 var grp = new VMMultitileGroup(multi, Context); //should self register
                 if (VM.UseWorld)
                 {
@@ -949,6 +970,7 @@ namespace FSO.SimAntics
                 TSOState.Names = ((VMTSOLotState)lastPlatformState).Names;
             }
             ObjectId = input.ObjectId;
+            if (ReduxHeld.Holds(ObjectId)) ObjectId = NextObjID(); // (SimsRedux: a held object keeps its ID)
 
             //just a few final changes to refresh everything, and avoid signalling objects
             var clock = Context.Clock;

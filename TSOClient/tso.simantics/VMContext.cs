@@ -42,6 +42,8 @@ namespace FSO.SimAntics
 
         public World World { get; internal set; }
         public static VMPrimitiveRegistration[] Primitives = new VMPrimitiveRegistration[256];
+        /// <summary>SimsRedux: the primitives are set up for Sims 1 mode (InitVMConfig(true)).</summary>
+        public static bool ReduxTS1;
         public VMAmbientSound Ambience;
         public ulong RandomSeed;
 
@@ -91,6 +93,7 @@ namespace FSO.SimAntics
 
         public static void InitVMConfig(bool ts1)
         {
+            ReduxTS1 = ts1;
             AddPrimitive(new VMPrimitiveRegistration(new VMSleep())
             {
                 Opcode = 0,
@@ -494,6 +497,29 @@ namespace FSO.SimAntics
                     Opcode = 51,
                     Name = "manage_inventory",
                     OperandModel = typeof(VMTS1InventoryOperationsOperand)
+                });
+
+                // SimsRedux: The Sims Online's own primitives, for its objects' scripts (VMTranslator.ReduxTSOOpcode
+                // moves them here). ReduxTSONothing (252) stays empty: like an unknown primitive, it carries on.
+                AddPrimitive(new VMPrimitiveRegistration(new VMGenericTSOCall())
+                {
+                    Opcode = VMTranslator.ReduxTSOGenericCall,
+                    Name = "generic_sims_online_call",
+                    OperandModel = typeof(VMGenericTSOCallOperand)
+                });
+
+                AddPrimitive(new VMPrimitiveRegistration(new ReduxTSONoTransferFunds())
+                {
+                    Opcode = VMTranslator.ReduxTSOTransferFunds,
+                    Name = "transfer_funds",
+                    OperandModel = typeof(VMTransferFundsOperand)
+                });
+
+                AddPrimitive(new VMPrimitiveRegistration(new VMSysLog())
+                {
+                    Opcode = VMTranslator.ReduxTSOSysLog,
+                    Name = "syslog",
+                    OperandModel = typeof(VMSysLogOperand)
                 });
 
             }
@@ -1076,6 +1102,7 @@ namespace FSO.SimAntics
         public bool CheckWallValid(LotTilePos pos, WallTile wall)
         {
             if (wall.Segments > 0 && Architecture.GetTerrainSloped(pos.TileX, pos.TileY)) return false;
+            if (VM?.ReduxHeld != null && VM.ReduxHeld.HoldsTile(pos)) return false; // (SimsRedux: a held-back object's tile)
             var objs = ObjectQueries.GetObjectsAt(pos);
             if (objs == null) return true;
             foreach (var obj in objs)
@@ -1087,6 +1114,8 @@ namespace FSO.SimAntics
 
         public bool CheckFloorValid(LotTilePos pos, FloorTile floor)
         {
+            // (SimsRedux: the floor under a held-back object upstairs stays)
+            if (floor.Pattern == 0 && pos.Level > 1 && VM?.ReduxHeld != null && VM.ReduxHeld.HoldsTile(pos)) return false;
             var objs = ObjectQueries.GetObjectsAt(pos);
             if (objs == null) return true;
             foreach (var obj in objs)
@@ -1261,6 +1290,14 @@ namespace FSO.SimAntics
 
             VMPlacementError status = (noFloor)?VMPlacementError.HeightNotAllowed:VMPlacementError.Success;
             VMEntity statusObj = null;
+
+            // SimsRedux: a held-back object's tile (Utils/ReduxHeldObjects) stays free for it
+            var held = VM?.ReduxHeld;
+            if (held != null && held.Any && pos != LotTilePos.OUT_OF_WORLD && pos.Level >= 1
+                && ((footprint != null) ? held.Blocks(footprint, pos.Level) : held.HoldsTile(pos)))
+            {
+                return new VMPlacementResult { Status = VMPlacementError.CantIntersectOtherObjects };
+            }
 
             if (footprint == null || pos.Level < 1)
             {
