@@ -198,8 +198,13 @@ namespace FSO.Vitaboy
                     var list = col.GeneralAvatarType(type);
                     if (list.Count == 0) list = col.GeneralAvatarType(type.Substring(0, 2));
                     var names = AllTextures();
-                    foreach (var apr in list)
+                    // (each missing outfit gets its own stand-in, picked by its name - the first one in the list
+                    //  for everyone made every Sim with a missing head look like the same old lady)
+                    int start = 0;
+                    if (list.Count > 0) { uint h = 2166136261; foreach (var ch in name) h = (h ^ ch) * 16777619; start = (int)(h % (uint)list.Count); }
+                    for (int k = 0; k < list.Count; k++)
                     {
+                        var apr = list[(start + k) % list.Count];
                         if (content.AvatarAppearances.Get(new ContentID(apr + ".apr")) == null) continue;
                         var stem = Stem(apr);
                         var tex = names.FirstOrDefault(n => n.StartsWith(stem + skin)) ?? names.FirstOrDefault(n => n.StartsWith(stem));
