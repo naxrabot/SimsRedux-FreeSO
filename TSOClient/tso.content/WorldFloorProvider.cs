@@ -291,6 +291,10 @@ namespace FSO.Content
             name = (name ?? "").ToLowerInvariant();
             ushort existing;
             if (DynamicFloorFromID.TryGetValue(name, out existing)) return existing;
+            // a file with a dot in its name ("tile.v2.flr") is saved as "tile" but known as "tile.v2": that's no missing one
+            foreach (var e in Entries.Values)
+                if (e.FileName != null && e.FileName != "global" && new string(e.FileName.ToLowerInvariant().TakeWhile(y => y != '.').ToArray()) == name)
+                    return (ushort)e.ID;
             var look = PlaceholderLook();
             if (look == null) throw new InvalidDataException("no floor to make a stand-in from");
             var id = (ushort)NumFloors;

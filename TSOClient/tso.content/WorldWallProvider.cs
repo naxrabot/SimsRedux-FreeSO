@@ -375,6 +375,10 @@ namespace FSO.Content
             name = (name ?? "").ToLowerInvariant();
             ushort existing;
             if (DynamicWallFromID.TryGetValue(name, out existing)) return existing;
+            // a file with a dot in its name ("brick.v2.wll") is saved as "brick" but known as "brick.v2": that's no missing one
+            foreach (var e in Entries.Values)
+                if (e.FileName != null && e.FileName != "global" && new string(e.FileName.ToLowerInvariant().TakeWhile(y => y != '.').ToArray()) == name)
+                    return (ushort)e.ID;
             var look = PlaceholderLook();
             if (look == null) throw new InvalidDataException("no wallpaper to make a stand-in from");
             var id = (ushort)NumWalls;
