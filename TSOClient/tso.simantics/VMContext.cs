@@ -1383,6 +1383,8 @@ namespace FSO.SimAntics
                     newGroup.Objects[i].PlatformState = group.Objects[i].PlatformState;
                     if (newGroup.Objects[i] is VMGameObject && original is VMGameObject) // SimsRedux: keep the colour tint
                         ((VMGameObject)newGroup.Objects[i]).SetReduxTint(((VMGameObject)original).ReduxTint);
+                    if (newGroup.Objects[i] is VMGameObject && original is VMGameObject) // SimsRedux: and its height
+                        ((VMGameObject)newGroup.Objects[i]).SetReduxLift(((VMGameObject)original).ReduxLift);
                     if (newGroup.Objects[i] is VMGameObject)
                     {
                         ((VMGameObject)newGroup.Objects[i]).RefreshGraphic();
