@@ -15,7 +15,9 @@ namespace FSO.SimAntics.JIT.Runtime
         public override VMRoutine Assemble(BHAV bhav, GameIffResource res)
         {
             VMRoutine routine;
-            var assembly = Assemblies.GetModuleFor(bhav.ChunkParent);
+            // (SimsRedux: a Sims Online script is never run as compiled code - its primitives are remapped below)
+            var reduxTSO = res != null && res.ReduxTSO;
+            var assembly = reduxTSO ? null : Assemblies.GetModuleFor(bhav.ChunkParent);
             object func = assembly?.GetFunction(bhav.ChunkID);
             if (func != null)
             {
@@ -32,7 +34,7 @@ namespace FSO.SimAntics.JIT.Runtime
             {
                 routine = new VMRoutine();
             }
-            PopulateRoutineFields(bhav, routine);
+            PopulateRoutineFields(bhav, routine, reduxTSO);
             return routine;
         }
     }
