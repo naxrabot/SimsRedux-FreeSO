@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework.Graphics;
 using System.IO;
 using FSO.Client.UI.Framework.Parser;
@@ -258,10 +259,27 @@ namespace FSO.Client.UI.Framework
                 {
                     foreach (var child in Children)
                     {
-                        child.Draw(batch);
+                        // SimsRedux: one broken piece of the screen (a panel, a button) no longer stops the whole
+                        // game - it's skipped and noted once in the console (and the problem log)
+                        if (child == null) continue;
+                        try { child.Draw(batch); }
+                        catch (Exception e) { ReduxDrawFailed(child, e); }
                     }
                 }
             }
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> ReduxDrawFailures = new System.Collections.Generic.HashSet<string>();
+        /// <summary>SimsRedux: where a screen piece that failed to draw is reported (the web build: the problem log).</summary>
+        public static Action<string, string> ReduxReportProblem;
+
+        private static void ReduxDrawFailed(UIElement child, Exception e)
+        {
+            // (a nested container already reported it - only the piece that actually failed is named)
+            var key = child.GetType().Name + ":" + e.GetType().Name;
+            if (!ReduxDrawFailures.Add(key)) return;
+            Console.WriteLine("[SimsRedux] couldn't draw " + child.GetType().Name + ": " + e);
+            try { ReduxReportProblem?.Invoke("screen piece failed", child.GetType().Name + ": " + e.ToString()); } catch { }
         }
 
         /// <summary>
