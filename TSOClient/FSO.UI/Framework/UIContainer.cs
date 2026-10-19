@@ -99,6 +99,7 @@ namespace FSO.Client.UI.Framework
         /// <param name="child"></param>
         public virtual void AddAt(int index, UIElement child)
         {
+            if (child == null) return; // (SimsRedux: a missing piece used to sit in the list as an empty slot)
             lock (Children)
             {
                 if (Children.Contains(child))
@@ -263,7 +264,7 @@ namespace FSO.Client.UI.Framework
                         // game - it's skipped and noted once in the console (and the problem log)
                         if (child == null) continue;
                         try { child.Draw(batch); }
-                        catch (Exception e) { ReduxDrawFailed(child, e); }
+                        catch (Exception e) { ReduxDrawFailed(child, e, "draw"); }
                     }
                 }
             }
@@ -273,13 +274,12 @@ namespace FSO.Client.UI.Framework
         /// <summary>SimsRedux: where a screen piece that failed to draw is reported (the web build: the problem log).</summary>
         public static Action<string, string> ReduxReportProblem;
 
-        private static void ReduxDrawFailed(UIElement child, Exception e)
+        private static void ReduxDrawFailed(UIElement child, Exception e, string what)
         {
-            // (a nested container already reported it - only the piece that actually failed is named)
-            var key = child.GetType().Name + ":" + e.GetType().Name;
+            var key = what + ":" + child.GetType().Name + ":" + e.GetType().Name;
             if (!ReduxDrawFailures.Add(key)) return;
-            Console.WriteLine("[SimsRedux] couldn't draw " + child.GetType().Name + ": " + e);
-            try { ReduxReportProblem?.Invoke("screen piece failed", child.GetType().Name + ": " + e.ToString()); } catch { }
+            Console.WriteLine("[SimsRedux] couldn't " + what + " " + child.GetType().Name + ": " + e);
+            try { ReduxReportProblem?.Invoke("screen piece failed", "couldn't " + what + " " + child.GetType().Name + ": " + e.ToString()); } catch { }
         }
 
         /// <summary>
@@ -293,7 +293,12 @@ namespace FSO.Client.UI.Framework
             {
                 //todo: why are all these locks here, and what kind of problems might that cause
                 foreach (var child in GetChildrenSafe())
-                    child.Update(state);
+                {
+                    // SimsRedux: same as drawing - one broken piece is skipped and reported, the game goes on
+                    if (child == null) continue;
+                    try { child.Update(state); }
+                    catch (Exception e) { ReduxDrawFailed(child, e, "update"); }
+                }
             }
         }
 
