@@ -280,6 +280,19 @@ namespace FSO.Vitaboy
                 if (Appearance != null)
                 {
                     try { m_HeadInstance = base.AddAppearance(Appearance, tex); } catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] outfit skipped: " + e.Message); } // (SimsRedux)
+                    // SimsRedux: nothing of it could be shown (its parts are missing or broken) - something
+                    // of the same kind instead, so the Sim never goes invisible
+                    if ((m_HeadInstance == null || m_HeadInstance.Bindings.Count == 0) && m_Head.TS1AppearanceID != null)
+                    {
+                        try { ReduxAvatarFallback.ReportProblem?.Invoke("outfit missing", m_Head.TS1AppearanceID + " / " + tex); } catch { }
+                        var fb2 = ReduxAvatarFallback.Outfit(m_Head.TS1AppearanceID, tex);
+                        var apr2 = (fb2 == null || fb2.Item1 == m_Head.TS1AppearanceID) ? null : FSO.Content.Content.Get().AvatarAppearances.Get(new FSO.Common.Content.ContentID(fb2.Item1));
+                        if (apr2 != null)
+                        {
+                            if (m_HeadInstance != null) base.RemoveAppearance(m_HeadInstance, true);
+                            try { m_HeadInstance = base.AddAppearance(apr2, fb2.Item2); } catch { }
+                        }
+                    }
                 }
             }
         }
@@ -411,6 +424,19 @@ namespace FSO.Vitaboy
                 if (Appearance != null)
                 {
                     try { m_BodyInstance = base.AddAppearance(Appearance, tex); } catch (System.Exception e) { System.Console.WriteLine("[SimsRedux] outfit skipped: " + e.Message); } // (SimsRedux)
+                    // SimsRedux: nothing of it could be shown (its parts are missing or broken) - something
+                    // of the same kind instead, so the Sim never goes invisible
+                    if ((m_BodyInstance == null || m_BodyInstance.Bindings.Count == 0) && m_Body.TS1AppearanceID != null)
+                    {
+                        try { ReduxAvatarFallback.ReportProblem?.Invoke("outfit missing", m_Body.TS1AppearanceID + " / " + tex); } catch { }
+                        var fb2 = ReduxAvatarFallback.Outfit(m_Body.TS1AppearanceID, tex);
+                        var apr2 = (fb2 == null || fb2.Item1 == m_Body.TS1AppearanceID) ? null : FSO.Content.Content.Get().AvatarAppearances.Get(new FSO.Common.Content.ContentID(fb2.Item1));
+                        if (apr2 != null)
+                        {
+                            if (m_BodyInstance != null) base.RemoveAppearance(m_BodyInstance, true);
+                            try { m_BodyInstance = base.AddAppearance(apr2, fb2.Item2); } catch { }
+                        }
+                    }
                 }
             }
         }
