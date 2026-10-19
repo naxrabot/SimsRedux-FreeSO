@@ -15,5 +15,12 @@ namespace FSO.HIT
             try { return inst.IsDisposed ? SoundState.Stopped : inst.State; }
             catch { return SoundState.Stopped; }
         }
+
+        public static SoundState SafeState(this FSO.Common.Audio.ISFXInstanceLike inst)
+        {
+            if (inst == null) return SoundState.Stopped;
+            try { return inst.State; }
+            catch { return SoundState.Stopped; }
+        }
     }
 }
