@@ -79,6 +79,36 @@ namespace FSO.SimAntics.Utils
             return Names[first] + " to " + Names[(first + 4) % 7];
         }
 
+        /// <summary>
+        /// Every tick, for every Sim: on a day off the car pool skips them. Sims 1's car pool leaves out a
+        /// Sim whose person data 69 is -1 (the game's own "not today"), so on a day off it's set to -1; on
+        /// the first work day after days off it's put back to an ordinary value (not today, not -1).
+        /// Worked out from the date and the career alone, so every player's game does the same.
+        /// </summary>
+        public static void Tick(VMAvatar ava)
+        {
+            try
+            {
+                var vm = ava?.Thread?.Context?.VM;
+                if (vm == null || !vm.TS1) return;
+                var career = ava.GetPersonData(VMPersonDataVariable.JobType);
+                if (career <= 0) return;
+                int day = Day(vm.Context.Clock);
+                var pd69 = ava.GetPersonData((VMPersonDataVariable)69);
+                if (!Works(career, day))
+                {
+                    if (pd69 != -1) ava.SetPersonData((VMPersonDataVariable)69, -1);
+                }
+                else if (pd69 == -1 && !Works(career, (day + 6) % 7))
+                {
+                    // back to work after days off (yesterday was one)
+                    var today = vm.GetGlobalValue(1);
+                    ava.SetPersonData((VMPersonDataVariable)69, (short)(today > 1 ? today - 1 : 30));
+                }
+            }
+            catch { }
+        }
+
         private static readonly Dictionary<VMRoutine, int> DueRoutines = new Dictionary<VMRoutine, int>();
         private static readonly object Lock = new object();
 
@@ -127,8 +157,7 @@ namespace FSO.SimAntics.Utils
                 if (sim == null) return 0;
                 var career = sim.GetPersonData(VMPersonDataVariable.JobType);
                 if (career <= 0 || Works(career, day)) return 0;
-                // a day off: counted as a day they were meant to be away (no warning, no firing)
-                sim.SetPersonData((VMPersonDataVariable)69, vm.GetGlobalValue(1));
+                // a day off: not due at work (no warning, no firing)
                 return -1;
             }
             catch { return 0; }
