@@ -24,6 +24,8 @@ namespace FSO.SimAntics.Utils
         /// <summary>The fridge attribute the servings are kept in (well past the ones the fridge uses).</summary>
         public const int StoreAttr = 40;
         public const int MaxStored = 16;
+        // (Sims 1's plate states, attribute 1: 0-1 raw, 2 prepared, 4 cooked - eat it; picture 15 = a cooked plate)
+        private const short CookedState = 4, CookedGraphic = 15;
 
         private static readonly HashSet<uint> GroupMeals = new HashSet<uint> { 0x15866694, 0xa9fe9873 }; // regular group meal, BBQ group meal
 
@@ -166,7 +168,21 @@ namespace FSO.SimAntics.Utils
         public static void Tick(VMAvatar ava)
         {
             var action = ava?.Thread?.ActiveAction;
-            if (action == null || action.ReduxCounted || action.Name == null) return;
+            if (action == null || action.Name == null) return;
+            // the plate taken out for leftovers is already cooked: straight to eating it (at a table, like any
+            // meal) - it used to count as raw, so the Sim went looking to prepare it and dropped it on the floor
+            if (action.ReduxCounted && action.Name.StartsWith(HaveLabel))
+            {
+                var held = ava.GetSlot(0);
+                if (held != null && (held.Object?.OBJ?.ChunkLabel ?? "").StartsWith("Food - Regular Meal", StringComparison.OrdinalIgnoreCase)
+                    && held.GetAttribute(1) < CookedState)
+                {
+                    held.SetAttribute(1, CookedState);
+                    held.SetValue(VMStackObjectVariable.Graphic, CookedGraphic);
+                }
+                return;
+            }
+            if (action.ReduxCounted) return;
             if (action.Name == PutAwayLabel && IsGroupMeal(action.Callee))
             {
                 // remember how many servings it had
