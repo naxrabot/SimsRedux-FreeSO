@@ -66,7 +66,9 @@ namespace FSO.Content.TS1
             var text = ((catalogName ?? "") + " " + (label ?? "") + " " + System.IO.Path.GetFileName(fileName ?? "")).ToLowerInvariant();
             if (text.IndexOf("rug", StringComparison.Ordinal) < 0 && text.IndexOf("sand pile", StringComparison.Ordinal) < 0) return false;
             foreach (var w in HiddenRugWords)
-                if (text.IndexOf(w, StringComparison.Ordinal) >= 0) return true;
+                for (int i = text.IndexOf(w, StringComparison.Ordinal); i >= 0; i = text.IndexOf(w, i + 1, StringComparison.Ordinal))
+                    // ("lake" only as a word start: "snowflake rug" is a snow rug, and those stay)
+                    if (w != "lake" || i == 0 || !char.IsLetter(text[i - 1])) return true;
             return false;
         }
         // ("_wrug": venegra's water rugs - a plain "wrug" would match "snowrug"; "pool rug", not "pool": a pool-hall rug stays)
