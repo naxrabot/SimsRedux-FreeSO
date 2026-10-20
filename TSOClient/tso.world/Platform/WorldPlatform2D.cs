@@ -27,6 +27,7 @@ namespace FSO.LotView.Platform
         public void SwapBlueprint(Blueprint bp)
         {
             this.bp = bp;
+            PickValid = false; // (a new lot: nothing from the old one's hover check)
         }
 
         public Texture2D GetLotThumb(GraphicsDevice gd, WorldState state, Action<Texture2D> rooflessCallback)
@@ -123,7 +124,38 @@ namespace FSO.LotView.Platform
             return tex;
         }
 
+        // SimsRedux: the hover check draws every object into a 1x1 picture and reads it back from the graphics card
+        // (a full stop for the GPU - slow on phones and in the browser). It was asked for every frame with the mouse or
+        // finger held still; now the same spot with the same view gives the last answer for up to 0.1 s. A different
+        // spot (or a click elsewhere) is always looked up fresh.
+        private bool PickValid;
+        private long PickTime;
+        private int PickX = int.MinValue, PickY = int.MinValue;
+        private Vector2 PickCenter;
+        private WorldZoom PickZoom;
+        private WorldRotation PickRotation;
+        private sbyte PickLevel;
+        private float PickPreciseZoom;
+        private short PickResult;
+
         public short GetObjectIDAtScreenPos(int x, int y, GraphicsDevice gd, WorldState state)
+        {
+            var now = Environment.TickCount64;
+            if (PickValid && now >= PickTime && now - PickTime < 100 && Math.Abs(x - PickX) <= 1 && Math.Abs(y - PickY) <= 1
+                && PickCenter == state.CenterTile && PickZoom == state.Zoom && PickRotation == state.Rotation
+                && PickLevel == state.Level && PickPreciseZoom == state.PreciseZoom)
+                return PickResult;
+            var result = PickObjectID(x, y, gd, state);
+            PickTime = Environment.TickCount64;
+            PickX = x; PickY = y;
+            PickCenter = state.CenterTile; PickZoom = state.Zoom; PickRotation = state.Rotation;
+            PickLevel = state.Level; PickPreciseZoom = state.PreciseZoom;
+            PickResult = result;
+            PickValid = true;
+            return result;
+        }
+
+        private short PickObjectID(int x, int y, GraphicsDevice gd, WorldState state)
         {
             var ray = state.CameraRayAtScreenPos(new Vector2(x, y));
 
@@ -309,7 +341,9 @@ namespace FSO.LotView.Platform
             gd.DepthStencilState = oldDS;
 
             var tex = bufferTexture.Get();
-            return TextureUtils.Clip(gd, tex, b);
+            var clipped = TextureUtils.Clip(gd, tex, b);
+            state._2D.ReleaseThumbBuffers(); // SimsRedux: (copied out - the big thumbnail targets aren't kept)
+            return clipped;
         }
 
         public void RecacheWalls(GraphicsDevice gd, WorldState state, bool cutawayOnly)

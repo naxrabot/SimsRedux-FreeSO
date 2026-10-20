@@ -14,6 +14,8 @@ namespace FSO.SimAntics.Marshals
         public float Speed;
         public float Weight;
         public bool Loop;
+        /// <summary>SimsRedux (version 43): not written here - VMAvatarMarshal writes it after everything else, so older saves still read.</summary>
+        public int ReduxWaitTicks;
         //time property list is restored from anim
 
         public VMAnimationStateMarshal() { }

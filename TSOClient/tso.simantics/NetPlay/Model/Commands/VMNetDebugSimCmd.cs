@@ -157,6 +157,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
             // SimsRedux online: a friend can only use this on their own Sim
             if (FromNet && (caller == null || caller.ObjectID != ObjectID)) return false;
+            // filling needs is a cheat, not an un-stick fix: online, Admin accounts only (like the burglar cheat)
+            if (FromNet && Action == DebugAction.FillNeeds && !vm.ReduxAdmins.Contains(ActorUID)) return false;
             return vm.GetObjectById(ObjectID) is VMAvatar;
         }
 

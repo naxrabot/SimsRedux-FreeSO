@@ -21,6 +21,29 @@ namespace FSO.SimAntics.Engine
             }
         }
 
+        /// <summary>
+        /// SimsRedux: compiled (-jit / AOT) scripts run as their own code and never go through VMRoutine.Execute,
+        /// so they skip every Redux hook (the computer, days off, the visitor cap, getting up from skill objects,
+        /// walk waits...) - and a player with -jit on would play differently from everyone else on an online lot.
+        /// In Sims 1 mode every script is interpreted (the plain translator), whatever translator is set, unless
+        /// this is turned on (for testing compiled scripts only). The Sims Online mode is unchanged.
+        /// </summary>
+        public static bool ReduxAllowCompiled = false;
+        private static readonly VMTranslator ReduxInterpreter = new VMTranslator();
+
+        /// <summary>SimsRedux: what scripts are built with (see ReduxAllowCompiled).</summary>
+        public static VMRoutine ReduxAssemble(BHAV bhav, GameIffResource res)
+        {
+            var t = INSTANCE;
+            if (!ReduxAllowCompiled && t.GetType() != typeof(VMTranslator))
+            {
+                bool ts1 = false;
+                try { ts1 = FSO.Content.Content.Get()?.TS1 == true; } catch { }
+                if (ts1) t = ReduxInterpreter;
+            }
+            return t.Assemble(bhav, res);
+        }
+
         public virtual VMRoutine Assemble(BHAV bhav, GameIffResource res){
             var routine = new VMRoutine();
             PopulateRoutineFields(bhav, routine, res != null && res.ReduxTSO);

@@ -10,13 +10,16 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Execute(VM vm, VMAvatar caller)
         {
+            if (ResponseText == null) ResponseText = "";
             if (ResponseText.Length > 1024) ResponseText = ResponseText.Substring(0, 1024);
 
             VMEntity owner = caller;
             if (vm.TS1)
             {
                 owner = vm.GlobalBlockingDialog;
-                if (!vm.ReduxNoPause) // (online lots were never paused)
+                // SimsRedux: only un-pause when a question really was waiting (a stray or late answer
+                // used to set the speed back to whatever was saved before - un-pausing a paused game)
+                if (owner != null && !vm.ReduxNoPause) // (online lots were never paused)
                 {
                     vm.SpeedMultiplier = vm.LastSpeedMultiplier;
                     vm.LastSpeedMultiplier = 0;
@@ -53,6 +56,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         #region VMSerializable Members
         public override void SerializeInto(BinaryWriter writer)
         {
+            if (ResponseText == null) ResponseText = "";
             if (ResponseText.Length > 1024) ResponseText = ResponseText.Substring(0, 1024);
             base.SerializeInto(writer);
             writer.Write(ResponseCode);

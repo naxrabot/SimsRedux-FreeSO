@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.LotView;
@@ -88,7 +88,7 @@ namespace FSO.SimAntics
 
         public static void BindAssembler()
         {
-            GameObjectResource.BHAVAssembler = VMTranslator.INSTANCE.Assemble;
+            GameObjectResource.BHAVAssembler = VMTranslator.ReduxAssemble; // (SimsRedux: interpreted in Sims 1 mode - see VMTranslator.ReduxAllowCompiled)
         }
 
         public static void InitVMConfig(bool ts1)
@@ -1472,13 +1472,15 @@ namespace FSO.SimAntics
             {
                 return null;
             }
-            // SimsRedux: Unleashed's Old Town trolley isn't used here - it kept being made in front of every
-            // lot (and taken away a moment later, so it flashed up on the street). It's never made at all now.
-            if (VM.TS1 && (objDefinition.OBJ?.ChunkLabel ?? "").IndexOf("trolley", StringComparison.OrdinalIgnoreCase) >= 0)
-                return null;
-
             var catalog = Content.Content.Get().WorldCatalog;
             var item = catalog.GetItemByGUID(GUID);
+
+            // SimsRedux: Unleashed's Old Town trolley isn't used here - it kept being made in front of every
+            // lot (and taken away a moment later, so it flashed up on the street). It's never made at all now.
+            // (Only the game's own trolley: a "trolley" that's in the Buy catalog - a serving or office trolley,
+            //  custom content - is made as normal. The trolley is never for sale.)
+            if (VM.TS1 && item == null && (objDefinition.OBJ?.ChunkLabel ?? "").IndexOf("trolley", StringComparison.OrdinalIgnoreCase) >= 0)
+                return null;
 
             int salePrice = 0;
             if (item != null) salePrice = (int)item.Value.Price;

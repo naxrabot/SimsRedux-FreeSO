@@ -138,7 +138,7 @@ float4 PixelShaderFunction(VertexShaderOutput input) : COLOR0
     float2 uv = input.p;
 	if (OutsideRoomCheck(uv)) discard;
     float light = clamp(1.0 - distance(uv, LightPosition) / LightSize, 0.0, 1.0);
-	float2 shadow = float2(tex2D(shadowSampler, uv).r, tex2D(floorShadowSampler, uv).g);
+	float2 shadow = saturate(float2(tex2D(shadowSampler, uv).r, tex2D(floorShadowSampler, uv).g));
 	return LightFinal(light, shadow);
 }
 
@@ -159,7 +159,7 @@ float4 PixelShaderFunctionBlur(VertexShaderOutput input) : COLOR0
 		}
 	}
 
-	float2 shadow = float2(tex2D(shadowSampler, uv).r, fs/(5*5));
+	float2 shadow = saturate(float2(tex2D(shadowSampler, uv).r, fs/(5*5)));
 	return LightFinal(light, shadow);
 }
 
@@ -168,7 +168,7 @@ float4 PixelShaderFunctionOutdoors(VertexShaderOutput input) : COLOR0{
 	if (OutsideRoomCheck(uv)) discard;
 	float light = 1;
 
-	float2 shadow = float2(tex2D(shadowSampler, uv).r, tex2D(floorShadowSampler, uv).g);
+	float2 shadow = saturate(float2(tex2D(shadowSampler, uv).r, tex2D(floorShadowSampler, uv).g));
 	shadow *= ShadowPowers;
 
 	light -= light*shadow.x;
@@ -193,7 +193,7 @@ float4 PixelShaderFunctionOutdoorsSSAA(VertexShaderOutput input) : COLOR0{
 	if (OutsideRoomCheck(uv)) discard;
 	float light = 1;
 
-	float2 shadow = SSAASample(uv);
+	float2 shadow = saturate(SSAASample(uv));
 	shadow *= ShadowPowers;
 
 	float floorLight = light - light*max(shadow.x, shadow.y);
@@ -207,7 +207,7 @@ float4 PixelShaderFunctionLightBleed(VertexShaderOutput input) : COLOR0{
 	if (OutsideRoomCheck(uv)) discard;
 	float light = 1;
 
-	float2 shadow = float2(SSAASample(uv).r * 5 / 4, 0);
+	float2 shadow = float2(saturate(SSAASample(uv).r * 5 / 4), 0);
 
 	light -= light*shadow.x;
 	float floorLight = light - light*shadow.y;
@@ -225,7 +225,7 @@ float4 DirectionFunction(VertexShaderOutput input) : COLOR0
 	float3 direction = float3(uv.x, 0, uv.y) - float3(LightPosition.x, LightHeight, LightPosition.y);
 
 	float light = clamp(1.0 - distance(uv, LightPosition) / LightSize, 0.0, 1.0);
-	float shadow = tex2D(shadowSampler, uv).r;
+	float shadow = saturate(tex2D(shadowSampler, uv).r);
 	return DirectionFinal(direction, light, shadow);
 }
 
@@ -234,7 +234,7 @@ float4 DirectionFunctionOutdoors(VertexShaderOutput input) : COLOR0{
 	if (OutsideRoomCheck(uv)) discard;
 	float light = 1;
 
-	float shadow = tex2D(shadowSampler, uv).r;
+	float shadow = saturate(tex2D(shadowSampler, uv).r);
 	shadow *= ShadowPowers.x;
 
 	light -= light*shadow;
@@ -251,7 +251,7 @@ float4 DirectionFunctionOutdoorsSSAA(VertexShaderOutput input) : COLOR0{
 	if (OutsideRoomCheck(uv)) discard;
 	float light = 1;
 
-	float shadow = SSAASample(uv).r;
+	float shadow = saturate(SSAASample(uv).r);
 	shadow *= ShadowPowers.x;
 
 	light -= light*shadow;
@@ -266,7 +266,7 @@ float4 DirectionFunctionLightBleed(VertexShaderOutput input) : COLOR0{
 	if (OutsideRoomCheck(uv)) discard;
 	float light = 1;
 
-	float shadow = SSAASample(uv).r * 5 / 4;
+	float shadow = saturate(SSAASample(uv).r * 5 / 4);
 
 	light -= light*shadow;
 

@@ -1,4 +1,4 @@
-using FSO.SimAntics.NetPlay.Model;
+﻿using FSO.SimAntics.NetPlay.Model;
 using System.IO;
 using FSO.SimAntics.Marshals.Threads;
 using FSO.SimAntics.Model.TSOPlatform;
@@ -24,7 +24,7 @@ namespace FSO.SimAntics.Marshals
         // 36 - FSO Inventory Token (inventory ops async state has temp list)
         // 37 - Inventory Token Total
         // 38 - Direct Control Frame
-        public static readonly int LATEST_VERSION = 42; // SimsRedux: 39 adds object colour tints, 40 the Sims' brain memory, 41 wall items' height, 42 object size (scale)
+        public static readonly int LATEST_VERSION = 43; // SimsRedux: 39 adds object colour tints, 40 the Sims' brain memory, 41 wall items' height, 42 object size (scale), 43 animations' play-and-wait ticks
 
         public int Version = LATEST_VERSION;
         public bool Compressed = true;

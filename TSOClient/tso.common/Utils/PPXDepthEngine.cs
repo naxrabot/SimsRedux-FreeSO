@@ -105,24 +105,7 @@ namespace FSO.Common.Utils
                 var oldDS = gd.DepthStencilState;
                 //completely special case.
                 SetTarget(gd, color);
-                gd.DepthStencilState = new DepthStencilState
-                {
-                    StencilEnable = true,
-                    StencilFunction = CompareFunction.Always,
-                    StencilFail = StencilOperation.Keep,
-                    StencilPass = StencilOperation.Replace,
-                    CounterClockwiseStencilPass = StencilOperation.Replace,
-                    StencilDepthBufferFail = StencilOperation.Keep,
-                    DepthBufferEnable = forceDepth, //(ActiveColor == null),
-                    DepthBufferWriteEnable = forceDepth, //(ActiveColor == null),
-                    ReferenceStencil = StencilValue,
-#if WEB
-                    // SimsRedux web: WebGL engine has no two-sided stencil; both sides are the same here anyway
-                    TwoSidedStencilMode = false
-#else
-                    TwoSidedStencilMode = true
-#endif
-                };
+                gd.DepthStencilState = SWColorState(forceDepth, StencilValue);
                 effect.Parameters["depthMap"]?.SetValue(depth);
                 effect.Parameters["depthOutMode"]?.SetValue(false);
                 proc(false);
@@ -133,14 +116,7 @@ namespace FSO.Common.Utils
                 effect.Parameters["depthMap"]?.SetValue((Texture2D)null);
                 effect.Parameters["depthOutMode"]?.SetValue(true);
                 SetTarget(gd, depth);
-                gd.DepthStencilState = new DepthStencilState
-                {
-                    StencilEnable = true,
-                    StencilFunction = CompareFunction.Equal,
-                    DepthBufferEnable = forceDepth,
-                    DepthBufferWriteEnable = forceDepth,
-                    ReferenceStencil = StencilValue,
-                };
+                gd.DepthStencilState = SWDepthState(forceDepth, StencilValue);
                 proc(true);
 
                 gd.DepthStencilState = oldDS;
@@ -167,6 +143,55 @@ namespace FSO.Common.Utils
                 //mrt already bound. draw in both.
                 proc(false);
             }
+        }
+
+        // SimsRedux: the software-depth states were made new for every sprite drawn (two per sprite, every frame);
+        // they only differ by the stencil number (1-255) and whether depth is forced, so each is made once.
+        private static DepthStencilState[] SWColorStates = new DepthStencilState[512];
+        private static DepthStencilState[] SWDepthStates = new DepthStencilState[512];
+
+        private static DepthStencilState SWColorState(bool forceDepth, int stencil)
+        {
+            int i = (forceDepth ? 256 : 0) + (stencil & 255);
+            var s = SWColorStates[i];
+            if (s != null) return s;
+            s = new DepthStencilState
+            {
+                StencilEnable = true,
+                StencilFunction = CompareFunction.Always,
+                StencilFail = StencilOperation.Keep,
+                StencilPass = StencilOperation.Replace,
+                CounterClockwiseStencilPass = StencilOperation.Replace,
+                StencilDepthBufferFail = StencilOperation.Keep,
+                DepthBufferEnable = forceDepth, //(ActiveColor == null),
+                DepthBufferWriteEnable = forceDepth, //(ActiveColor == null),
+                ReferenceStencil = stencil,
+#if WEB
+                // SimsRedux web: WebGL engine has no two-sided stencil; both sides are the same here anyway
+                TwoSidedStencilMode = false
+#else
+                TwoSidedStencilMode = true
+#endif
+            };
+            SWColorStates[i] = s;
+            return s;
+        }
+
+        private static DepthStencilState SWDepthState(bool forceDepth, int stencil)
+        {
+            int i = (forceDepth ? 256 : 0) + (stencil & 255);
+            var s = SWDepthStates[i];
+            if (s != null) return s;
+            s = new DepthStencilState
+            {
+                StencilEnable = true,
+                StencilFunction = CompareFunction.Equal,
+                DepthBufferEnable = forceDepth,
+                DepthBufferWriteEnable = forceDepth,
+                ReferenceStencil = stencil,
+            };
+            SWDepthStates[i] = s;
+            return s;
         }
 
         public static Action<GraphicsDevice, RenderTarget2D> SSAAFunc;

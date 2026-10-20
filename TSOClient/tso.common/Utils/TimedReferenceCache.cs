@@ -84,7 +84,10 @@ namespace FSO.Common.Utils
                 //GC.Collect();
                 if (CurRingNum == 0 && DerefsSinceLastCollect >= DerefThreshold)
                 {
-                    GC.Collect();
+                    // SimsRedux: was a full, blocking collection (a hitch every few seconds on phones and in the
+                    // browser). A younger-generation one, which the runtime may skip if it isn't worth it, picks up
+                    // the recently dropped pictures; the memory watcher (ReduxMemory) still does a full one under pressure.
+                    GC.Collect(1, GCCollectionMode.Optimized, false);
                     DerefsSinceLastCollect = 0;
                 }
             }

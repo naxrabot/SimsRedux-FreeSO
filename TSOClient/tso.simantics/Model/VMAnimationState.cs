@@ -15,7 +15,7 @@ namespace FSO.SimAntics.Model
         public float Speed = 1.0f;
         public float Weight = 1.0f; //For animation blending. All active animations should add up to 1 but won't break if it doesn't.
         public bool Loop = false;
-        /// <summary>SimsRedux: ticks one "play and wait" step has been waiting on this (looping) animation without anything happening (not saved).</summary>
+        /// <summary>SimsRedux: ticks one "play and wait" step has been waiting on this (looping) animation without anything happening (saved since marshal version 43).</summary>
         public int ReduxWaitTicks;
         public List<TimePropertyListItem> TimePropertyLists = new List<TimePropertyListItem>();
 
@@ -66,7 +66,8 @@ namespace FSO.SimAntics.Model
                 PlayingBackwards = PlayingBackwards,
                 Speed = Speed,
                 Weight = Weight,
-                Loop = Loop
+                Loop = Loop,
+                ReduxWaitTicks = ReduxWaitTicks
             };
         }
 
@@ -81,6 +82,7 @@ namespace FSO.SimAntics.Model
             Speed = input.Speed;
             Weight = input.Weight;
             Loop = input.Loop;
+            ReduxWaitTicks = input.ReduxWaitTicks;
             GetTimeProps();
 
             var currentFrame = CurrentFrame;

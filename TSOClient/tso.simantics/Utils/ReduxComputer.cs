@@ -1,4 +1,4 @@
-using FSO.Files.Formats.IFF.Chunks;
+﻿using FSO.Files.Formats.IFF.Chunks;
 using FSO.LotView.Model;
 using FSO.SimAntics.Engine;
 using FSO.SimAntics.Model;
@@ -705,8 +705,20 @@ namespace FSO.SimAntics.Utils
 
         internal static bool IsMyFamily(VMAvatar ava)
         {
-            var fam = ava.Thread.Context.VM.TS1State?.CurrentFamily;
-            return fam != null && ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == fam.ChunkID;
+            return IsHouseholdSim(ava.Thread.Context.VM, ava);
+        }
+
+        /// <summary>
+        /// SimsRedux: is this Sim one of the family living on this lot? A guest player's Sim (and a townie
+        /// brought over) is given the lot family's number so the game treats them as allowed in, but is marked
+        /// FSOExcludeUserSave - they are not the household (not paid, not picking chores, not the brain's).
+        /// </summary>
+        public static bool IsHouseholdSim(VM vm, VMAvatar ava)
+        {
+            if (vm == null || ava == null) return false;
+            var fam = vm.TS1State?.CurrentFamily;
+            return fam != null && ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == fam.ChunkID
+                && (ava.GetValue(VMStackObjectVariable.MovementFlags) & (short)VMMovementFlags.FSOExcludeUserSave) == 0;
         }
 
         private static void GiveMoney(VMAvatar ava, int amount)

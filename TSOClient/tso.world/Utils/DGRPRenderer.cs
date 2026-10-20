@@ -519,14 +519,19 @@ namespace FSO.LotView.Utils
             }
         }
 
+        private List<_2DStandaloneSprite> ImmediateSprites = new List<_2DStandaloneSprite>();
         public virtual void DrawImmediate(WorldState world)
         {
             ValidateSprite(world);
 
+            // SimsRedux: all of this object's pieces in one go (see _2DWorldBatch.DrawImmediateBatch)
+            ImmediateSprites.Clear();
             foreach (var item in Items)
             {
-                world._2D.DrawImmediate(item.Sprite);
+                ImmediateSprites.Add(item.Sprite);
             }
+            world._2D.DrawImmediateBatch(ImmediateSprites);
+            ImmediateSprites.Clear();
         }
 
         public void Draw3D(WorldState world)

@@ -1,3 +1,4 @@
+﻿using System;
 using System.IO;
 using FSO.SimAntics.Utils;
 
@@ -9,6 +10,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     /// </summary>
     public class VMNetReduxExterminateCmd : VMNetCommandBodyAbstract
     {
+        /// <summary>
+        /// The exterminator really came (on every game, when the command runs): the lot, who called him and how
+        /// many bugs went. For the "got rid of the bugs" message - only shown when it actually happened.
+        /// </summary>
+        public static event Action<VM, uint, int> Exterminated;
+
         public override bool Execute(VM vm, VMAvatar caller)
         {
             if (!vm.TS1) return false;
@@ -20,17 +27,23 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 if (fam.Budget < ReduxBugs.ExterminatorPrice) return false;
                 fam.Budget -= ReduxBugs.ExterminatorPrice;
             }
+            int removed = 0;
             foreach (var b in bugs)
             {
                 if (b.Dead) continue;
                 b.Delete(true, vm.Context);
+                removed++;
             }
+            try { Exterminated?.Invoke(vm, ActorUID, removed); } catch { }
             return true;
         }
 
         public override bool Verify(VM vm, VMAvatar caller)
         {
-            return vm.TS1;
+            if (!vm.TS1) return false;
+            // online: only the family living on the lot (at home) spends the family's money on the exterminator
+            if (FromNet && !vm.ReduxFamilyControl.ContainsKey(ActorUID)) return false;
+            return true;
         }
 
         public override void SerializeInto(BinaryWriter writer) { base.SerializeInto(writer); }

@@ -144,6 +144,7 @@ namespace FSO.LotView.LMap
             var w = blueprint.Width;
             var h = blueprint.Height;
             var ultra = WorldConfig.Current.UltraLighting;
+            // (WorldConfig.Directional is already off where half-float drawing targets can't be relied on - see FSOEnvironment.FloatRenderTargets)
             var directional = WorldConfig.Current.Directional;
 
             if (w > 64 && FSOEnvironment.SoftwareDepth) ultra = false;
@@ -761,8 +762,8 @@ namespace FSO.LotView.LMap
         {
             if (LastShadowTargQualityDivider != ShadowTargQualityDivider)
             {
-                OutsideShadowTarg.Dispose();
-                OutsideShadowTargPost.Dispose();
+                OutsideShadowTarg?.Dispose();
+                OutsideShadowTargPost?.Dispose();
             }
             if (OutsideShadowTarg == null || OutsideShadowTarg.IsDisposed)
             {
@@ -771,6 +772,7 @@ namespace FSO.LotView.LMap
                 OutsideShadowTargPost = new RenderTarget2D(GD, (ShadowTarg.Width * 2) / div, (ShadowTarg.Height * 2) / div, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.PreserveContents);
                 LightEffect.SSAASize = new Vector2(1f / OutsideShadowTarg.Width, 1f / OutsideShadowTarg.Height);
                 LastShadowTargQualityDivider = ShadowTargQualityDivider;
+                OutShadowFloor = -1; // (new, empty targets: the outdoor shadows have to be drawn again)
             }
         }
 
@@ -842,7 +844,7 @@ namespace FSO.LotView.LMap
                     {
                         ShadowTargQualityDivider = 4;
                     }
-                    if (pointLight.FalloffMultiplier > 3)
+                    else if (pointLight.FalloffMultiplier > 3)
                     {
                         ShadowTargQualityDivider = 2;
                     }
@@ -1004,6 +1006,18 @@ namespace FSO.LotView.LMap
             OutsideShadowTargPost?.Dispose();
             LightMap?.Dispose();
             LightMapDirection?.Dispose();
+            // SimsRedux: these were made again on every Init (each lot load) without letting the old ones go
+            LightBuf?.Dispose();
+            ShadowTargBlit?.Dispose();
+            ShadowTarg = null;
+            ObjShadowTarg = null;
+            OutsideShadowTarg = null;
+            OutsideShadowTargPost = null;
+            LightMap = null;
+            LightMapDirection = null;
+            LightBuf = null;
+            ShadowTargBlit = null;
+            OutShadowFloor = -1;
         }
     }
 }

@@ -371,6 +371,30 @@ namespace FSO.Files.Formats.IFF.Chunks
             }
         }
 
+        /// <summary>
+        /// SimsRedux: decodes the pixels for a quick look (a tint, a monitor screen, an object's colour profile) and says
+        /// what this call had to decode: 1 = the pixels, 2 = the depth. Hand that to ReleaseDecoded once done, so a
+        /// picture that's already on the graphics card doesn't keep a second copy of its pixels in memory.
+        /// </summary>
+        public int DecodeForRead()
+        {
+            int missing = (PixelData == null ? 1 : 0) | ((!ContainsNoZ && ZBufferData == null) ? 2 : 0);
+            DecodeIfRequired(false);
+            return missing;
+        }
+
+        /// <summary>
+        /// SimsRedux: lets go of decoded data (what = 1 pixels, 2 depth, 3 both) - only when it can be decoded again
+        /// (the packed data is still here, and nothing asked to keep everything). Depth is kept with 3D on.
+        /// </summary>
+        public void ReleaseDecoded(int what)
+        {
+            if (what == 0 || IffFile.RETAIN_CHUNK_DATA || ToDecode == null) return;
+            if (Volatile.Read(ref _decoding) != 0) return;
+            if ((what & 1) != 0) PixelData = null;
+            if ((what & 2) != 0 && !FSOEnvironment.Enable3D) ZBufferData = null;
+        }
+
         public void Write(IoWriter io, bool ts1)
         {
             using (var sprStream = new MemoryStream())

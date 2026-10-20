@@ -143,8 +143,16 @@ namespace FSO.SimAntics.Utils
         /// <summary>The servings put away in this lot's fridges.</summary>
         public static int Stored(VM vm)
         {
+            // (a plain loop - no sort or LINQ: the order doesn't matter for a sum, and this runs for every pie menu)
             int n = 0;
-            foreach (var f in Fridges(vm)) n += Math.Max((short)0, f.GetAttribute(StoreAttr));
+            if (vm == null) return 0;
+            var ents = vm.Entities;
+            for (int i = 0; i < ents.Count; i++)
+            {
+                var f = ents[i];
+                if (f.MultitileGroup?.BaseObject != f || !IsFridge(f)) continue;
+                n += Math.Max((short)0, f.GetAttribute(StoreAttr));
+            }
             return n;
         }
 

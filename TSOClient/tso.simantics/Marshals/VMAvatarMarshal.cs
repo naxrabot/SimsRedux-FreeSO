@@ -1,4 +1,4 @@
-using FSO.SimAntics.Entities;
+﻿using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
 using FSO.SimAntics.NetPlay.Model;
 using FSO.Vitaboy;
@@ -101,6 +101,19 @@ namespace FSO.SimAntics.Marshals
                 BrainMemory = new int[n];
                 for (int i = 0; i < n; i++) BrainMemory[i] = reader.ReadInt32();
             }
+            if (Version > 42)
+            {
+                // SimsRedux (43): each animation's play-and-wait ticks (so a reload/resync waits the same as the host)
+                var n = reader.ReadInt32();
+                if (n < 0 || n > 1024) throw new System.Exception("bad animation wait ticks");
+                for (int i = 0; i < n; i++)
+                {
+                    var t = reader.ReadInt32();
+                    if (i < Animations.Length) Animations[i].ReduxWaitTicks = t;
+                }
+                var c = reader.ReadInt32();
+                if (CarryAnimationState != null) CarryAnimationState.ReduxWaitTicks = c;
+            }
         }
         public override void SerializeInto(BinaryWriter writer)
         {
@@ -144,6 +157,9 @@ namespace FSO.SimAntics.Marshals
             var mem = BrainMemory ?? new int[0];
             writer.Write(mem.Length);
             foreach (var m in mem) writer.Write(m);
+            writer.Write(Animations.Length);
+            foreach (var item in Animations) writer.Write(item.ReduxWaitTicks);
+            writer.Write(CarryAnimationState?.ReduxWaitTicks ?? 0);
         }
     }
 }

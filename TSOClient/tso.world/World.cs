@@ -698,6 +698,7 @@ namespace FSO.LotView
                 PPXDepthEngine.WithOpacity = State.CameraMode < CameraRenderMode._3D;
                 PPXDepthEngine.DrawBackbuffer(Opacity, BackbufferScale);
             }
+            if (ReduxLightDebug.Mode != 0 && !(this is SubWorldComponent)) ReduxLightDebug.Draw(device, State); // SimsRedux: "lightmap" cheat
             return;
         }
 
@@ -1237,6 +1238,12 @@ namespace FSO.LotView
                 }
                 Blueprint.Terrain?.Dispose();
                 Blueprint.RoofComp?.Dispose();
+            }
+            if (!(this is SubWorldComponent))
+            {
+                // SimsRedux: the lot's objects are gone - their recoloured and monitor pictures go with them
+                try { Utils.ReduxTint.LotClosed(); } catch (Exception e) { Console.WriteLine("[SimsRedux] tint cache: " + e.Message); }
+                try { Utils.ReduxScreens.LotClosed(); } catch (Exception e) { Console.WriteLine("[SimsRedux] screen cache: " + e.Message); }
             }
             GraphicsModeControl.ModeChanged -= SetGraphicsMode;
         }

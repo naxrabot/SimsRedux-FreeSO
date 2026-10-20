@@ -45,7 +45,16 @@ namespace FSO.LotView
             }
         }
         public int AA = 0;
-        public bool Directional = true;
+        private bool _Directional = true;
+        /// <summary>
+        /// Directional lighting (needs half-float drawing targets: off where FSOEnvironment.FloatRenderTargets says
+        /// they can't be relied on, whatever the setting).
+        /// </summary>
+        public bool Directional
+        {
+            get { return _Directional && FSOEnvironment.FloatRenderTargets; }
+            set { _Directional = value; }
+        }
         public bool Complex = false;
 
         private bool _EnableTransitions = false;

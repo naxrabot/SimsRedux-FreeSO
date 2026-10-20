@@ -53,7 +53,9 @@ namespace FSO.LotView
             }
             if (state.CameraMode > CameraRenderMode._2D) DrawImmediate = true;
 
-            if (Math.Abs(Blueprint.OutsideTime - LastTimeOfDay) > 0.001f)
+            // SimsRedux: was 0.001 of a day (every ~1.5 s of play at normal speed - a whole outdoor lighting and
+            // lot redraw each time). 0.004 of a day is ~6 game minutes: the sky still changes smoothly.
+            if (Math.Abs(Blueprint.OutsideTime - LastTimeOfDay) > 0.004f)
             {
                 Dirty |= BlueprintGlobalChanges.OUTDOORS_LIGHTING_CHANGED;
                 LastTimeOfDay = Blueprint.OutsideTime;
