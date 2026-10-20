@@ -521,6 +521,12 @@ namespace FSO.SimAntics.Engine
                 HardFail(VMRouteFailCode.Interrupted, null);
                 return VMPrimitiveExitCode.CONTINUE;
             }
+            // SimsRedux: the same for a visitor/NPC walking in his own main loop (see VMThread.ReduxMainLoopInterrupted)
+            if (State != VMRoutingFrameState.FAILED && Thread.ReduxMainLoopInterrupted(ActionTree))
+            {
+                HardFail(VMRouteFailCode.Interrupted, null);
+                return VMPrimitiveExitCode.CONTINUE;
+            }
 
             if (WaitTime > 0)
             {

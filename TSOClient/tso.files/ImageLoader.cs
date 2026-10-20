@@ -141,7 +141,7 @@ namespace FSO.Files
             {
                 var nonMip = file.Value.Producer();
                 var data = new Color[nonMip.Width * nonMip.Height];
-                nonMip.GetData(data);
+                FSO.Common.Utils.TextureUtils.GetDataKeepTarget(gd, nonMip, data); // (SimsRedux: can be mid-draw)
                 nonMip.Dispose();
 
                 var result = new Texture2D(gd, nonMip.Width, nonMip.Height, true, SurfaceFormat.Color);
@@ -380,7 +380,7 @@ namespace FSO.Files
                                 if (premult != 0)
                                 {
                                     var buffer = new Color[tex.Width * tex.Height];
-                                    tex.GetData(buffer);
+                                    FSO.Common.Utils.TextureUtils.GetDataKeepTarget(gd, tex, buffer); // (SimsRedux: can be mid-draw)
                                     Premultiply(buffer, premult);
                                     tex.SetData(buffer);
                                 }

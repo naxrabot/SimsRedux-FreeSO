@@ -46,5 +46,10 @@ namespace FSO.Content.Interfaces
         /// either) - it's still a catalog item, so ones already on a lot keep their price, info and sell value.
         /// </summary>
         public bool ReduxHidden;
+        /// <summary>
+        /// SimsRedux 14.x: the object's own price was §0 (a download or The Sims Online's object that never set one), so
+        /// Price is a guess from similar items (ReduxCatalogInfo.GuessPrice) - buying, selling and wear all use it.
+        /// </summary>
+        public bool ReduxPriceGuessed;
     }
 }

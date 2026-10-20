@@ -21,6 +21,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public byte TargetUpgradeLevel;
         /// <summary>SimsRedux: raised or lowered while it was being placed (Page Up/Down, +/-).</summary>
         public short Lift;
+        /// <summary>SimsRedux: made bigger or smaller while it was being placed (percent, 0 = normal).</summary>
+        public short Scale;
 
         private int value = -1;
 
@@ -116,6 +118,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
             CreatedGroup = group;
             if (Lift != 0) foreach (var o in group.Objects) (o as VMGameObject)?.SetReduxLift(Lift);
+            if (Scale != 0) foreach (var o in group.Objects) (o as VMGameObject)?.SetReduxScale(Scale);
 
             if (Mode == PurchaseMode.Donate)
             {
@@ -199,6 +202,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             writer.Write((byte)Mode);
             writer.Write(TargetUpgradeLevel);
             writer.Write(Lift);
+            writer.Write(Scale);
         }
 
         public override void Deserialize(BinaryReader reader)
@@ -214,6 +218,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             Mode = (PurchaseMode)reader.ReadByte();
             TargetUpgradeLevel = reader.ReadByte();
             Lift = reader.ReadInt16();
+            Scale = reader.ReadInt16();
         }
 
         #endregion

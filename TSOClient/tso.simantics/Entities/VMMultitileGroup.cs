@@ -456,6 +456,19 @@ namespace FSO.SimAntics.Entities
                 obj.MultitileGroup = this;
             }
 
+            // SimsRedux 14.x: a download's (or The Sims Online's) Buy item that cost §0 has a price now (the catalog's
+            // ReduxPriceGuessed) - ones bought, or put on a house, before then get it too, so they sell and wear like
+            // everything else
+            if (InitialPrice == 0 && context.VM.TS1 && Objects.Count > 0)
+            {
+                try
+                {
+                    var item = FSO.Content.Content.Get().WorldCatalog.GetItemByGUID(GUID);
+                    if (item != null && item.Value.ReduxPriceGuessed) InitialPrice = (int)item.Value.Price;
+                }
+                catch (Exception) { }
+            }
+
             if (VM.UseWorld && (BaseObject?.PlatformState as VMTSOObjectState)?.Broken == true)
             {
                 for (int i = 0; i < input.Objects.Length; i++) ((VMGameObject)Objects[i]).EnableParticle(256);

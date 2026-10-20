@@ -149,6 +149,70 @@ namespace FSO.Common.Utils
             return rt;
         }
 
+        /// <summary>
+        /// SimsRedux: reads a texture's pixels back without losing the drawing target. On OpenGL ES (the Android app)
+        /// and WebGL (the browser), reading a texture back binds a framebuffer of its own and leaves it unbound
+        /// afterwards - while the engine still thinks its render target is bound, so everything drawn next (the rest
+        /// of a Sim, the other Sims, a face picture) lands on the screen's hidden buffer and is lost. That made Sims
+        /// vanish for a frame and every face picture come out blank. After the read the targets (and the viewport
+        /// and scissor) are bound again.
+        /// </summary>
+        public static void GetDataKeepTarget<T>(GraphicsDevice gd, Texture2D tex, T[] data) where T : struct
+        {
+            if (gd == null || FSOEnvironment.DirectX) { tex.GetData(data); return; }
+            var targets = gd.GetRenderTargets();
+            if (targets == null || targets.Length == 0) { tex.GetData(data); return; }
+            var viewport = gd.Viewport;
+            var scissor = gd.ScissorRectangle;
+            try { tex.GetData(data); }
+            finally { RebindTargets(gd, targets, viewport, scissor); }
+        }
+
+        /// <summary>SimsRedux: true when a texture can be read back now without a target being wiped to bind it again
+        /// (a target that doesn't keep its contents is cleared whenever it's bound).</summary>
+        public static bool CanReadBackNow(GraphicsDevice gd)
+        {
+            if (gd == null || FSOEnvironment.DirectX) return true;
+            var targets = gd.GetRenderTargets();
+            if (targets == null) return true;
+            foreach (var t in targets)
+            {
+                var rt = t.RenderTarget as RenderTarget2D;
+                if (rt != null && rt.RenderTargetUsage != RenderTargetUsage.PreserveContents) return false;
+            }
+            return true;
+        }
+
+        /// <summary>SimsRedux: how many times a read-back had to bind the drawing target again (debugdraw shows it).</summary>
+        public static int TargetRebinds;
+        /// <summary>SimsRedux: the "debugdraw" cheat - a line in the log each time a read-back happens while drawing.</summary>
+        public static bool LogReadbacks;
+
+        private static void RebindTargets(GraphicsDevice gd, RenderTargetBinding[] targets, Viewport viewport, Rectangle scissor)
+        {
+            try
+            {
+                foreach (var t in targets)
+                {
+                    var rt = t.RenderTarget as RenderTarget2D;
+                    // (a target that doesn't keep its contents would be cleared by binding it again - left alone)
+                    if (rt == null || rt.IsDisposed || rt.RenderTargetUsage != RenderTargetUsage.PreserveContents) return;
+                }
+                // (binding the same targets again is skipped by the engine - so the screen first, then them)
+                gd.SetRenderTarget(null);
+                gd.SetRenderTargets(targets);
+                gd.Viewport = viewport;
+                gd.ScissorRectangle = scissor;
+                TargetRebinds++;
+                if (LogReadbacks) Console.WriteLine("[SimsRedux] draw: a picture was read back while drawing into a "
+                    + viewport.Width + "x" + viewport.Height + " target - target bound again (" + TargetRebinds + " so far)");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[SimsRedux] draw: couldn't bind the drawing target again: " + e.Message);
+            }
+        }
+
         public static Texture2D Copy(GraphicsDevice gd, Texture2D texture)
         {
             if (texture.Format == SurfaceFormat.Dxt5)

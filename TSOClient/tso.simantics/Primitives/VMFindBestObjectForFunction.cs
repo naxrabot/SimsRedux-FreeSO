@@ -92,7 +92,11 @@ namespace FSO.SimAntics.Engine.Primitives
                         if (context.VM.TS1 || funcVar != VMStackObjectVariable.RepairState)
                         {
                             if (score <= 0) continue; // lots of invalid functions with 0 score. just ignore them.
-                            if (Thresholds.TryGetValue(funcVar, out threshold) && score < threshold) continue;
+                            // SimsRedux: in Sims 1 anything broken (repair state above 0) is the repairman's job -
+                            // broken objects are 1 (stereo) to 300 (shower), and with FreeSO's 600 he found nothing
+                            // to fix, left again, and the Sims called him back the next day
+                            if (Thresholds.TryGetValue(funcVar, out threshold) && score < threshold
+                                && !(context.VM.TS1 && funcVar == VMStackObjectVariable.RepairState)) continue;
                         }
                         else if (ent is VMAvatar || !((VMTSOObjectState)ent.MultitileGroup.BaseObject.TSOState).Broken) continue;
                     }

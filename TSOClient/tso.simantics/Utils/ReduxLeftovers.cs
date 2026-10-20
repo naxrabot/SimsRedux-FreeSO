@@ -24,8 +24,11 @@ namespace FSO.SimAntics.Utils
         /// <summary>The fridge attribute the servings are kept in (well past the ones the fridge uses).</summary>
         public const int StoreAttr = 40;
         public const int MaxStored = 16;
-        // (Sims 1's plate states, attribute 1: 0-1 raw, 2 prepared, 4 cooked - eat it; picture 15 = a cooked plate)
-        private const short CookedState = 4, CookedGraphic = 15;
+        // (Sims 1's plate, Food.iff: attribute 1 = state - 0-1 raw, 2 prepared, 4 cooked: eat it; attribute 3 = dish -
+        //  1 once cooked ("cook food"; 2 = fresh from the fridge, 0 = prepared), and its picture follows the dish -
+        //  8 is a full cooked plate; attribute 0 = food points, 8 = the most it had (for the picture),
+        //  12 = the fridge's debug flag, which shows "Food Points" dialogs while eating)
+        private const short CookedState = 4, CookedDish = 1, CookedGraphic = 8;
 
         private static readonly HashSet<uint> GroupMeals = new HashSet<uint> { 0x15866694, 0xa9fe9873 }; // regular group meal, BBQ group meal
 
@@ -86,7 +89,7 @@ namespace FSO.SimAntics.Utils
                 ActionFunction = src.ActionFunction,
                 TestFunction = 0, // (offered when there's something to do - see AdjustPie)
                 MotiveEntries = new TTABMotiveEntry[src.MotiveEntries?.Length ?? 0], // (no autonomy: only when you ask)
-                Flags = src.Flags & ~(TTABFlags.Debug),
+                Flags = src.Flags & ~(TTABFlags.Debug | TTABFlags.TS1NoAdult), // (the debug entry it copies is grown-ups only via Debug; the Moderate fridge's also says "no adults")
                 Flags2 = src.Flags2,
                 TTAIndex = (uint)index,
                 AttenuationCode = src.AttenuationCode,
@@ -145,6 +148,22 @@ namespace FSO.SimAntics.Utils
             return n;
         }
 
+        /// <summary>
+        /// The fridge's meal script charges for the groceries - not for leftovers, which were paid for when they
+        /// were cooked. True while a Sim's "Have Leftovers" runs the fridge's own script.
+        /// </summary>
+        public static bool IsFreeServing(VMStackFrame frame)
+        {
+            try
+            {
+                var ava = frame?.Caller as VMAvatar;
+                var action = ava?.Thread?.ActiveAction;
+                if (action?.Name == null || !action.Name.StartsWith(HaveLabel, StringComparison.Ordinal)) return false;
+                return IsFridge(action.Callee) && (frame.Callee == action.Callee || IsFridge(frame.Callee));
+            }
+            catch { return false; }
+        }
+
         /// <summary>A platter being removed: if a Sim is putting it away, its servings go in the fridge.</summary>
         public static void OnDelete(VMEntity obj, VMContext context)
         {
@@ -195,6 +214,12 @@ namespace FSO.SimAntics.Utils
                     var fridge = Fridges(ava.Thread.Context.VM).FirstOrDefault(f => f.GetAttribute(StoreAttr) > 0);
                     if (fridge != null) fridge.SetAttribute(StoreAttr, (short)(fridge.GetAttribute(StoreAttr) - 1));
                     held.SetAttribute(1, CookedState);
+                    // a cooked dish, as the stove leaves it - with the fresh-from-the-fridge dish it still showed the
+                    // ingredients, and the meal script didn't take it to a table
+                    held.SetAttribute(3, CookedDish);
+                    held.SetAttribute(12, 0); // (no debug "Food Points" dialogs)
+                    if (held.GetAttribute(0) <= 0) held.SetAttribute(0, 40); // (never an empty plate)
+                    held.SetAttribute(8, held.GetAttribute(0));
                     held.SetValue(VMStackObjectVariable.Graphic, CookedGraphic);
                     return;
                 }

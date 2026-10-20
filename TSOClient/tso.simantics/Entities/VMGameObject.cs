@@ -246,9 +246,45 @@ namespace FSO.SimAntics
         {
             lift = (short)Math.Max(-MaxLift, Math.Min(MaxLift, (int)lift));
             if (lift == ReduxLift) return;
-            var vis = VisualPosition;   // (where it is without the lift)
+            var oldZ = LiftZ;
             ReduxLift = lift;
-            if (UseWorld) VisualPosition = vis;
+            // (the drawn position moves by the change in height only. Going through VisualPosition here added the
+            //  ground's height a second time - read back it already includes the terrain, and setting it adds the
+            //  terrain again - so a newly placed or loaded item jumped about a metre above where it was held.)
+            if (UseWorld)
+            {
+                var dz = LiftZ - oldZ;
+                if (dz != 0)
+                {
+                    WorldUI.UnmoddedPosition = WorldUI.UnmoddedPosition + new Vector3(0, 0, dz);
+                    var oc = WorldUI as ObjectComponent;
+                    if (oc != null && oc.blueprint != null) oc.blueprint.Changes.RegisterObjectChange(oc); // (redrawn where it now is)
+                }
+            }
+        }
+
+        /// <summary>
+        /// SimsRedux: how big the object is drawn, in percent (0 = normal size). Only the picture / model changes:
+        /// the object keeps its normal tiles, so placement, walls, routing and Sims using it work as usual.
+        /// </summary>
+        public short ReduxScale { get; private set; }
+
+        public const short MinScale = 50, MaxScale = 200, ScaleStep = 10;
+
+        /// <summary>SimsRedux: the drawn size as a percentage (100 = normal).</summary>
+        public int ReduxScalePercent { get { return ReduxScale == 0 ? 100 : ReduxScale; } }
+
+        public void SetReduxScale(short percent)
+        {
+            if (percent != 0) percent = (short)Math.Max(MinScale, Math.Min(MaxScale, (int)percent));
+            if (percent == 100) percent = 0;
+            ReduxScale = percent;
+            if (UseWorld && WorldUI is ObjectComponent)
+            {
+                var oc = (ObjectComponent)WorldUI;
+                oc.ReduxScaleOnWall = VMNetLiftObjectCmd.IsWallItem(this);
+                oc.ReduxScale = (percent == 0) ? 1f : percent / 100f;
+            }
         }
 
         // Begin Container SLOTs interface
@@ -541,7 +577,7 @@ namespace FSO.SimAntics
         #region VM Marshalling Functions
         public VMGameObjectMarshal Save()
         {
-            var gameObj = new VMGameObjectMarshal { Direction = Direction, Disabled = Disabled, Tint = ReduxTint, Lift = ReduxLift };
+            var gameObj = new VMGameObjectMarshal { Direction = Direction, Disabled = Disabled, Tint = ReduxTint, Lift = ReduxLift, Scale = ReduxScale };
             SaveEnt(gameObj);
             return gameObj;
         }
@@ -555,6 +591,7 @@ namespace FSO.SimAntics
             Disabled = input.Disabled;
             SetReduxTint(input.Tint);
             SetReduxLift(input.Lift);
+            SetReduxScale(input.Scale);
             if (UseWorld)
             {
                 ((ObjectComponent)this.WorldUI).DynamicSpriteFlags = this.DynamicSpriteFlags;

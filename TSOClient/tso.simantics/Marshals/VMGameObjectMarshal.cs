@@ -9,6 +9,7 @@ namespace FSO.SimAntics.Marshals
         public VMGameObjectDisableFlags Disabled;
         public uint Tint; // SimsRedux: colour tint (version 39+)
         public short Lift; // SimsRedux: how far a wall item is moved up (+) or down (-), in hundredths (version 41+)
+        public short Scale; // SimsRedux: drawn size in percent, 0 = normal (version 42+)
 
         public VMGameObjectMarshal() { }
         public VMGameObjectMarshal(int version, bool ts1) : base(version, ts1) { }
@@ -20,6 +21,7 @@ namespace FSO.SimAntics.Marshals
             if (Version > 9) Disabled = (VMGameObjectDisableFlags)reader.ReadByte();
             if (Version > 38) Tint = reader.ReadUInt32();
             if (Version > 40) Lift = reader.ReadInt16();
+            if (Version > 41) Scale = reader.ReadInt16();
         }
         public override void SerializeInto(BinaryWriter writer)
         {
@@ -28,6 +30,7 @@ namespace FSO.SimAntics.Marshals
             writer.Write((byte)Disabled);
             writer.Write(Tint);
             writer.Write(Lift);
+            writer.Write(Scale);
         }
     }
 }

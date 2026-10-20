@@ -90,6 +90,7 @@ namespace FSO.LotView
             foreach (var avatar in Blueprint.Avatars)
             {
                 if (avatar.Level <= state.Level) avatar.Draw(gd, state);
+                else avatar.ReduxNoteDraw("on a floor above the one shown");
             }
 
             gd.RasterizerState = RasterizerState.CullNone;

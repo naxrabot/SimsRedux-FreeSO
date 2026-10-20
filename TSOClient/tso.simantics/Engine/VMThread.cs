@@ -104,6 +104,52 @@ namespace FSO.SimAntics.Engine
             return ++ReduxWalksThisTick > ReduxMaxWalksPerTick;
         }
 
+        // SimsRedux: script calls the Redux hooks answered straight away in the current tick (see ReduxHookShouldWait)
+        private uint ReduxHookTick = uint.MaxValue;
+        private int ReduxHooksThisTick;
+        public const int ReduxMaxHooksPerTick = 16;
+
+        /// <summary>
+        /// SimsRedux: the days-off hooks (Utils/ReduxWeek.cs) answer some of the car pool's scripts at once instead of
+        /// running them ("warnings car pool", "due at work", "is this car for...?"). The game's own versions take time
+        /// (they idle, show a message...), so a loop around one never spun; answered at once, a loop that keeps asking
+        /// (the car pool's controller once someone in the family has a job, on their day off) ran until the "infinite
+        /// loop" limit - half a million steps every tick, which froze the browser game after accepting a job. After a
+        /// few answers in one tick, the next one waits for the next tick (the same on every machine).
+        /// </summary>
+        public bool ReduxHookShouldWait()
+        {
+            var vm = Context?.VM;
+            if (IsCheck || vm?.Scheduler == null) return false;
+            var tick = vm.Scheduler.CurrentTickID;
+            if (ReduxHookTick != tick) { ReduxHookTick = tick; ReduxHooksThisTick = 0; }
+            return ++ReduxHooksThisTick > ReduxMaxHooksPerTick;
+        }
+
+        /// <summary>
+        /// SimsRedux: in Sims 1 a walk in a visitor's or NPC's own main loop (not in an interaction) stops -
+        /// the walk primitive says false, "interrupted" - when a top-priority interaction has been pushed on
+        /// him, so his loop gets back to idling and takes it. FreeSO only did that inside interactions, so
+        /// the police officer kept chasing the burglar ("walk to him" again and again) and never started the
+        /// "Arrest" the NPC Controller pushed on both of them: they stood by the road forever, the stolen
+        /// money never came back and neither left. Family Sims are left as they were. Only the queue and
+        /// person data are read (the same on every machine).
+        /// </summary>
+        public bool ReduxMainLoopInterrupted(bool actionTree)
+        {
+            if (actionTree || IsCheck || ActiveQueueBlock != -1) return false;
+            var avatar = Entity as VMAvatar;
+            if (avatar == null || Context?.VM == null || !Context.VM.TS1) return false;
+            if (avatar.GetPersonData(VMPersonDataVariable.PersonType) == 0) return false; // (family Sims)
+            if (avatar.GetPersonData(VMPersonDataVariable.NonInterruptable) != 0) return false;
+            foreach (var item in Queue)
+            {
+                if (item.Mode == VMQueueMode.Normal && item.Priority >= (short)VMQueuePriority.Maximum
+                    && item.Callee != null && !item.Callee.Dead) return true;
+            }
+            return false;
+        }
+
         public static VMPrimitiveExitCode EvaluateCheck(VMContext context, VMEntity entity, VMStackFrame initFrame)
         {
             return EvaluateCheck(context, entity, initFrame, null, null);
@@ -690,6 +736,12 @@ namespace FSO.SimAntics.Engine
             if ((opcode == 27 || opcode == 45) && ReduxWalkShouldWait(frame))
             {
                 HandleResult(frame, instruction, VMPrimitiveExitCode.CONTINUE_NEXT_TICK);
+                return;
+            }
+            // SimsRedux: a visitor/NPC walking in his own main loop stops for a top-priority interaction (see ReduxMainLoopInterrupted)
+            if ((opcode == 27 || opcode == 45) && ReduxMainLoopInterrupted(frame.ActionTree))
+            {
+                HandleResult(frame, instruction, VMPrimitiveExitCode.GOTO_FALSE);
                 return;
             }
 

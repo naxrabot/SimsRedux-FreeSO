@@ -181,6 +181,14 @@ namespace FSO.Content.TS1
                 try { AddTSOObjects(); }
                 catch (Exception e) { Console.WriteLine("[SimsRedux] Sims Online objects: " + e.Message); }
             }
+            // SimsRedux 14.x: downloads' and The Sims Online's Buy items that cost §0 get a price like similar items'
+            // (buying, selling and wear all go by the catalog price - see ReduxCatalogInfo.FillMissingPrices)
+            try
+            {
+                var priced = ReduxCatalogInfo.FillMissingPrices(ItemsByCategory, ItemsByGUID);
+                if (priced > 0) Console.WriteLine("[SimsRedux] " + priced + " Buy items had no price - priced like similar items");
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] pricing free Buy items: " + e.Message); }
             var globalSims = Entries.Values.Where(x => x.GlobalSimObject);
             ControllerObjects.Clear();
             ControllerObjects.AddRange(globalSims);

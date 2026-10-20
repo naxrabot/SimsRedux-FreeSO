@@ -973,6 +973,12 @@ namespace FSO.SimAntics.Primitives
                 if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
                 var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
                 if (!done.Add(obj.ObjectID) || obj.TreeTable == null) continue;
+                // (only what the repairman fixes: his "find something to repair" looks for a repair state above 0 -
+                //  a Repair interaction on anything else would have him called every day for nothing)
+                bool needsRepair = false;
+                foreach (var part in obj.MultitileGroup.Objects)
+                    if (part.GetValue(VMStackObjectVariable.RepairState) > 0) { needsRepair = true; break; }
+                if (!needsRepair) continue;
                 var ttas = obj.TreeTableStrings;
                 foreach (var ia in obj.TreeTable.Interactions)
                 {

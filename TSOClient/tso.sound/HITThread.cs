@@ -161,8 +161,14 @@ namespace FSO.HIT
                 {
                     try
                     {
+                        // SimsRedux: at most this many instructions a tick. A sound script that loops without ever
+                        // waiting (e.g. "roll a number until it isn't 0" when both ends of the roll are 0) used to spin
+                        // here forever - on the game's own thread, which froze the whole game (the browser game has no
+                        // other thread). Now it carries on from the same place next tick instead.
+                        int budget = ReduxMaxInstructionsPerTick;
                         while (true)
                         {
+                            if (--budget < 0) return true;
                             var opcode = Src.Data[PC++];
                             if (opcode >= HITInterpreter.Instructions.Length) opcode = 0;
                             var result = HITInterpreter.Instructions[opcode](this);
@@ -181,6 +187,9 @@ namespace FSO.HIT
                 }
             }
         }
+
+        /// <summary>SimsRedux: the most sound-script instructions one thread runs in a tick (see Tick).</summary>
+        public const int ReduxMaxInstructionsPerTick = 4096;
 
         /// <summary>
         /// Kills all playing sounds.

@@ -505,7 +505,9 @@ namespace FSO.Vitaboy
             if (tex != null && !tex.IsDisposed)
             {
                 // (once: a picture that came out completely black is as good as missing)
-                if (!CheckedBlack)
+                // (SimsRedux: only when the picture can be read back without wiping the target being drawn into -
+                //  otherwise it's checked on a later draw)
+                if (!CheckedBlack && FSO.Common.Utils.TextureUtils.CanReadBackNow(device))
                 {
                     CheckedBlack = true;
                     if (ReduxAvatarFallback.AllBlack(tex)) { why = "came out black"; tex = null; Texture = null; Fails = Math.Max(Fails, 3); }

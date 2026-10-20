@@ -222,16 +222,28 @@ namespace FSO.LotView.Components
             }
         }
 
+        /// <summary>SimsRedux: the "debugdraw" cheat - a line in the log when a Sim isn't drawn on a frame, and why
+        /// (only when the reason changes, and again when they're drawn).</summary>
+        public static bool ReduxDrawLog;
+        private string ReduxLastSkip;
+        internal void ReduxNoteDraw(string skippedBecause)
+        {
+            if (!ReduxDrawLog || skippedBecause == ReduxLastSkip) return;
+            ReduxLastSkip = skippedBecause;
+            Console.WriteLine("[SimsRedux] draw: Sim " + ObjectID + (skippedBecause == null ? " drawn again" : " not drawn: " + skippedBecause));
+        }
+
         public override void Draw(GraphicsDevice device, WorldState world)
         {
             var pos = Position;
             Avatar.Position = WorldSpace.GetWorldFromTile(pos);
-            if (Avatar.Skeleton == null) return;
+            if (Avatar.Skeleton == null) { ReduxNoteDraw("no skeleton"); return; }
             var headpos = Avatar.Skeleton.GetBone("HEAD").AbsolutePosition / 3.0f;
             var tHead1 = Vector3.Transform(new Vector3(headpos.X, headpos.Z, headpos.Y), Matrix.CreateRotationZ((float)(RadianDirection + Math.PI)));
             var transhead = tHead1 + pos - new Vector3(0.5f, 0.5f, 0f);
 
-            if (!Visible) return;
+            if (!Visible) { ReduxNoteDraw("hidden by the game"); return; }
+            ReduxNoteDraw(null);
 
             if (Avatar != null){
 

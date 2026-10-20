@@ -106,7 +106,7 @@ namespace FSO.LotView.Components
 
             var color = new Vector4();
             var data = new Color[Texture.Width * Texture.Height];
-            Texture.GetData(data);
+            FSO.Common.Utils.TextureUtils.GetDataKeepTarget(device, Texture, data); // (SimsRedux: can be mid-draw)
             foreach (var col in data)
             {
                 color += col.ToVector4();

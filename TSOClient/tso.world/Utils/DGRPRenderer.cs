@@ -107,6 +107,28 @@ namespace FSO.LotView.Utils
         /// <summary>SimsRedux: the tinted picture couldn't be made yet (still loading).</summary>
         public bool TintPending;
 
+        private float _ReduxScale = 1f;
+        /// <summary>SimsRedux: how big the object is drawn (1 = normal). Visual only.</summary>
+        public float ReduxScale
+        {
+            get { return _ReduxScale; }
+            set { if (_ReduxScale != value) { _ReduxScale = value; InvalidateRotation(); } }
+        }
+        private bool _ReduxScaleOnWall;
+        /// <summary>SimsRedux: hangs on a wall - resized on the wall's surface (around its middle), not from the floor.</summary>
+        public bool ReduxScaleOnWall
+        {
+            get { return _ReduxScaleOnWall; }
+            set { if (_ReduxScaleOnWall != value) { _ReduxScaleOnWall = value; if (_ReduxScale != 1f) InvalidateRotation(); } }
+        }
+        private Vector3 _ReduxScaleAnchor;
+        /// <summary>SimsRedux: from this tile to the middle of the whole object (a multi-tile sofa grows from its middle), in tiles.</summary>
+        public Vector3 ReduxScaleAnchor
+        {
+            get { return _ReduxScaleAnchor; }
+            set { if (_ReduxScaleAnchor != value) { _ReduxScaleAnchor = value; if (_ReduxScale != 1f) InvalidateRotation(); } }
+        }
+
         private float RadianDirection
         {
             get
@@ -262,6 +284,7 @@ namespace FSO.LotView.Utils
                     }
 
                     ReduxFlatDepth(world);
+                    ReduxApplyScale(world);
                     _TextureDirty = false;
                     Bounding = new Rectangle(minX, minY, maxX - minX, maxY - minY);
                 }
@@ -337,6 +360,119 @@ namespace FSO.LotView.Utils
                 }
             }
             catch (Exception) { } // (the object keeps its own depth)
+        }
+
+        /// <summary>
+        /// SimsRedux: draws the object bigger or smaller (ReduxScale). Each picture is stretched around one point:
+        /// the middle of the object's floor (of the whole object, for a multi-tile one), or for a wall item the middle
+        /// of the picture, so it stays on its wall. The depth pictures stretch with it, which would tilt a flat thing's
+        /// depth (a painting would sink into its wall at one side, a rug into the floor) - so for wall items and flat
+        /// floor items each corner also gets the depth of the real spot on the wall / floor it now covers.
+        /// </summary>
+        private void ReduxApplyScale(WorldState world)
+        {
+            try
+            {
+                float s = _ReduxScale;
+                if (Items.Count == 0 || Math.Abs(s - 1f) < 0.001f) return;
+                var ws = world.WorldSpace;
+
+                Vector2 anchor;
+                if (_ReduxScaleOnWall)
+                {
+                    int x0 = int.MaxValue, y0 = int.MaxValue, x1 = int.MinValue, y1 = int.MinValue;
+                    foreach (var item in Items)
+                    {
+                        var r = item.Sprite.DestRect;
+                        x0 = Math.Min(x0, r.Left); y0 = Math.Min(y0, r.Top);
+                        x1 = Math.Max(x1, r.Right); y1 = Math.Max(y1, r.Bottom);
+                    }
+                    anchor = new Vector2((x0 + x1) / 2f, (y0 + y1) / 2f);
+                }
+                else anchor = new Vector2(ws.CadgeWidth / 2f, ws.CadgeBaseLine); // (the tile's middle, on the floor)
+                if (_ReduxScaleAnchor != Vector3.Zero) anchor += ws.GetScreenFromTile(_ReduxScaleAnchor);
+
+                // the surface the picture lies on, for the depth: the wall (along it and up), or the floor
+                Vector3 a1 = Vector3.Zero, a2 = Vector3.Zero;
+                bool plane = false;
+                if (_ReduxScaleOnWall)
+                {
+                    a1 = (_Direction == Direction.NORTH || _Direction == Direction.SOUTH) ? Vector3.UnitX : Vector3.UnitY;
+                    a2 = Vector3.UnitZ;
+                    plane = true;
+                }
+                else if (ReduxLooksFlat(world))
+                {
+                    a1 = Vector3.UnitX;
+                    a2 = Vector3.UnitY;
+                    plane = true;
+                }
+                var s1 = ws.GetScreenFromTile(a1);
+                var s2 = ws.GetScreenFromTile(a2);
+                float det = s1.X * s2.Y - s1.Y * s2.X;
+                if (Math.Abs(det) < 0.001f) plane = false;
+                float k = 1f - 1f / s;
+
+                foreach (var item in Items)
+                {
+                    var spr = item.Sprite;
+                    var r = spr.DestRect;
+                    int l = (int)Math.Round(anchor.X + (r.Left - anchor.X) * s);
+                    int t = (int)Math.Round(anchor.Y + (r.Top - anchor.Y) * s);
+                    int rr = (int)Math.Round(anchor.X + (r.Right - anchor.X) * s);
+                    int b = (int)Math.Round(anchor.Y + (r.Bottom - anchor.Y) * s);
+                    spr.DestRect = new Rectangle(l, t, Math.Max(1, rr - l), Math.Max(1, b - t));
+                    if (!plane) { spr.ReduxCornerWorld = null; continue; }
+                    var r2 = spr.DestRect;
+                    var corners = new[] {
+                        new Vector2(r2.Left, r2.Top), new Vector2(r2.Right, r2.Top),
+                        new Vector2(r2.Right, r2.Bottom), new Vector2(r2.Left, r2.Bottom) };
+                    var cw = new Vector3[4];
+                    for (int i = 0; i < 4; i++)
+                    {
+                        var d = corners[i] - anchor;
+                        // d = u*s1 + v*s2: the spot on the surface this corner now shows...
+                        float u = (d.X * s2.Y - d.Y * s2.X) / det;
+                        float v = (s1.X * d.Y - s1.Y * d.X) / det;
+                        // ...while the stretched depth picture still says the spot 1/s as far out
+                        cw[i] = WorldSpace.GetWorldFromTile(a1 * u + a2 * v) * k;
+                    }
+                    spr.ReduxCornerWorld = cw;
+                }
+            }
+            catch (Exception) { } // (drawn at its normal size)
+        }
+
+        /// <summary>SimsRedux: is this a flat thing lying on the floor (a rug, a mat)? Same test as ReduxFlatDepth's.</summary>
+        private bool ReduxLooksFlat(WorldState world)
+        {
+            try
+            {
+                int div = 1 << Math.Max(0, Math.Min(2, (int)WorldZoom.Near - (int)world.Zoom));
+                int minTop = int.MaxValue, maxBottom = int.MinValue;
+                foreach (var item in Items)
+                {
+                    var spr = item.Sprite;
+                    if (spr.RenderMode != _2DBatchRenderMode.Z_BUFFER || spr.Depth == null || spr.Pixel == null) return false;
+                    if (item.DGRPSprite == null || item.DGRPSprite.ObjectOffset.Z != 0) return false;
+                    int top = (int)item.DGRPSprite.SpriteOffset.Y - spr.DestRect.Height;
+                    minTop = Math.Min(minTop, top * div);
+                    maxBottom = Math.Max(maxBottom, (top + spr.DestRect.Height) * div);
+                }
+                if (minTop < -40 || maxBottom < 16) return false;
+                foreach (var item in Items)
+                {
+                    var frame = item.DGRPSprite.GetSPR2Frame();
+                    if (frame == null) return false;
+                    if (frame.ReduxZCount < 0) frame.DecodeIfRequired(true);
+                    if (frame.ReduxZCount <= 0) return false;
+                    float floorSlope = -TextureGenerator.FLAT_Z_INC * div;
+                    if (Math.Abs(frame.ReduxZSlope - floorSlope) > 0.25f * -floorSlope) return false;
+                    if (frame.ReduxZRms > 3 + div) return false;
+                }
+                return true;
+            }
+            catch (Exception) { return false; }
         }
 
         /// <summary>SimsRedux: the floor's depth step at a row (pixels from the object's ground point, at this zoom).</summary>

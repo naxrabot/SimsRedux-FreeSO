@@ -178,6 +178,16 @@ namespace FSO.SimAntics.Utils
                 var pos = e.Position;
                 if (pos.x >= 0 && pos.y >= 0 && pos != LotTilePos.OUT_OF_WORLD) result.AddSpot(e);
             }
+            // ...and the Sim is standing again: still "sitting" with no seat, the game's idle script looked at the
+            // seat it was sitting on (object 0) and stopped with a SimAntics error
+            foreach (var e in ents)
+            {
+                var ava = e as VMAvatarMarshal;
+                if (ava == null || ava.Container == 0 || !result.IDs.Contains(ava.Container)) continue;
+                ava.Container = 0;
+                ava.ContainerSlot = 0;
+                if (ava.PersonData != null && ava.PersonData.Length > 0) ava.PersonData[0] = 0; // (Posture: standing)
+            }
             if (input.MultitileGroups != null)
                 foreach (var g in input.MultitileGroups)
                     if (g?.Objects != null && g.Objects.Length > 0 && g.Objects.All(o => result.IDs.Contains(o))) result.Groups.Add(g);

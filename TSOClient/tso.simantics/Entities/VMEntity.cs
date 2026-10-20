@@ -255,6 +255,8 @@ namespace FSO.SimAntics
             // SimsRedux: computers get more to do (Write a Novel, Practice Writing, ...)
             FSO.SimAntics.Utils.ReduxComputer.Patch(this);
             FSO.SimAntics.Utils.ReduxLeftovers.Patch(this); // SimsRedux: leftovers in the fridge
+            FSO.SimAntics.Utils.ReduxBugs.Patch(this); // SimsRedux: "Spray" on bugs
+            FSO.SimAntics.Utils.ReduxBaby.Patch(this); // SimsRedux: the baby's neglect warning after 20 starving minutes, as meant
 
             this.Attributes = new List<short>(numAttributes);
             SetFlag(VMEntityFlags.ChairFacing, true);

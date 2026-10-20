@@ -87,15 +87,24 @@ namespace FSO.Vitaboy
             return tex;
         }
 
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Microsoft.Xna.Framework.Graphics.Texture2D, object> CheckedFine
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<Microsoft.Xna.Framework.Graphics.Texture2D, object>();
+
         /// <summary>Is this picture completely black? (a picture that didn't come through properly)</summary>
         public static bool AllBlack(Microsoft.Xna.Framework.Graphics.Texture2D tex)
         {
             try
             {
                 if (tex.Format != Microsoft.Xna.Framework.Graphics.SurfaceFormat.Color || tex.Width * tex.Height > 1024 * 1024) return false;
+                // (SimsRedux: a picture already found fine isn't read back again - every face picture and every copy
+                //  of a Sim used to read all its pictures back from the graphics card)
+                object seen;
+                if (CheckedFine.TryGetValue(tex, out seen)) return false;
                 var data = new Microsoft.Xna.Framework.Color[tex.Width * tex.Height];
-                tex.GetData(data);
-                foreach (var c in data) if (c.R > 8 || c.G > 8 || c.B > 8) return false;
+                // (read back without losing the target being drawn into - on phones and in browsers a plain read
+                //  unbound it, and the rest of the Sim, the other Sims and face pictures were drawn to nowhere)
+                FSO.Common.Utils.TextureUtils.GetDataKeepTarget(tex.GraphicsDevice, tex, data);
+                foreach (var c in data) if (c.R > 8 || c.G > 8 || c.B > 8) { try { CheckedFine.Add(tex, null); } catch { } return false; }
                 if (ReportProblem != null) try { ReportProblem("black Sim texture", "A Sim texture came out completely black (" + tex.Width + "x" + tex.Height + ") - using another"); } catch { }
                 return true;
             }

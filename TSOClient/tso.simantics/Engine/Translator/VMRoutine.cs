@@ -65,6 +65,7 @@ namespace FSO.SimAntics
                     if (kind == ReduxKindHappyEnough)
                     {
                         var keep = FSO.SimAntics.Utils.ReduxComputer.Decide(frame.Thread, frame, opcode);
+                        if (keep != 0 && frame.Thread != null && frame.Thread.ReduxHookShouldWait()) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                         if (keep > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                         if (keep < 0) return VMPrimitiveExitCode.GOTO_FALSE; // (a need is low: they stop)
                     }
@@ -72,14 +73,18 @@ namespace FSO.SimAntics
                     else if (kind == ReduxKindDueAtWork || kind == ReduxKindCarPool || kind == ReduxKindSchoolBus || kind == ReduxKindCarForSim)
                     {
                         var off = FSO.SimAntics.Utils.ReduxWeek.DayOff(frame, opcode);
+                        // (a script asking again and again in one tick waits for the next tick - see VMThread.ReduxHookShouldWait)
+                        if (off != 0 && frame.Thread != null && frame.Thread.ReduxHookShouldWait()) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                         if (off < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                         if (off > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                     }
                 }
                 // SimsRedux: no more than a couple of uninvited visitors a day (Utils/ReduxVisitCap.cs)
-                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxVisitCap.Skip(frame, opcode)) return VMPrimitiveExitCode.GOTO_TRUE;
+                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxVisitCap.Skip(frame, opcode))
+                    return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
                 // SimsRedux: Smarter Sims get up from skill objects before a need runs out (Utils/ReduxExit.cs)
-                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxExit.StopSkill(frame, opcode)) return VMPrimitiveExitCode.GOTO_TRUE;
+                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxExit.StopSkill(frame, opcode))
+                    return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
                 frame.Thread.ExecuteSubRoutine(frame, opcode, (VMSubRoutineOperand)instruction.Operand);
                 return VMPrimitiveExitCode.CONTINUE;
             }
@@ -91,6 +96,10 @@ namespace FSO.SimAntics
             // the old "after 5000 primitives" limit still did ~1000 walk set-ups a tick: 1 frame a second).
             if ((opcode == 27 || opcode == 45) && frame.Thread != null && frame.Thread.ReduxWalkShouldWait(frame))
                 return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
+            // SimsRedux: a visitor/NPC walking in his own main loop stops for a top-priority interaction - the
+            // police officer chasing the burglar takes the NPC Controller's "Arrest" (VMThread.ReduxMainLoopInterrupted)
+            if ((opcode == 27 || opcode == 45) && frame.Thread != null && frame.Thread.ReduxMainLoopInterrupted(frame.ActionTree))
+                return VMPrimitiveExitCode.GOTO_FALSE;
 
             var primitive = VMContext.Primitives[opcode];
             if (primitive == null)

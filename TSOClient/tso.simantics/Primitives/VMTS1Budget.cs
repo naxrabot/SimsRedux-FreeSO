@@ -15,6 +15,9 @@ namespace FSO.SimAntics.Primitives
                                                                                        //weird terms for the flags here but ts1 is inverted
                                                                                        //amount contains the amount we are subtracting from the budget.
 
+            // SimsRedux: a serving of leftovers from the fridge is already paid for (Utils/ReduxLeftovers.cs)
+            if (amount > 0 && FSO.SimAntics.Utils.ReduxLeftovers.IsFreeServing(context)) return VMPrimitiveExitCode.GOTO_TRUE;
+
             var oldBudget = context.VM.TS1State.CurrentFamily?.Budget ?? 0;
             var newBudget = oldBudget - amount;
             if (oldBudget < 0) return VMPrimitiveExitCode.GOTO_FALSE;

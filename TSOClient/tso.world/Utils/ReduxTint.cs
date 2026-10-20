@@ -380,7 +380,8 @@ namespace FSO.LotView.Utils
                 {
                     if (original.Format != SurfaceFormat.Color) { Log("not a colour texture: " + original.Format); return original; }
                     src = new Color[w * h];
-                    original.GetData(src);
+                    // (SimsRedux: this can happen while the lot is being drawn - the drawing target is kept bound)
+                    FSO.Common.Utils.TextureUtils.GetDataKeepTarget(gd, original, src);
                     bool any = false;
                     for (int i = 0; i < src.Length; i++) if (src[i].A != 0) { any = true; break; }
                     if (!any) { pending = true; return original; } // still loading

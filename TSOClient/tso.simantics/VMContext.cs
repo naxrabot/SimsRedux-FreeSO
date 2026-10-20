@@ -1429,6 +1429,8 @@ namespace FSO.SimAntics
                         ((VMGameObject)newGroup.Objects[i]).SetReduxTint(((VMGameObject)original).ReduxTint);
                     if (newGroup.Objects[i] is VMGameObject && original is VMGameObject) // SimsRedux: and its height
                         ((VMGameObject)newGroup.Objects[i]).SetReduxLift(((VMGameObject)original).ReduxLift);
+                    if (newGroup.Objects[i] is VMGameObject && original is VMGameObject) // SimsRedux: and its size
+                        ((VMGameObject)newGroup.Objects[i]).SetReduxScale(((VMGameObject)original).ReduxScale);
                     if (newGroup.Objects[i] is VMGameObject)
                     {
                         ((VMGameObject)newGroup.Objects[i]).RefreshGraphic();

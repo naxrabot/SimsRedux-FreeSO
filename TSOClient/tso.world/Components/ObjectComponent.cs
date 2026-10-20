@@ -82,6 +82,7 @@ namespace FSO.LotView.Components
                     if (GroundAlign != null) _World = GroundAlign.Value * _World;
                     _World3D = Matrix.CreateScale(3f) * Matrix.CreateRotationY(-RadianDirection) * _World3D;
                     _World3DDirty = false;
+                    if (_ReduxScale != 1f) _World3D = ReduxScaleWorld(_World3D); // SimsRedux: resized
                 }
                 return _World3D;
             }
@@ -467,7 +468,96 @@ namespace FSO.LotView.Components
 
         public void ValidateSprite(WorldState world)
         {
+            ReduxSyncScaleAnchor();
             dgrp.ValidateSprite(world);
+        }
+
+        // SimsRedux: drawn bigger or smaller (1 = normal size). Only the picture / model: the object keeps its tiles.
+        private float _ReduxScale = 1f;
+        public float ReduxScale
+        {
+            get { return _ReduxScale; }
+            set
+            {
+                if (_ReduxScale == value) return;
+                _ReduxScale = value;
+                if (dgrp != null) dgrp.ReduxScale = value;
+                _WorldDirty = true;
+                _BoundsDirty = true;
+                if (blueprint != null) blueprint.Changes.RegisterObjectChange(this);
+                blueprint?.SM64?.UpdateObject(this);
+            }
+        }
+
+        private bool _ReduxScaleOnWall;
+        /// <summary>SimsRedux: hangs on a wall - resized on the wall around its middle (it stays on the wall).</summary>
+        public bool ReduxScaleOnWall
+        {
+            get { return _ReduxScaleOnWall; }
+            set
+            {
+                if (_ReduxScaleOnWall == value) return;
+                _ReduxScaleOnWall = value;
+                if (dgrp != null) dgrp.ReduxScaleOnWall = value;
+                _WorldDirty = true;
+            }
+        }
+
+        /// <summary>
+        /// SimsRedux: from this tile to the middle of the whole object, in tiles (flat). A multi-tile object (a sofa,
+        /// a bed) grows from its middle, so its parts stay together.
+        /// </summary>
+        private Vector3 ReduxGroupAnchor()
+        {
+            var grp = MultitileGroup;
+            if (grp == null || grp.Objects.Count < 2) return Vector3.Zero;
+            var me = Position;
+            float sx = 0, sy = 0;
+            int n = 0;
+            foreach (var o in grp.Objects)
+            {
+                if (o == null) continue;
+                var p = o.Position;
+                if (Math.Abs(p.X - me.X) > 8 || Math.Abs(p.Y - me.Y) > 8) continue; // (a part off the lot)
+                sx += p.X; sy += p.Y; n++;
+            }
+            if (n == 0) return Vector3.Zero;
+            return new Vector3(sx / n - me.X, sy / n - me.Y, 0);
+        }
+
+        private Vector3 _ReduxAnchorUsed;
+        private void ReduxSyncScaleAnchor()
+        {
+            if (_ReduxScale == 1f || dgrp == null) return;
+            var a = ReduxGroupAnchor();
+            if (Vector3.DistanceSquared(a, dgrp.ReduxScaleAnchor) > 0.0001f) dgrp.ReduxScaleAnchor = a;
+            if (Vector3.DistanceSquared(a, _ReduxAnchorUsed) > 0.0001f) _World3DDirty = true;
+        }
+
+        /// <summary>
+        /// SimsRedux: the 3D model resized around the middle of its floor (of the whole object, for a multi-tile one),
+        /// or for a wall item around the middle of its back, on the wall - so it stays on the wall.
+        /// </summary>
+        private Matrix ReduxScaleWorld(Matrix world)
+        {
+            var anchor = ReduxGroupAnchor();
+            _ReduxAnchorUsed = anchor;
+            var local = Vector3.Zero; // (the middle of the tile, on the floor)
+            if (_ReduxScaleOnWall)
+            {
+                var b = dgrp?.GetBounds();
+                if (b == null) _World3DDirty = true; // (the model isn't ready yet: try again next time)
+                else
+                {
+                    var bb = b.Value;
+                    var c = (bb.Min + bb.Max) / 2f;
+                    // the wall is behind the item: the side its model sits furthest towards
+                    if (Math.Abs(c.Z) >= Math.Abs(c.X)) local = new Vector3(0, c.Y, (c.Z < 0) ? bb.Min.Z : bb.Max.Z);
+                    else local = new Vector3((c.X < 0) ? bb.Min.X : bb.Max.X, c.Y, 0);
+                }
+            }
+            var pivot = Vector3.Transform(local, world) + WorldSpace.GetWorldFromTile(anchor);
+            return world * Matrix.CreateTranslation(-pivot) * Matrix.CreateScale(_ReduxScale) * Matrix.CreateTranslation(pivot);
         }
 
         public override Vector2 GetScreenPos(WorldState world)
@@ -588,6 +678,7 @@ namespace FSO.LotView.Components
 
             if (world.CameraMode > CameraRenderMode._2D || Mode.IsSet(ComponentRenderMode._3D)) //)
             {
+                ReduxSyncScaleAnchor();
                 var mworld = World3D;
                 dgrp.World = mworld;
                 if (this.DrawGroup != null) dgrp.Draw3D(world);
@@ -596,6 +687,7 @@ namespace FSO.LotView.Components
             {
                 if (this.DrawGroup != null)
                 {
+                    ReduxSyncScaleAnchor();
                     if (Container != null) dgrp.Position = pos;
                     dgrp.DrawImmediate(world);
                     if (dgrp.TintPending && dgrp.Tint != 0) TintWaiting.Add(this);

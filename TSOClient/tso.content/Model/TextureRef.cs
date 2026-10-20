@@ -55,7 +55,7 @@ namespace FSO.Content.Model
                 // TODO: get data, mip that and then upload instead of using a temporary texture
 
                 var data = new Color[texture.Width * texture.Height];
-                texture.GetData(data);
+                FSO.Common.Utils.TextureUtils.GetDataKeepTarget(device, texture, data); // (SimsRedux: can be mid-draw)
                 texture.Dispose();
                 texture = new Texture2D(device, texture.Width, texture.Height, true, SurfaceFormat.Color);
                 TextureUtils.UploadWithMips(texture, device, data);

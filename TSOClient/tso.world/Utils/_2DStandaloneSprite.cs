@@ -10,6 +10,11 @@ namespace FSO.LotView.Utils
 
         public _2DSpriteVertex[] vertices;
         public VertexBuffer GPUVertices;
+        /// <summary>
+        /// SimsRedux: extra world position for each corner (top left, top right, bottom right, bottom left), added to
+        /// AbsoluteWorldPosition - lets a resized picture keep a sensible depth (see DGRPRenderer.ReduxApplyScale).
+        /// </summary>
+        public Vector3[] ReduxCornerWorld;
 
         public void Dispose()
         {
@@ -28,19 +33,20 @@ namespace FSO.LotView.Utils
             var top = FlipVertically ? srcRectangle.Bottom : srcRectangle.Top;
             var bot = FlipVertically ? srcRectangle.Top : srcRectangle.Bottom;
 
+            var cw = (ReduxCornerWorld != null && ReduxCornerWorld.Length == 4) ? ReduxCornerWorld : null;
             vertices = new _2DSpriteVertex[] {
                 new _2DSpriteVertex(
                     new Vector3(dstRectangle.Left, dstRectangle.Top, 0)
-                    , GetUV(texture, left, top), AbsoluteWorldPosition, ObjectID, Room, Floor),
+                    , GetUV(texture, left, top), (cw == null) ? AbsoluteWorldPosition : AbsoluteWorldPosition + cw[0], ObjectID, Room, Floor),
                 new _2DSpriteVertex(
                     new Vector3(dstRectangle.Right, dstRectangle.Top, 0)
-                    , GetUV(texture, right, top), AbsoluteWorldPosition, ObjectID, Room, Floor),
+                    , GetUV(texture, right, top), (cw == null) ? AbsoluteWorldPosition : AbsoluteWorldPosition + cw[1], ObjectID, Room, Floor),
                 new _2DSpriteVertex(
                     new Vector3(dstRectangle.Right, dstRectangle.Bottom, 0)
-                    , GetUV(texture, right, bot), AbsoluteWorldPosition, ObjectID, Room, Floor),
+                    , GetUV(texture, right, bot), (cw == null) ? AbsoluteWorldPosition : AbsoluteWorldPosition + cw[2], ObjectID, Room, Floor),
                 new _2DSpriteVertex(
                     new Vector3(dstRectangle.Left, dstRectangle.Bottom, 0)
-                    , GetUV(texture, left, bot), AbsoluteWorldPosition, ObjectID, Room, Floor)
+                    , GetUV(texture, left, bot), (cw == null) ? AbsoluteWorldPosition : AbsoluteWorldPosition + cw[3], ObjectID, Room, Floor)
             };
 
             if (GPUVertices == null) GPUVertices = new VertexBuffer(gd, typeof(_2DSpriteVertex), 4, BufferUsage.None);

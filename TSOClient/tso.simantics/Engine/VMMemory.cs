@@ -19,8 +19,41 @@ namespace FSO.SimAntics.Engine.Utils
         /// <param name="scope"></param>
         /// <param name="data"></param>
         /// <returns></returns>
+        private static int ReduxMissingStackObjectNotes;
+
+        /// <summary>SimsRedux: is this a read of the stack object's own data, in the Sims 1, with no stack object? (noted in the console a few times)</summary>
+        private static bool ReduxMissingStackObjectRead(VMStackFrame context, VMVariableScope scope)
+        {
+            switch (scope)
+            {
+                case VMVariableScope.StackObjectAttributes:
+                case VMVariableScope.StackObject:
+                case VMVariableScope.StackObjectTemp:
+                case VMVariableScope.StackObjectSlot:
+                case VMVariableScope.StackObjectDefinition:
+                case VMVariableScope.StackObjectAttributeByParameter:
+                case VMVariableScope.DynSpriteFlagForTempOfStackObject:
+                    break;
+                default:
+                    return false;
+            }
+            if (context.VM == null || !context.VM.TS1) return false;
+            if (ReduxMissingStackObjectNotes < 20)
+            {
+                ReduxMissingStackObjectNotes++;
+                Console.WriteLine("[SimsRedux] " + (context.Caller?.ToString() ?? "?") + " read " + scope + " of a missing stack object (id "
+                    + context.StackObjectID + ") in " + (context.Routine?.Rti?.Name ?? "?") + ":" + context.InstructionPointer + " - read as 0");
+            }
+            return true;
+        }
+
         public static short GetVariable(VMStackFrame context, VMVariableScope scope, short data)
         {
+            // SimsRedux: a Sims 1 script reading data of a stack object that isn't there (object 0, or one that's
+            // gone) gets 0, as in the original game, instead of stopping with a SimAntics error (e.g. a Sim left
+            // "sitting" with no seat: "do idle core" reads the seat's category). Only these reads - writes, and
+            // any other failure, are still reported.
+            if (context.StackObject == null && ReduxMissingStackObjectRead(context, scope)) return 0;
             switch (scope){
                 case VMVariableScope.MyObjectAttributes: //0
                     return context.Caller.GetAttribute((ushort)data);
