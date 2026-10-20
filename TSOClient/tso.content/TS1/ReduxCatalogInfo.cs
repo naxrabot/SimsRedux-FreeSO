@@ -24,25 +24,29 @@ namespace FSO.Content.TS1
         {
             item.ReduxSource = source;
             item.ReduxOriginal = ((uint)obj.OriginalGUID2 << 16) | obj.OriginalGUID1;
-            string name = null, desc = "";
+            string name = null, desc = "", english = null;
             try
             {
                 // (straight from the raw bytes when it can be - reading every language's strings was most of the time)
                 var raw = iff.Peek<CTSS>(obj.CatalogStringsID);
                 var data = raw?.ChunkData;
-                if (raw != null && !(raw.ChunkProcessed == false && data != null && STR.PeekFirstTwo(data, out name, out desc)))
+                if (raw != null && !(raw.ChunkProcessed == false && data != null && STR.PeekFirstTwo(data, out name, out desc, out english)))
                 {
-                    name = null; desc = "";
+                    name = null; desc = ""; english = null;
                     var ctss = iff.Get<CTSS>(obj.CatalogStringsID);
                     if (ctss != null)
                     {
                         name = ctss.GetString(0);
                         if (ctss.Length > 1) desc = ctss.GetString(1) ?? "";
+                        english = ctss.GetString(0, STRLangCode.EnglishUS);
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception) { english = null; }
             item.CatalogName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+            // (the price guess only goes by the English name and the label - the same in every language)
+            item.ReduxPriceName = string.IsNullOrWhiteSpace(english) ? null : english.Trim();
+            item.ReduxPriceLabel = obj.ChunkLabel;
             item.ReduxDescription = desc ?? "";
             try
             {
@@ -264,7 +268,9 @@ namespace FSO.Content.TS1
         /// <summary>
         /// A sensible price for a Buy item (category 0-7) that costs §0: by the words in its catalog name (then its
         /// object label), then its subsort flags, then its category. Only from the item itself and the tables above, so
-        /// every game (and every online lot) works out exactly the same price.
+        /// every game (and every online lot) works out exactly the same price. name must be the English US catalog name
+        /// (ObjectCatalogItem.ReduxPriceName) and label the object's own label - never a name in the game's language
+        /// (players in different languages would get different prices); without them it goes by the subsort/category.
         /// </summary>
         public static uint GuessPrice(sbyte category, byte subsort, string name, string label)
         {
@@ -312,7 +318,7 @@ namespace FSO.Content.TS1
                 {
                     var item = list[i];
                     if (item.Price != 0 || item.ReduxSource == 0 || item.ReduxHidden) continue;
-                    item.Price = GuessPrice(item.Category, item.Subsort, item.CatalogName, item.Name);
+                    item.Price = GuessPrice(item.Category, item.Subsort, item.ReduxPriceName, item.ReduxPriceLabel);
                     if (item.Price == 0) continue;
                     item.ReduxPriceGuessed = true;
                     list[i] = item;

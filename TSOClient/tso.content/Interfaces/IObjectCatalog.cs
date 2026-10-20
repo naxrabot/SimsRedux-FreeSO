@@ -51,5 +51,11 @@ namespace FSO.Content.Interfaces
         /// Price is a guess from similar items (ReduxCatalogInfo.GuessPrice) - buying, selling and wear all use it.
         /// </summary>
         public bool ReduxPriceGuessed;
+        /// <summary>
+        /// SimsRedux 14.5: what GuessPrice goes by - the catalog name in English US (the file's own, null if it has none)
+        /// and the object's label - never the name in the game's language, so every player (online, whatever their
+        /// language) works out the same price.
+        /// </summary>
+        public string ReduxPriceName, ReduxPriceLabel;
     }
 }

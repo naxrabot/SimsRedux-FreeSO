@@ -1470,6 +1470,7 @@ namespace FSO.SimAntics
                     return;
                 }
                 Dead = true; //if a reset tries to delete this object it is wasting its time
+                FSO.SimAntics.Utils.ReduxBugs.OnDelete(this, context); // SimsRedux: no spray can left in a Sim's hand
                 var threads = SoundThreads;
 
                 //clear any short term relations the target object has to us

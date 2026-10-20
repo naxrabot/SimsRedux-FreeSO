@@ -263,6 +263,8 @@ namespace FSO.Content.TS1
             public string Description = "";
             public uint Original;
             public ulong Shape;
+            /// <summary>SimsRedux 14.5: the English US catalog name and the label, for the price guess (see ObjectCatalogItem).</summary>
+            public string PriceName, PriceLabel;
         }
 
         /// <summary>
@@ -310,6 +312,8 @@ namespace FSO.Content.TS1
                             ReduxCatalogInfo.Fill(ref info, iff, o, objds, 2);
                             if (info.CatalogName != null) found.Name = info.CatalogName;
                             found.Description = info.ReduxDescription ?? "";
+                            found.PriceName = info.ReduxPriceName;
+                            found.PriceLabel = info.ReduxPriceLabel;
                             found.Original = info.ReduxOriginal;
                             found.Shape = ShapeOf(o.GUID);
                             if (found.Category < 0 || found.Category >= 30) found.Catalog = false;

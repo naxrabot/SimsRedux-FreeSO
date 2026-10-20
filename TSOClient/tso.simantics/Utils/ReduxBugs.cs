@@ -152,6 +152,57 @@ namespace FSO.SimAntics.Utils
             catch (Exception e) { Console.WriteLine("[SimsRedux] bugs: " + e.Message); }
         }
 
+        /// <summary>
+        /// As any object goes (VMEntity.Delete, on every player's game alike): when it's bugs, the spray can goes from
+        /// every Sim who has it out but isn't still spraying other bugs that are there. "Spray" takes the can out and puts
+        /// it away itself, but if the bugs go first (the exterminator, another Sim's spray, the maid) the interaction
+        /// stops part way and the can stayed bound to the Sim - and was saved with them. (This also clears a can left
+        /// from before, the next time any bugs go.) Only game state is read, so every player does the same.
+        /// </summary>
+        public static void OnDelete(VMEntity obj, VMContext context)
+        {
+            try
+            {
+                if (!Is(obj) || context?.ObjectQueries?.Avatars == null) return;
+                foreach (var e in context.ObjectQueries.Avatars)
+                {
+                    var ava = e as VMAvatar;
+                    if (ava?.BoundAppearances == null || ava.BoundAppearances.Count == 0) continue;
+                    var cans = ava.BoundAppearances.Where(IsCan).ToList();
+                    if (cans.Count == 0 || StillSpraying(ava, obj)) continue;
+                    foreach (var can in cans)
+                    {
+                        ava.BoundAppearances.Remove(can);
+                        if (VM.UseWorld)
+                        {
+                            var apr = FSO.Content.Content.Get().AvatarAppearances.Get(can);
+                            if (apr != null) ava.Avatar?.RemoveAccessory(apr);
+                        }
+                    }
+                }
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] bugs: " + e.Message); }
+        }
+
+        private static bool IsCan(string apr)
+        {
+            return apr != null && apr.IndexOf("roach-can", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Is this Sim in the middle of "Spray" on other bugs that are still there?</summary>
+        private static bool StillSpraying(VMAvatar ava, VMEntity going)
+        {
+            var stack = ava.Thread?.Stack;
+            if (stack == null) return false;
+            foreach (var f in stack)
+            {
+                if (f?.Routine == null || f.Routine.ID != SprayTreeID) continue;
+                var target = f.StackObject;
+                if (target != null && target != going && !target.Dead && Is(target)) return true;
+            }
+            return false;
+        }
+
         private static BHAVInstruction I(ushort opcode, byte t, byte f, params byte[] operand)
         {
             var op = new byte[8];

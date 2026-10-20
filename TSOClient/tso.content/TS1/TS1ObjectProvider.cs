@@ -257,7 +257,9 @@ namespace FSO.Content.TS1
                     ReduxPicture = true,
                     ReduxShape = f.Shape,
                     ReduxOriginal = f.Original,
-                    ReduxSource = 2
+                    ReduxSource = 2,
+                    ReduxPriceName = f.PriceName,
+                    ReduxPriceLabel = f.PriceLabel ?? obj.ChunkLabel
                 };
                 ItemsByCategory[item.Category].Add(item);
                 ItemsByGUID[item.GUID] = item;

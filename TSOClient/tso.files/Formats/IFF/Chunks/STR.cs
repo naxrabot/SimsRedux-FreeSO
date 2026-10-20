@@ -192,7 +192,16 @@ namespace FSO.Files.Formats.IFF.Chunks
         /// </summary>
         public static bool PeekFirstTwo(byte[] data, out string first, out string second)
         {
-            first = second = null;
+            return PeekFirstTwo(data, out first, out second, out _);
+        }
+
+        /// <summary>
+        /// SimsRedux: the same, and also the first English US string (englishFirst - null if it has none), which is the
+        /// same whatever language the game is in (prices must be worked out the same on every player's game).
+        /// </summary>
+        public static bool PeekFirstTwo(byte[] data, out string first, out string second, out string englishFirst)
+        {
+            first = second = englishFirst = null;
             if (data == null || data.Length < 4) return false;
             if (BitConverter.ToInt16(data, 0) != -3) return false;
             try
@@ -231,9 +240,10 @@ namespace FSO.Files.Formats.IFF.Chunks
                 first = useOwn ? t0 : (english > 0 ? e0 : null);
                 if (english > 1) second = useOwn ? (own > 1 ? t1 : null) : e1;
                 else second = "";
+                englishFirst = english > 0 ? e0 : null;
                 return true;
             }
-            catch (Exception) { first = second = null; return false; }
+            catch (Exception) { first = second = englishFirst = null; return false; }
         }
 
         /// <summary>
