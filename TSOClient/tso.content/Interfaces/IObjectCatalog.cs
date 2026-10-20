@@ -41,5 +41,10 @@ namespace FSO.Content.Interfaces
         public uint ReduxOriginal;
         /// <summary>Where it's from: 0 the game's own archives, 1 a separate file (Downloads, shipped mods, Creator), 2 The Sims Online.</summary>
         public byte ReduxSource;
+        /// <summary>
+        /// SimsRedux 14.0: kept out of Buy and Build mode (not in any category list, so not in search or the dropper
+        /// either) - it's still a catalog item, so ones already on a lot keep their price, info and sell value.
+        /// </summary>
+        public bool ReduxHidden;
     }
 }

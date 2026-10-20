@@ -322,16 +322,25 @@ namespace FSO.HIT
         public static HITResult Rand(HITThread thread)
         {
             var dest = thread.ReadByte();
-            var low = thread.ReadByte();
-            var high = thread.ReadByte();
+            // SimsRedux 14.0: "low" and "high" are variables (the sound scripts load them first: "loadl h5 1000,
+            // loadb h6 0, rand h5 h6 h5" is a number from 0 to 1000). The register numbers themselves were used as
+            // the range before, so every roll gave the same number - and every "now and then" in a script
+            // ("play a grunt 1 time in 10", "hum now and then while painting") happened every single time round
+            // its loop: the Sims' voice lines repeated over and over.
+            int low = thread.ReadVar(thread.ReadByte());
+            int high = thread.ReadVar(thread.ReadByte());
+            if (high < low) { var swap = low; low = high; high = swap; }
 
-            var result = (new Random()).Next(high+1-low)+low;
+            int result;
+            lock (RandLock) result = (int)Math.Min(int.MaxValue, low + (long)(RandGen.NextDouble() * ((long)high - low + 1)));
             thread.WriteVar(dest, result);
 
             thread.SetFlags(result);
 
             return HITResult.CONTINUE;
         }
+        private static readonly Random RandGen = new Random();
+        private static readonly object RandLock = new object();
 
         public static HITResult Abs(HITThread thread)
         {

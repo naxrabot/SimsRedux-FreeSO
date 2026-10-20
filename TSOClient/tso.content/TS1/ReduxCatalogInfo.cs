@@ -55,6 +55,23 @@ namespace FSO.Content.TS1
             item.ReduxShape = Shape(iff, sprites, obj, all);
         }
 
+        /// <summary>
+        /// SimsRedux 14.0: downloads' water, sand, beach, swamp and murky-pool "rugs" (the CT oval water and sand
+        /// rugs, sand piles, beach rugs...) are kept out of the catalogs - Joey asked for them gone. Only separate
+        /// files (shipped mods, Downloads), never the game's own objects; snow and ice rugs stay. The files aren't
+        /// touched, so ones already on a lot keep working.
+        /// </summary>
+        public static bool HiddenFromCatalog(string catalogName, string label, string fileName)
+        {
+            var text = ((catalogName ?? "") + " " + (label ?? "") + " " + System.IO.Path.GetFileName(fileName ?? "")).ToLowerInvariant();
+            if (text.IndexOf("rug", StringComparison.Ordinal) < 0 && text.IndexOf("sand pile", StringComparison.Ordinal) < 0) return false;
+            foreach (var w in HiddenRugWords)
+                if (text.IndexOf(w, StringComparison.Ordinal) >= 0) return true;
+            return false;
+        }
+        // ("_wrug": venegra's water rugs - a plain "wrug" would match "snowrug"; "pool rug", not "pool": a pool-hall rug stays)
+        private static readonly string[] HiddenRugWords = { "water", "sand", "beach", "swamp", "pool rug", "poolrug", "ocean", "lake", "pond", "_wrug" };
+
         private static DGRP GetDGRP(IffFile iff, IffFile sprites, ushort id)
         {
             DGRP result = null;
