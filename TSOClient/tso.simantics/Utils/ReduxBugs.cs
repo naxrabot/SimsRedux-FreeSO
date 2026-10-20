@@ -117,7 +117,7 @@ namespace FSO.SimAntics.Utils
                                 I(18, 254, 254, 1, 0, 0, 0, 0, 0, 0, 0),
                             }
                         };
-                        var routine = Engine.Translator.VMTranslator.INSTANCE.Assemble(bhav, res);
+                        var routine = FSO.SimAntics.Engine.VMTranslator.INSTANCE.Assemble(bhav, res);
                         if (routine == null) return;
                         res.Iff.AddChunk(bhav);
                         res.RoutineCache[SprayTreeID] = routine;
