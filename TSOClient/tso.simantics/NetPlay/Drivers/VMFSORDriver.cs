@@ -35,9 +35,25 @@ namespace FSO.SimAntics.NetPlay.Drivers
 
         private uint TickID;
 
+        /// <summary>
+        /// SimsRedux soak test (-soakreplay): play every recorded tick, paused or not - the recording itself says
+        /// when the game was paused (VMNetDriver.ReduxRecordSpeed).
+        /// </summary>
+        public bool ReduxIgnoreSpeed;
+
+        /// <summary>SimsRedux soak test (-soakreplay): every recorded tick has been played.</summary>
+        public bool ReduxAtEnd
+        {
+            get
+            {
+                try { return Reader.BaseStream.Position >= Reader.BaseStream.Length - 1; }
+                catch { return true; }
+            }
+        }
+
         public override bool Tick(VM vm)
         {
-            if (vm.SpeedMultiplier <= 0) return true;
+            if (vm.SpeedMultiplier <= 0 && !ReduxIgnoreSpeed) return true;
             //try to read a new tick from the stream
             bool success = false;
             if (Reader.BaseStream.Position < Reader.BaseStream.Length - 1)

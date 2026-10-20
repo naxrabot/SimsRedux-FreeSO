@@ -19,6 +19,16 @@ namespace FSO.SimAntics.NetPlay
             }
         }
 
+        // ---- SimsRedux soak test hooks: null unless the soak test is running; they only look, never change anything ----
+        /// <summary>A command threw while running (driver, lot, command, exception).</summary>
+        public static System.Action<VMNetDriver, VM, VMNetCommandBodyAbstract, System.Exception> ReduxOnCommandFailed;
+        /// <summary>Every command that ran (driver, lot, command, whether Execute said it worked).</summary>
+        public static System.Action<VMNetDriver, VM, VMNetCommandBodyAbstract, bool> ReduxOnCommandDone;
+        /// <summary>The lot's random seed didn't match the tick's (driver, lot, tick, expected seed, actual seed).</summary>
+        public static System.Action<VMNetDriver, VM, uint, ulong, ulong> ReduxOnDesync;
+        /// <summary>A tick ran (driver, lot, tick id, how long it took in Stopwatch ticks).</summary>
+        public static System.Action<VMNetDriver, VM, uint, long> ReduxOnTicked;
+
         public IVMTSOGlobalLink GlobalLink;
         public abstract void SendCommand(VMNetCommandBodyAbstract cmd);
         public abstract void SendDirectCommand(uint pid, VMNetCommandBodyAbstract cmd);
@@ -59,6 +69,8 @@ namespace FSO.SimAntics.NetPlay
             if (CurrentTick > GreatestTick) GreatestTick = CurrentTick;
             if (!tick.ImmediateMode && (tick.Commands.Count == 0 || !(tick.Commands[0].Command is VMStateSyncCmd)) && vm.Context.RandomSeed != tick.RandomSeed)
             {
+                var onDesync = ReduxOnDesync;
+                if (onDesync != null) { try { onDesync(this, vm, CurrentTick, tick.RandomSeed, vm.Context.RandomSeed); } catch { } }
                 if (DesyncCooldown == 0)
                 {
                     System.Console.WriteLine("DESYNC - Requested state from host");
@@ -72,7 +84,7 @@ namespace FSO.SimAntics.NetPlay
                 }
             }
 
-            if (RecordStream != null) RecordTick(tick);
+            if (RecordStream != null) RecordTick(ReduxRecordSpeed ? ReduxWithSpeed(vm, tick) : tick);
             vm.Context.RandomSeed = tick.RandomSeed;
             AsyncBreak = false;
             bool doTick = !tick.ImmediateMode;
@@ -96,8 +108,12 @@ namespace FSO.SimAntics.NetPlay
                 {
                     ok = false;
                     System.Console.WriteLine("[SimsRedux] command " + cmd.Command.GetType().Name + " failed and was skipped: " + e);
+                    var onFailed = ReduxOnCommandFailed;
+                    if (onFailed != null) { try { onFailed(this, vm, cmd.Command, e); } catch { } }
                 }
                 Executing = null;
+                var onDone = ReduxOnCommandDone;
+                if (onDone != null) { try { onDone(this, vm, cmd.Command, ok); } catch { } }
                 if (!(cmd.Command is VMStateSyncCmd)) Note(cmd.Command.GetType().Name.Replace("VMNet", "").Replace("Cmd", "") + (ok ? " done" : " FAILED") + (caller == null ? " (no Sim for uid " + cmd.Command.ActorUID + ")" : ""));
                 if (vm.FSOVAsyncLoading)
                 {
@@ -112,7 +128,14 @@ namespace FSO.SimAntics.NetPlay
             {
                 if (tick.TickID > LastTick + 1) System.Console.WriteLine("Tick wrong! Got " + tick.TickID + ", Missed " + ((int)tick.TickID - (LastTick + 1)));
                 vm.Trace?.NewTick(tick.TickID);
-                vm.InternalTick(tick.TickID);
+                var onTicked = ReduxOnTicked;
+                if (onTicked == null) vm.InternalTick(tick.TickID);
+                else
+                {
+                    long started = System.Diagnostics.Stopwatch.GetTimestamp();
+                    vm.InternalTick(tick.TickID);
+                    try { onTicked(this, vm, tick.TickID, System.Diagnostics.Stopwatch.GetTimestamp() - started); } catch { }
+                }
                 if (DesyncCooldown > 0) DesyncCooldown--;
             }
             LastTick = tick.TickID;
@@ -121,8 +144,33 @@ namespace FSO.SimAntics.NetPlay
         //functions for recording command streams. 
         //Should work on client or server, assuming there is a sync point at the start.
 
+        /// <summary>
+        /// SimsRedux soak test: the recording also notes the lot's speed whenever it changed (single player sets
+        /// it directly, not through a command - a pause for a question, the speed buttons), so a replay pauses
+        /// and runs exactly where the recorded game did. Only the recorded copy of the tick gets the note.
+        /// </summary>
+        public bool ReduxRecordSpeed;
+        private int ReduxRecordedSpeed = int.MinValue, ReduxRecordedLastSpeed;
+
+        private VMNetTick ReduxWithSpeed(VM vm, VMNetTick tick)
+        {
+            if (vm.SpeedMultiplier == ReduxRecordedSpeed && vm.LastSpeedMultiplier == ReduxRecordedLastSpeed) return tick;
+            ReduxRecordedSpeed = vm.SpeedMultiplier;
+            ReduxRecordedLastSpeed = vm.LastSpeedMultiplier;
+            var copy = new VMNetTick
+            {
+                TickID = tick.TickID,
+                RandomSeed = tick.RandomSeed,
+                ImmediateMode = tick.ImmediateMode,
+                Commands = new System.Collections.Generic.List<VMNetCommand>(tick.Commands),
+            };
+            copy.Commands.Insert(0, new VMNetCommand(new VMNetSetSpeedCmd { Full = true, Speed = vm.SpeedMultiplier, LastSpeed = vm.LastSpeedMultiplier }));
+            return copy;
+        }
+
         public void Record(Stream output)
         {
+            ReduxRecordedSpeed = int.MinValue;
             RecordStream = new BinaryWriter(output);
             RecordStream.Write(new char[] { 'F', 'S', 'O', 'r' });
             RecordStream.Write(0); //version, for future extension
@@ -136,6 +184,16 @@ namespace FSO.SimAntics.NetPlay
         public void EndRecord()
         {
             RecordStream?.BaseStream?.Close();
+            RecordStream = null; // (SimsRedux: a closed recording is never written to again)
+        }
+
+        /// <summary>SimsRedux soak test: recording right now.</summary>
+        public bool IsRecording { get { return RecordStream != null; } }
+
+        /// <summary>SimsRedux soak test: everything recorded so far written out (so the file can be copied).</summary>
+        public void FlushRecord()
+        {
+            try { RecordStream?.Flush(); } catch { }
         }
 
         public virtual void Shutdown()

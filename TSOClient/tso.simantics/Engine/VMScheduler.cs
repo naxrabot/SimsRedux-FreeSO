@@ -76,6 +76,12 @@ namespace FSO.SimAntics.Engine
             CurrentTickID = tickID;
         }
 
+        /// <summary>
+        /// SimsRedux soak test: called after each object's tick (lot, object, Stopwatch ticks it took). Null unless
+        /// the soak test is running; it only looks, never changes anything.
+        /// </summary>
+        public static System.Action<VM, VMEntity, long> ReduxOnEntityTicked;
+
         public void RunTick()
         {
             if (vm.Aborting) return;
@@ -87,7 +93,15 @@ namespace FSO.SimAntics.Engine
                 {
                     var ent = TickThisFrame[i];
                     CurrentObjectID = ent.ObjectID;
-                    ent.Tick();
+                    var onTicked = ReduxOnEntityTicked;
+                    if (onTicked == null) ent.Tick();
+                    else
+                    {
+                        // SimsRedux soak test: how long each object's tick took (hot loops, slow ticks)
+                        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+                        ent.Tick();
+                        try { onTicked(vm, ent, System.Diagnostics.Stopwatch.GetTimestamp() - started); } catch { }
+                    }
                 }
                 TickSchedule.Remove(CurrentTickID);
             }
