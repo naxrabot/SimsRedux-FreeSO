@@ -25,6 +25,8 @@ namespace FSO.Content.TS1
 
         /// <summary>SimsRedux: how much custom content loaded (shown once in game, and in the console).</summary>
         public static int ReduxModFiles, ReduxModCatalogItems, DownloadsCatalogItems;
+        /// <summary>SimsRedux 14.0: downloads kept out of Buy and Build mode (ReduxCatalogInfo.HiddenFromCatalog).</summary>
+        public static int ReduxHiddenItems;
 
         public void Init()
         {
@@ -42,7 +44,7 @@ namespace FSO.Content.TS1
             var guidRank = new Dictionary<uint, int>();
             var guidKey = new Dictionary<uint, string>();
             var guidLogged = new HashSet<uint>();
-            ReduxModFiles = 0; ReduxModCatalogItems = 0; DownloadsCatalogItems = 0;
+            ReduxModFiles = 0; ReduxModCatalogItems = 0; DownloadsCatalogItems = 0; ReduxHiddenItems = 0;
             foreach (var iff in allIffs)
             {
                 bool reduxMod = false;
@@ -149,6 +151,15 @@ namespace FSO.Content.TS1
                                 item.RoomSort = 1 << 6;
                                 item.CommunitySort = item.DowntownSort = item.VacationSort = item.StudiotownSort = item.MagictownSort = 1 << 7;
                             }
+                            // SimsRedux 14.0: downloads' water/sand/beach rugs - a catalog item (placed ones keep their
+                            // price and info), but in no category, so Buy and Build mode never list them
+                            if (source == GameObjectSource.Standalone && ReduxCatalogInfo.HiddenFromCatalog(item.CatalogName, obj.ChunkLabel, filename))
+                            {
+                                item.ReduxHidden = true;
+                                ItemsByGUID[item.GUID] = item;
+                                ReduxHiddenItems++;
+                                continue;
+                            }
                             ItemsByCategory[item.Category].Add(item);
                             ItemsByGUID[item.GUID] = item;
                             if (reduxMod) ReduxModCatalogItems++;
@@ -159,7 +170,7 @@ namespace FSO.Content.TS1
             }
 
             Console.WriteLine("[SimsRedux] custom content: " + ReduxModFiles + " shipped object files, " + ReduxModCatalogItems +
-                " shipped Buy/Build items, " + DownloadsCatalogItems + " from the Downloads folder");
+                " shipped Buy/Build items, " + DownloadsCatalogItems + " from the Downloads folder, " + ReduxHiddenItems + " water/sand rugs kept out of the catalog");
 
             // SimsRedux stage 3: The Sims Online's objects without interactions (TS1/ReduxTSOObjects), after all of
             // the above - a GUID already taken by the Sims 1 game or a shipped mod keeps that object (TakenBeforeTSO).
