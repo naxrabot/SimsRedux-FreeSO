@@ -185,6 +185,58 @@ namespace FSO.Files.Formats.IFF.Chunks
         }
 
         /// <summary>
+        /// SimsRedux: the first two strings (a catalog's name and description) straight from the raw bytes of a
+        /// language-coded (FD FF) chunk, the same as GetString(0) and - when it has more than one - GetString(1)
+        /// give, without reading every language's strings (the catalog does this for every object while loading).
+        /// False if the chunk is in another format (read it normally then).
+        /// </summary>
+        public static bool PeekFirstTwo(byte[] data, out string first, out string second)
+        {
+            first = second = null;
+            if (data == null || data.Length < 4) return false;
+            if (BitConverter.ToInt16(data, 0) != -3) return false;
+            try
+            {
+                int target = (int)DefaultLangCode;
+                if (target < 1 || target > 20) target = 1;
+                int count = BitConverter.ToUInt16(data, 2);
+                int at = 4;
+                string e0 = null, e1 = null, t0 = null, t1 = null;
+                int english = 0, own = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    if (at >= data.Length) return false;
+                    int lang = data[at++];
+                    if (lang == 0) lang = 1;
+                    int start = at;
+                    while (data[at] != 0) at++;
+                    string value = null;
+                    bool wanted = (lang == 1 && english < 2) || (lang == target && own < 2);
+                    if (wanted)
+                    {
+                        var chars = new char[at - start];
+                        for (int k = 0; k < chars.Length; k++) chars[k] = (char)data[start + k];
+                        value = new string(chars);
+                    }
+                    at++;
+                    while (data[at] != 0) at++; // (the comment)
+                    at++;
+                    if (lang > 20) continue;
+                    if (lang == 1) { if (english == 0) e0 = value; else if (english == 1) e1 = value; english++; }
+                    if (lang == target && target != 1) { if (own == 0) t0 = value; else if (own == 1) t1 = value; own++; }
+                    if (english >= 2 && (target == 1 || own >= 2)) break;
+                }
+                // (GetLanguageSet: the game's language if it has any strings, else English US; Length counts English US)
+                bool useOwn = target != 1 && own > 0;
+                first = useOwn ? t0 : (english > 0 ? e0 : null);
+                if (english > 1) second = useOwn ? (own > 1 ? t1 : null) : e1;
+                else second = "";
+                return true;
+            }
+            catch (Exception) { first = second = null; return false; }
+        }
+
+        /// <summary>
         /// Gets a STRItem instance from this STR chunk.
         /// </summary>
         /// <param name="index">Index of STRItem.</param>

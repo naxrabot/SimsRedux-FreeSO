@@ -115,6 +115,47 @@ namespace FSO.Files.Formats.IFF.Chunks
             }
         }
 
+        /// <summary>
+        /// SimsRedux: one frame's size, straight from a SPR2 chunk's raw bytes (nothing decoded or copied) - for the
+        /// catalog, which only needs to know an object's shape. False if the bytes don't have that frame.
+        /// </summary>
+        public static bool PeekFrameSize(byte[] data, uint frame, out int width, out int height)
+        {
+            width = height = 0;
+            if (data == null || data.Length < 12) return false;
+            try
+            {
+                var version = BitConverter.ToUInt32(data, 0);
+                if (version == 1000)
+                {
+                    var count = BitConverter.ToUInt32(data, 4);
+                    if (frame >= count || 12 + (long)count * 4 > data.Length) return false;
+                    long at = BitConverter.ToUInt32(data, 12 + (int)frame * 4);
+                    if (at < 0 || at + 4 > data.Length) return false;
+                    width = BitConverter.ToUInt16(data, (int)at);
+                    height = BitConverter.ToUInt16(data, (int)at + 2);
+                    return true;
+                }
+                if (version == 1001)
+                {
+                    var count = BitConverter.ToUInt32(data, 8);
+                    if (frame >= count) return false;
+                    long at = 12;
+                    for (uint i = 0; i < frame; i++)
+                    {
+                        if (at + 8 > data.Length) return false;
+                        at += 8 + BitConverter.ToUInt32(data, (int)at + 4); // (version, size, then size bytes)
+                    }
+                    if (at + 12 > data.Length) return false;
+                    width = BitConverter.ToUInt16(data, (int)at + 8);
+                    height = BitConverter.ToUInt16(data, (int)at + 10);
+                    return true;
+                }
+            }
+            catch (Exception) { }
+            return false;
+        }
+
         public override bool Write(IffFile iff, Stream stream)
         {
             using (var io = IoWriter.FromStream(stream, ByteOrder.LITTLE_ENDIAN))

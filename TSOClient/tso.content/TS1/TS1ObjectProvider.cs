@@ -137,6 +137,18 @@ namespace FSO.Content.TS1
                                 StudiotownSort = (byte)obj.STSubsort,
                                 VacationSort = (byte)obj.VacationSubsort
                             };
+                            // SimsRedux 13.8: catalog name, description, picture and shape, while the file is open anyway
+                            // (so Buy and Build mode never have to open the object to list it - see ReduxCatalogInfo)
+                            ReduxCatalogInfo.Fill(ref item, file, obj, objects, (byte)(source == GameObjectSource.Standalone ? 1 : 0));
+                            // SimsRedux 13.8: a separate file's Buy object that names no room and no lot type showed up
+                            // nowhere at all - it goes under Miscellaneous (any room, and Other on community, downtown,
+                            // vacation, studio and magic lots), like The Sims Online's. The game's own are left alone.
+                            if (source == GameObjectSource.Standalone && item.Category < 8 && item.RoomSort == 0 && item.CommunitySort == 0
+                                && item.DowntownSort == 0 && item.VacationSort == 0 && item.StudiotownSort == 0 && item.MagictownSort == 0)
+                            {
+                                item.RoomSort = 1 << 6;
+                                item.CommunitySort = item.DowntownSort = item.VacationSort = item.StudiotownSort = item.MagictownSort = 1 << 7;
+                            }
                             ItemsByCategory[item.Category].Add(item);
                             ItemsByGUID[item.GUID] = item;
                             if (reduxMod) ReduxModCatalogItems++;
@@ -219,7 +231,14 @@ namespace FSO.Content.TS1
                     DowntownSort = (byte)(obj.DTSubsort != 0 ? obj.DTSubsort : misc),
                     MagictownSort = (byte)(obj.MTSubsort != 0 ? obj.MTSubsort : misc),
                     StudiotownSort = (byte)(obj.STSubsort != 0 ? obj.STSubsort : misc),
-                    VacationSort = (byte)(obj.VacationSubsort != 0 ? obj.VacationSubsort : misc)
+                    VacationSort = (byte)(obj.VacationSubsort != 0 ? obj.VacationSubsort : misc),
+                    // SimsRedux 13.8: the catalog info (ReduxCatalogInfo) - every listed object has a picture drawn from it
+                    CatalogName = f.Name,
+                    ReduxDescription = f.Description ?? "",
+                    ReduxPicture = true,
+                    ReduxShape = f.Shape,
+                    ReduxOriginal = f.Original,
+                    ReduxSource = 2
                 };
                 ItemsByCategory[item.Category].Add(item);
                 ItemsByGUID[item.GUID] = item;

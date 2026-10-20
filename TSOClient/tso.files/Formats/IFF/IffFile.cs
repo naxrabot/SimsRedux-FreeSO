@@ -336,6 +336,18 @@ namespace FSO.Files.Formats.IFF
             return default(T);
         }
 
+        /// <summary>
+        /// SimsRedux: a chunk by its type and ID without reading it (null if there's none) - to know it's there,
+        /// or to look at its raw bytes (ChunkData, while ChunkProcessed is false) without decoding it all.
+        /// </summary>
+        public IffChunk Peek<T>(ushort id)
+        {
+            Dictionary<ushort, object> lookup;
+            object chunk;
+            if (ByChunkId.TryGetValue(typeof(T), out lookup) && lookup.TryGetValue(id, out chunk)) return (IffChunk)chunk;
+            return null;
+        }
+
         public List<IffChunk> ListAll()
         {
             var result = new List<IffChunk>();

@@ -27,5 +27,19 @@ namespace FSO.Content.Interfaces
         public byte CommunitySort;
         public byte StudiotownSort;
         public byte MagictownSort;
+
+        // SimsRedux (Sims 1 mode): worked out once while the objects load (TS1/ReduxCatalogInfo), so Buy and Build
+        // mode can list, sort, group and search the catalog without opening a single object file. CatalogName above
+        // is the catalog's own name for it (null: use Name).
+        /// <summary>The catalog description ("" if none).</summary>
+        public string ReduxDescription;
+        /// <summary>It has a catalog picture, or one can be drawn from it (no picture: a hidden/test object).</summary>
+        public bool ReduxPicture;
+        /// <summary>Its shape (every sprite's size and place, facing you, medium zoom): recolours share it. 0 = unknown.</summary>
+        public ulong ReduxShape;
+        /// <summary>The object it's a recolour of (its OBJD's original GUID), 0 if none.</summary>
+        public uint ReduxOriginal;
+        /// <summary>Where it's from: 0 the game's own archives, 1 a separate file (Downloads, shipped mods, Creator), 2 The Sims Online.</summary>
+        public byte ReduxSource;
     }
 }
