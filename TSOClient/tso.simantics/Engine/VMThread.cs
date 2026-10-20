@@ -1,4 +1,4 @@
-//#define THROW_SIMANTICS
+﻿//#define THROW_SIMANTICS
 #if !Server
     #define IDE_COMPAT
 #endif
@@ -295,6 +295,13 @@ namespace FSO.SimAntics.Engine
 
         private static string ReduxLastQueueNote; // (the last drop noted, and how many times in a row since)
         private static int ReduxQueueNoteRepeats;
+        /// <summary>
+        /// SimsRedux: write dropped orders to queue_debug.log too (off unless turned on - set this from
+        /// a debug option, or SIMSREDUX_QUEUE_LOG=1). At most ReduxQueueLogMax lines a session, in a fresh file each session.
+        /// </summary>
+        public static bool ReduxQueueLog = Environment.GetEnvironmentVariable("SIMSREDUX_QUEUE_LOG") == "1";
+        public const int ReduxQueueLogMax = 500;
+        private static int ReduxQueueLogLines;
 
         /// <summary>
         /// SimsRedux: a player's order that was dropped before it ran (it shows in the queue for a moment,
@@ -312,7 +319,10 @@ namespace FSO.SimAntics.Engine
                 else { ReduxLastQueueNote = what; ReduxQueueNoteRepeats = 0; }
                 var line = DateTime.Now.ToString("HH:mm:ss") + " " + what;
                 Console.WriteLine("[SimsRedux] " + line);
-                FSO.Common.IO.FSOFile.AppendAllText(System.IO.Path.Combine(FSO.Common.FSOEnvironment.UserDir, "queue_debug.log"), line + "\r\n");
+                if (!ReduxQueueLog || ReduxQueueLogLines >= ReduxQueueLogMax) return;
+                var path = System.IO.Path.Combine(FSO.Common.FSOEnvironment.UserDir, "queue_debug.log");
+                if (ReduxQueueLogLines++ == 0) FSO.Common.IO.FSOFile.WriteAllText(path, line + "\r\n"); // (a fresh file each session - it never grows past the cap)
+                else FSO.Common.IO.FSOFile.AppendAllText(path, line + "\r\n");
             }
             catch { }
         }

@@ -308,12 +308,36 @@ namespace FSO.Vitaboy
         public override void Draw(Microsoft.Xna.Framework.Graphics.GraphicsDevice device)
         {
             Effect.CurrentTechnique = Effect.Techniques[DefaultTechnique];
-            Effect.Parameters["View"]?.SetValue(View);
-            Effect.Parameters["Projection"]?.SetValue(Projection);
-            Effect.Parameters["World"]?.SetValue(World);
-            Effect.Parameters["AmbientLight"]?.SetValue(AmbientLight);
+            var p = ParamsFor(Effect);
+            p.View?.SetValue(View);
+            p.Projection?.SetValue(Projection);
+            p.World?.SetValue(World);
+            p.AmbientLight?.SetValue(AmbientLight);
 
             DrawGeometry(device, Effect);
+        }
+
+        // SimsRedux: the effect's parameters, looked up by name once per effect instead of for every mesh of every
+        // Sim every frame (the lookup goes through the parameter list comparing names)
+        private class EffectParams
+        {
+            public Effect Effect;
+            public EffectParameter View, Projection, World, AmbientLight, SkelBindings, MeshTex, LightPosition;
+        }
+        private static EffectParams LastParams;
+        private static EffectParams ParamsFor(Effect effect)
+        {
+            var p = LastParams;
+            if (p != null && p.Effect == effect) return p;
+            var ps = effect.Parameters;
+            p = new EffectParams
+            {
+                Effect = effect,
+                View = ps["View"], Projection = ps["Projection"], World = ps["World"], AmbientLight = ps["AmbientLight"],
+                SkelBindings = ps["SkelBindings"], MeshTex = ps["MeshTex"], LightPosition = ps["LightPosition"]
+            };
+            LastParams = p;
+            return p;
         }
 
         public void DrawHeadOnly(Microsoft.Xna.Framework.Graphics.GraphicsDevice device, Effect effect, Matrix headMatrix)
@@ -350,7 +374,8 @@ namespace FSO.Vitaboy
         {
             //Effect.CurrentTechnique = Effect.Techniques[0];
             if (SkelBones == null) ReloadSkeleton();
-            effect.Parameters["SkelBindings"]?.SetValue(SkelBones);
+            var prm = ParamsFor(effect);
+            prm.SkelBindings?.SetValue(SkelBones);
 
             lock (Bindings)
             {
@@ -363,7 +388,7 @@ namespace FSO.Vitaboy
                             continue;
                         }
 
-                        effect.Parameters["MeshTex"]?.SetValue(binding.SafeTexture(device));
+                        prm.MeshTex?.SetValue(binding.SafeTexture(device));
                         pass.Apply();
                         binding.Mesh.Draw(device);
                     }
@@ -402,7 +427,7 @@ namespace FSO.Vitaboy
             foreach (var light in LightPositions)
             {
                 //effect.Parameters["FloorHeight"]?.SetValue((float)(Math.Floor(Position.Y/2.95)*2.95 + 0.05));
-                effect.Parameters["LightPosition"]?.SetValue(light);
+                prm.LightPosition?.SetValue(light);
                 var oldTech = effect.CurrentTechnique;
                 effect.CurrentTechnique = effect.Techniques[4];
                 effect.CurrentTechnique.Passes[0].Apply();

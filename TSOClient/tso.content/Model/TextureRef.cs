@@ -49,10 +49,31 @@ namespace FSO.Content.Model
 
         protected override Texture2D Process(GraphicsDevice device, Stream stream)
         {
+            if (Mipmap)
+            {
+                // SimsRedux: straight from the decoded pixels when the loader gives them (no temporary texture read
+                // back from the graphics card - a GPU stall, and a second copy of the picture for a moment)
+                try
+                {
+                    var file = ImageLoader.DataFromStream(device, stream);
+                    if (file != null && file.Value.Data != null)
+                    {
+                        var img = file.Value.Data.Value;
+                        var pixels = img.Data;
+                        if (pixels != null && img.Width > 0 && img.Height > 0 && pixels.Length >= img.Width * img.Height)
+                        {
+                            var mipped = new Texture2D(device, img.Width, img.Height, true, SurfaceFormat.Color);
+                            TextureUtils.UploadWithMips(mipped, device, pixels);
+                            return mipped;
+                        }
+                    }
+                }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] mipmapped picture, trying the old way: " + e.Message); }
+                stream.Seek(0, SeekOrigin.Begin);
+            }
             var texture = base.Process(device, stream);
             if (Mipmap)
             {
-                // TODO: get data, mip that and then upload instead of using a temporary texture
 
                 var data = new Color[texture.Width * texture.Height];
                 FSO.Common.Utils.TextureUtils.GetDataKeepTarget(device, texture, data); // (SimsRedux: can be mid-draw)

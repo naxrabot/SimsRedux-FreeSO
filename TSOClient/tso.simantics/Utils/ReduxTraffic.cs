@@ -1,4 +1,4 @@
-using FSO.LotView.Model;
+﻿using FSO.LotView.Model;
 using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
 using System;
@@ -86,17 +86,23 @@ namespace FSO.SimAntics.Utils
                     {
                         if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject) continue;
                         if (!IsCar(e)) continue;
-                        if (e.GetAttribute(0) == Marker) st.Traffic.Add(e.MultitileGroup);
+                        if (e.GetAttribute(0) == Marker)
+                        {
+                            st.Traffic.Add(e.MultitileGroup);
+                            MarkMoving(e.MultitileGroup); // (one saved with the lot, or just made)
+                        }
                         else st.OtherCar = true;
                     }
                 }
                 st.Traffic.RemoveAll(g => g.BaseObject == null || g.BaseObject.Dead);
-                var traffic = st.Traffic.Count > 0 ? st.Traffic.ToList() : null;
+                // (no copy each tick: driving a car only ever deletes lot objects, never touches this list)
+                var traffic = st.Traffic;
+                int carCount = traffic.Count;
                 bool otherCar = st.OtherCar;
-                if (traffic != null) foreach (var g in traffic) Drive(vm, g);
+                for (int i = 0; i < traffic.Count; i++) Drive(vm, traffic[i]);
 
                 // a new one now and then (decided from the game clock, the same for everyone)
-                if (clock.Ticks % 30 != 0 || otherCar || (traffic != null && traffic.Count >= 2)) return;
+                if (clock.Ticks % 30 != 0 || otherCar || carCount >= 2) return;
                 int hour = clock.Hours;
                 bool night = hour >= 22 || hour < 6;
                 bool evening = hour >= 19 || hour < 7;
@@ -191,6 +197,7 @@ namespace FSO.SimAntics.Utils
             var group = ctx.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, dir);
             if (group == null) return;
             foreach (var o in group.Objects) o.SetAttribute(0, Marker); // (not a carpool: its main just waits)
+            MarkMoving(group);
 
             // put it there, then line its middle up with the lane
             var pos = road.AlongX ? LotTilePos.FromBigTile((short)along, (short)lane, 1) : LotTilePos.FromBigTile((short)lane, (short)along, 1);
@@ -235,6 +242,16 @@ namespace FSO.SimAntics.Utils
             }
             if (Move(group, next, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success)
                 group.Delete(ctx);
+        }
+
+        /// <summary>
+        /// SimsRedux: a traffic car moves every tick - marked as something that moves often (like a Sim's
+        /// carried object), so it doesn't make the lot rebuild its outdoor lighting every tick. (Visual only:
+        /// it just doesn't cast a light shadow.)
+        /// </summary>
+        private static void MarkMoving(VMMultitileGroup group)
+        {
+            foreach (var o in group.Objects) o.MovedSelf = true;
         }
 
         private static VMPlacementResult Move(VMMultitileGroup group, LotTilePos pos, Direction dir, VMContext ctx, VMPlaceRequestFlags flags)

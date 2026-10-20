@@ -20,6 +20,8 @@ namespace FSO.LotView.LMap
             var w = blueprint.Width;
             var h = blueprint.Height;
 
+            // SimsRedux: the last lot's maps were left behind on every lot load
+            Dispose();
             RoomMaps = new List<Texture2D>();
             for (int i = 0; i < 5; i++) RoomMaps.Add(new Texture2D(GD, w, h, false, SurfaceFormat.Color));
         }

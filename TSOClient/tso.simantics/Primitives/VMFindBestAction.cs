@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.SimAntics.Engine;
@@ -150,8 +150,8 @@ namespace FSO.SimAntics.Primitives
             // === SIMSREDUX: SMARTER BRAIN - what matters right now ===
             int level = context.VM.ReduxNoPause ? 2 : ReduxLevel;
             // (a Sim of the family living here - not a visitor, NPC or pet)
-            bool familySim = context.VM.TS1 && !caller.IsPet && !visitor && context.VM.TS1State?.CurrentFamily != null
-                && caller.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == context.VM.TS1State.CurrentFamily.ChunkID;
+            // (a guest player's Sim carries the lot family's number but isn't the household - IsHouseholdSim)
+            bool familySim = context.VM.TS1 && !caller.IsPet && !visitor && FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(context.VM, caller);
             // Off (single player): the player's own family does nothing on their own; visitors still do
             if (level < 0 && familySim)
                 return VMPrimitiveExitCode.GOTO_FALSE;
@@ -182,14 +182,15 @@ namespace FSO.SimAntics.Primitives
                     if (!outside) continue;
                 }
                 var pos2 = obj.Position;
-                var distance = (float)Math.Sqrt(Math.Pow(pos1.x - pos2.x, 2) + Math.Pow(pos1.y - pos2.y, 2) + Math.Pow((pos1.Level - pos2.Level) * 320, 2.0)) / 16.0f;
+                double ddx = pos1.x - pos2.x, ddy = pos1.y - pos2.y, ddz = (pos1.Level - pos2.Level) * 320;
+                var distance = (float)Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz) / 16.0f;
                 var inUse = obj.GetFlag(VMEntityFlags.Occupied);
 
                 if (obj.TreeTable == null) continue;
                 foreach (var entry in obj.TreeTable.AutoInteractions)
                 {
                     var id = entry.TTAIndex;
-                    if (inUse && !obj.TreeTable.Interactions.Any(x => x.JoiningIndex == id)) continue;
+                    if (inUse && !HasJoining(obj.TreeTable, id)) continue;
                     var advertisements = entry.ActiveMotiveEntries; //TODO: cache this
                     if (advertisements.Length == 0) continue; //no ads on this object.
 
@@ -442,7 +443,7 @@ namespace FSO.SimAntics.Primitives
 
             bool idle = level >= 0 && family != null
                 && sim.GetPersonData(VMPersonDataVariable.PersonType) != 1                        // not a visitor/NPC
-                && sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family.ChunkID      // the family living here
+                && FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(vm, sim)                                          // the family living here (not a guest player's Sim)
                 && sim.GetPersonData(VMPersonDataVariable.IsGhost) == 0
                 && thread.Queue.Count == 0                                                        // nothing queued at all
                 && thread.BlockingState == null && thread.Stack.Count > 0 && !thread.Stack[thread.Stack.Count - 1].ActionTree
@@ -489,6 +490,14 @@ namespace FSO.SimAntics.Primitives
             }
         }
 
+        /// <summary>SimsRedux perf: Interactions.Any(x => x.JoiningIndex == id) without a closure per check.</summary>
+        private static bool HasJoining(TTAB table, uint id)
+        {
+            var ias = table.Interactions;
+            for (int i = 0; i < ias.Length; i++) if (ias[i].JoiningIndex == id) return true;
+            return false;
+        }
+
         private static readonly string[] ReduxCookNames = { "have a meal", "serve meal", "have lite meal" };
 
         private static void ReduxPreferReadyFood(List<VMPieMenuInteraction> actions)
@@ -498,16 +507,24 @@ namespace FSO.SimAntics.Primitives
                 bool ready = false;
                 foreach (var a in actions)
                 {
-                    var name = (a.Name ?? "").ToLowerInvariant();
-                    if (name.StartsWith("have leftovers")) { ready = true; break; }
+                    var name = a.Name ?? "";
+                    if (name.StartsWith("have leftovers", StringComparison.OrdinalIgnoreCase)) { ready = true; break; }
                     var label = a.Callee?.Object?.OBJ?.ChunkLabel ?? "";
                     if (label.StartsWith("Food -", StringComparison.OrdinalIgnoreCase)
-                        && (name == "eat" || name == "serve" || name.StartsWith("grab a slice"))) { ready = true; break; }
+                        && (name.Equals("eat", StringComparison.OrdinalIgnoreCase) || name.Equals("serve", StringComparison.OrdinalIgnoreCase)
+                            || name.StartsWith("grab a slice", StringComparison.OrdinalIgnoreCase))) { ready = true; break; }
                 }
                 if (!ready) return;
-                actions.RemoveAll(a => { var n = (a.Name ?? "").ToLowerInvariant(); return ReduxCookNames.Any(c => n.StartsWith(c)); });
+                actions.RemoveAll(IsCookChoice);
             }
             catch (Exception) { }
+        }
+
+        private static bool IsCookChoice(VMPieMenuInteraction a)
+        {
+            var n = a.Name ?? "";
+            foreach (var c in ReduxCookNames) if (n.StartsWith(c, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
 
         private List<VMPieMenuInteraction> TakeTopActions(List<VMPieMenuInteraction> list, int count)
@@ -573,23 +590,32 @@ namespace FSO.SimAntics.Primitives
             }
             // stage 3: fires on the lot, Sims who are asleep (be quiet near them), doors (don't hang about in them),
             // and whose plate is whose (a Sim eating from a plate claims it for a while, even if they get up)
-            foreach (var e in vm.Entities)
+            // (one pass over the lot - it was two, each with several name searches per object, on every decision;
+            //  what kind of object it is now comes from a cache by object type: KindOf)
+            var ents = vm.Entities;
+            for (int ei = 0; ei < ents.Count; ei++)
             {
-                if (e is VMGameObject && e.Position != LotTilePos.OUT_OF_WORLD && IsDoor(e)) Doors.Add(e.Position);
-                if (e is VMAvatar eater && eater.BrainMemory != null && eater.BrainMemory.Length >= 14 && eater.Thread?.Queue != null && eater.Thread.Queue.Count > 0)
+                var e = ents[ei];
+                if (e is VMGameObject)
                 {
-                    var q = eater.Thread.Queue[0];
-                    if (q.Callee != null && q.Callee != eater && IsPlate(q.Callee) && (q.Name ?? "").IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        eater.BrainMemory[12] = q.Callee.ObjectID;
-                        eater.BrainMemory[13] = Now;
-                    }
+                    if (e.Position == LotTilePos.OUT_OF_WORLD) continue;
+                    var kind = KindOf(e);
+                    if ((kind & ObjKind.Door) != 0) Doors.Add(e.Position);
+                    if ((kind & ObjKind.Fire) != 0) Fires.Add(e.Position);
                 }
-            }
-            foreach (var e in vm.Entities)
-            {
-                if (e is VMGameObject && e.Position != LotTilePos.OUT_OF_WORLD && IsFire(e)) Fires.Add(e.Position);
-                else if (e is VMAvatar a && a != sim && a.Position != LotTilePos.OUT_OF_WORLD && a.GetMotiveData(VMMotive.SleepState) != 0) Sleepers.Add(a);
+                else if (e is VMAvatar a)
+                {
+                    if (a.BrainMemory != null && a.BrainMemory.Length >= 14 && a.Thread?.Queue != null && a.Thread.Queue.Count > 0)
+                    {
+                        var q = a.Thread.Queue[0];
+                        if (q.Callee != null && q.Callee != a && IsPlate(q.Callee) && (q.Name ?? "").IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            a.BrainMemory[12] = q.Callee.ObjectID;
+                            a.BrainMemory[13] = Now;
+                        }
+                    }
+                    if (a != sim && a.Position != LotTilePos.OUT_OF_WORLD && a.GetMotiveData(VMMotive.SleepState) != 0) Sleepers.Add(a);
+                }
             }
             Night = Hour >= 22 || Hour < 6;
             LateNight = Hour >= 23 || Hour < 5;
@@ -635,18 +661,40 @@ namespace FSO.SimAntics.Primitives
         private readonly List<VMAvatar> Sleepers = new List<VMAvatar>();
         private readonly List<LotTilePos> Doors = new List<LotTilePos>();
 
-        private static string Label(VMEntity e) { return e?.Object?.OBJ?.ChunkLabel ?? ""; }
-        private static bool IsDoor(VMEntity e)
+        // SimsRedux perf: what kind of object it is (from its name) is worked out once per object type and kept,
+        // instead of several case-insensitive name searches per object on every decision of every Sim. (Kept
+        // with the name and GUID it came from, so a renamed object - the Sim template - is looked at again.)
+        [Flags] private enum ObjKind : byte { None = 0, Door = 1, Plate = 2, Fire = 4, Phone = 8 }
+        private sealed class KindEntry { public string Label; public uint GUID; public ObjKind Kind; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FSO.Content.GameObject, KindEntry> ObjKinds
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<FSO.Content.GameObject, KindEntry>();
+
+        private static ObjKind KindOf(VMEntity e)
         {
-            var l = Label(e);
-            return l.IndexOf("door", StringComparison.OrdinalIgnoreCase) >= 0 && l.IndexOf("doorbell", StringComparison.OrdinalIgnoreCase) < 0;
+            var go = e?.Object;
+            if (go?.OBJ == null) return ObjKind.None;
+            var label = go.OBJ.ChunkLabel ?? "";
+            var guid = go.OBJ.GUID;
+            var k = ObjKinds.GetValue(go, _ => new KindEntry());
+            lock (k)
+            {
+                if (!ReferenceEquals(k.Label, label) || k.GUID != guid)
+                {
+                    var kind = ObjKind.None;
+                    if (label.IndexOf("door", StringComparison.OrdinalIgnoreCase) >= 0 && label.IndexOf("doorbell", StringComparison.OrdinalIgnoreCase) < 0) kind |= ObjKind.Door;
+                    if (label.IndexOf("plate", StringComparison.OrdinalIgnoreCase) >= 0 && label.IndexOf("serving", StringComparison.OrdinalIgnoreCase) < 0) kind |= ObjKind.Plate;
+                    if (guid == VMBurn.FIRE_GUID || label.Equals("fire", StringComparison.OrdinalIgnoreCase) || label.StartsWith("fire -", StringComparison.OrdinalIgnoreCase)
+                        || label.Equals("fire1", StringComparison.OrdinalIgnoreCase)) kind |= ObjKind.Fire;
+                    if (label.IndexOf("phone", StringComparison.OrdinalIgnoreCase) >= 0) kind |= ObjKind.Phone;
+                    k.Kind = kind; k.Label = label; k.GUID = guid;
+                }
+                return k.Kind;
+            }
         }
+
+        private static bool IsDoor(VMEntity e) { return (KindOf(e) & ObjKind.Door) != 0; }
         /// <summary>A single plate of food (not the serving dish a group meal is shared from).</summary>
-        private static bool IsPlate(VMEntity e)
-        {
-            var l = Label(e);
-            return l.IndexOf("plate", StringComparison.OrdinalIgnoreCase) >= 0 && l.IndexOf("serving", StringComparison.OrdinalIgnoreCase) < 0;
-        }
+        private static bool IsPlate(VMEntity e) { return (KindOf(e) & ObjKind.Plate) != 0; }
         /// <summary>Someone else is (or was just) eating from this plate.</summary>
         private bool SomeoneElsesPlate(VM vm, VMEntity plate)
         {
@@ -662,19 +710,13 @@ namespace FSO.SimAntics.Primitives
         /// <summary>Set when FindChore picked a phone call (100 = repairman, 101 = fire department), so it isn't made twice.</summary>
         public int ChoreCode;
 
-        private static bool IsFire(VMEntity e)
-        {
-            if (e.Object?.OBJ == null) return false;
-            if (e.Object.OBJ.GUID == VMBurn.FIRE_GUID) return true;
-            var label = e.Object.OBJ.ChunkLabel ?? "";
-            return label.Equals("fire", StringComparison.OrdinalIgnoreCase) || label.StartsWith("fire -", StringComparison.OrdinalIgnoreCase)
-                || label.Equals("fire1", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsFire(VMEntity e) { return (KindOf(e) & ObjKind.Fire) != 0; }
 
         private static float Tiles(LotTilePos a, LotTilePos b)
         {
             if (a.Level != b.Level) return 1000;
-            return (float)Math.Sqrt(Math.Pow(a.x - b.x, 2) + Math.Pow(a.y - b.y, 2)) / 16f;
+            float dx = a.x - b.x, dy = a.y - b.y;
+            return (float)Math.Sqrt(dx * dx + dy * dy) / 16f;
         }
 
         /// <summary>The phone call is in this Sim's memory, so nobody in the family calls again while help is on the way.</summary>
@@ -717,13 +759,13 @@ namespace FSO.SimAntics.Primitives
         {
             var done = new HashSet<short>();
             VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
-            foreach (var iobj in context.VM.Entities)
+            // (a copy: the check trees run below can make or delete objects, which changes the lot's list)
+            foreach (var iobj in context.VM.Entities.ToArray())
             {
                 if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
                 var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
                 if (!done.Add(obj.ObjectID) || obj.TreeTable == null || obj.GetFlag(VMEntityFlags.Occupied)) continue;
-                var label = obj.Object?.OBJ?.ChunkLabel ?? "";
-                if (label.IndexOf("phone", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if ((KindOf(obj) & ObjKind.Phone) == 0) continue;
                 var ttas = obj.TreeTableStrings;
                 foreach (var ia in obj.TreeTable.Interactions)
                 {
@@ -793,10 +835,11 @@ namespace FSO.SimAntics.Primitives
                 var ttas = obj.TreeTableStrings;
                 foreach (var ia in obj.TreeTable.Interactions)
                 {
-                    var name = (ttas?.GetString((int)ia.TTAIndex) ?? "").Trim();
-                    bool sleep = name.Equals("Sleep", StringComparison.OrdinalIgnoreCase);
-                    bool isNap = name.Equals("Nap", StringComparison.OrdinalIgnoreCase);
+                    var kind = TtaKindOf(ttas, ia.TTAIndex);
+                    bool sleep = (kind & TtaKind.Sleep) != 0;
+                    bool isNap = (kind & TtaKind.Nap) != 0;
                     if (!sleep && !isNap) continue;
+                    var name = (ttas?.GetString((int)ia.TTAIndex) ?? "").Trim(); // (only for the one or two that match)
                     if (GivenUp(obj.ObjectID, ia.TTAIndex)) continue;
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
                     if (action == null) continue;
@@ -821,7 +864,7 @@ namespace FSO.SimAntics.Primitives
         public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents)
         {
             var family = context.VM.TS1State?.CurrentFamily;
-            if (family == null || Sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != family.ChunkID) return null;
+            if (family == null || !FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(context.VM, Sim)) return null; // (not a guest player's Sim)
 
             // stage 3 - a fire: the nearest grown-up calls the fire department (once), before anything else
             if (Fires.Count > 0 && !Sim.IsChild && !CalledRecently(context.VM, 101, Now, 60))
@@ -846,11 +889,12 @@ namespace FSO.SimAntics.Primitives
                 var ttas = obj.TreeTableStrings;
                 foreach (var ia in obj.TreeTable.Interactions)
                 {
-                    var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
-                    bool bills = name.IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0;
-                    bool repair = handy && name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase);
-                    bool housework = messy && IsHousework(obj, name);
+                    var kind = TtaKindOf(ttas, ia.TTAIndex);
+                    bool bills = (kind & TtaKind.Bills) != 0;
+                    bool repair = handy && (kind & TtaKind.Repair) != 0;
+                    bool housework = messy && IsHousework(obj, kind);
                     if (!bills && !repair && !housework) continue;
+                    var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
                     if (housework && (IsPlate(obj) && SomeoneElsesPlate(context.VM, obj))) continue; // (someone's still eating)
                     if (GivenUp(obj.ObjectID, ia.TTAIndex)) continue; // tried it again and again: leave it for a while
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
@@ -859,7 +903,8 @@ namespace FSO.SimAntics.Primitives
                     var avail = Sim.Thread.CheckAction(action, true);
                     if (avail == null) continue; // not available right now (no bills, nothing broken)
                     var p = obj.Position;
-                    var d = (float)Math.Sqrt(Math.Pow(Sim.Position.x - p.x, 2) + Math.Pow(Sim.Position.y - p.y, 2)) / 16f + (bills ? 0 : repair ? 5 : 8);
+                    double ddx = Sim.Position.x - p.x, ddy = Sim.Position.y - p.y;
+                    var d = (float)Math.Sqrt(ddx * ddx + ddy * ddy) / 16f + (bills ? 0 : repair ? 5 : 8);
                     if (d < bestDist)
                     {
                         bestDist = d;
@@ -892,17 +937,58 @@ namespace FSO.SimAntics.Primitives
         /// clean the toilet, shower or tub. (Each only shows when it's needed: the object's own check
         /// decides.) A meal with servings still on it is left alone - someone may still want some.
         /// </summary>
-        private static bool IsHousework(VMEntity obj, string name)
+        private static bool IsHousework(VMEntity obj, TtaKind kind)
         {
-            if (name.IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0) return false;
-            bool clean = name.Equals("Clean", StringComparison.OrdinalIgnoreCase) || name.Equals("Clean Up", StringComparison.OrdinalIgnoreCase)
-                || name.StartsWith("Clean ", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Mop", StringComparison.OrdinalIgnoreCase);
-            bool trash = name.IndexOf("Empty Trash", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Take Out Trash", StringComparison.OrdinalIgnoreCase) >= 0
-                || name.Equals("Empty", StringComparison.OrdinalIgnoreCase);
-            bool water = name.Equals("Water", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Water ", StringComparison.OrdinalIgnoreCase);
-            if (!clean && !trash && !water) return false;
-            if (clean && FSO.SimAntics.Utils.ReduxLeftovers.IsGroupMeal(obj) && obj.GetAttribute(2) > 0) return false;
+            if ((kind & TtaKind.Housework) == 0) return false;
+            if ((kind & TtaKind.Clean) != 0 && FSO.SimAntics.Utils.ReduxLeftovers.IsGroupMeal(obj) && obj.GetAttribute(2) > 0) return false;
             return true;
+        }
+
+        // SimsRedux perf: what a menu choice is (from its name) - worked out once per object type's menu and kept
+        // (with the name it came from, so a changed name is looked at again), not on every decision.
+        [Flags] private enum TtaKind : ushort { None = 0, Bills = 1, Repair = 2, Clean = 4, Housework = 8, Sleep = 16, Nap = 32 }
+        private sealed class TtaEntry { public string Name; public TtaKind Kind; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TTAs, Dictionary<uint, TtaEntry>> TtaKinds
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<TTAs, Dictionary<uint, TtaEntry>>();
+
+        private static TtaKind TtaKindOf(TTAs ttas, uint index)
+        {
+            if (ttas == null) return TtaKind.None;
+            var name = ttas.GetString((int)index) ?? "";
+            var dict = TtaKinds.GetValue(ttas, _ => new Dictionary<uint, TtaEntry>());
+            lock (dict)
+            {
+                TtaEntry entry;
+                if (!dict.TryGetValue(index, out entry)) { entry = new TtaEntry(); dict[index] = entry; }
+                if (!ReferenceEquals(entry.Name, name))
+                {
+                    entry.Kind = ClassifyTta(name);
+                    entry.Name = name;
+                }
+                return entry.Kind;
+            }
+        }
+
+        private static TtaKind ClassifyTta(string name)
+        {
+            var kind = TtaKind.None;
+            if (name.IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0) kind |= TtaKind.Bills;
+            if (name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase)) kind |= TtaKind.Repair;
+            // housework anyone does (as IsHousework always looked for it)
+            if (name.IndexOf("Eat", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                bool clean = name.Equals("Clean", StringComparison.OrdinalIgnoreCase) || name.Equals("Clean Up", StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith("Clean ", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Mop", StringComparison.OrdinalIgnoreCase);
+                bool trash = name.IndexOf("Empty Trash", StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("Take Out Trash", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.Equals("Empty", StringComparison.OrdinalIgnoreCase);
+                bool water = name.Equals("Water", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Water ", StringComparison.OrdinalIgnoreCase);
+                if (clean) kind |= TtaKind.Clean;
+                if (clean || trash || water) kind |= TtaKind.Housework;
+            }
+            var trimmed = name.Trim();
+            if (trimmed.Equals("Sleep", StringComparison.OrdinalIgnoreCase)) kind |= TtaKind.Sleep;
+            if (trimmed.Equals("Nap", StringComparison.OrdinalIgnoreCase)) kind |= TtaKind.Nap;
+            return kind;
         }
 
         // SimsRedux: chores a Sim keeps failing. BrainMemory[14] = the chore (object << 16 | interaction),
@@ -959,7 +1045,7 @@ namespace FSO.SimAntics.Primitives
             {
                 var a = e as VMAvatar;
                 if (a == null || a.IsPet || a.Position == LotTilePos.OUT_OF_WORLD) continue;
-                if (a.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family && a.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200) return true;
+                if (a.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == family && FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(vm, a) && a.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200) return true;
             }
             return false;
         }
@@ -968,7 +1054,8 @@ namespace FSO.SimAntics.Primitives
         private bool SomethingBroken(VMStackFrame context)
         {
             var done = new HashSet<short>();
-            foreach (var iobj in context.VM.Entities)
+            // (a copy: the check trees run below can make or delete objects, which changes the lot's list)
+            foreach (var iobj in context.VM.Entities.ToArray())
             {
                 if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
                 var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);

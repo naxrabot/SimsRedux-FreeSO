@@ -141,6 +141,26 @@ namespace FSO.LotView.Utils
             SpriteIndices.SetData(_2DStandaloneSprite.indices);
         }
 
+        private int[] LazySize = new int[8];
+
+        /// <summary>SimsRedux: a thumbnail buffer that's only made when needed gets its full size now.</summary>
+        private void EnsureBufferSize(int index)
+        {
+            if (index < 0 || index >= Buffers.Count || index >= LazySize.Length) return;
+            var size = LazySize[index];
+            if (size > 0 && (Buffers[index].Width != size || Buffers[index].Height != size || Buffers[index].IsDisposed))
+                ResizeBuffer(index, size, size);
+        }
+
+        /// <summary>SimsRedux: the object thumbnail is copied out - its 1024x1024 buffers go back to 1x1.</summary>
+        public void ReleaseThumbBuffers()
+        {
+            for (int i = 0; i < Buffers.Count && i < LazySize.Length; i++)
+            {
+                if (LazySize[i] > 0 && Buffers[i].Width > 1) ResizeBuffer(i, 1, 1);
+            }
+        }
+
         public void GenBuffers(int bwidth, int bheight)
         {
             foreach (var buffer in Buffers)
@@ -170,10 +190,15 @@ namespace FSO.LotView.Utils
                     case 4:
                         width = 1024;
                         height = 1024;
+                        // SimsRedux: made when a thumbnail is drawn (WithBuffer), let go after (ReleaseThumbBuffers) -
+                        // two 1024x1024 targets with depth (~16 MB) were kept for the whole game
+                        if (NumBuffers > 5) { LazySize[i] = 1024; width = height = 1; }
                         break;
                     case 5:
                         width = 576;
                         height = 576;
+                        // (sized by GetLotThumb right before it's drawn into)
+                        if (NumBuffers > 5) { width = height = 1; }
                         break;
                 }
 
@@ -289,6 +314,8 @@ namespace FSO.LotView.Utils
             if (depthBufferIndex > Buffers.Count) depthBufferIndex = Buffers.Count - 1;
 
             if (bufferIndex >= Buffers.Count) bufferIndex = 0;
+            EnsureBufferSize(bufferIndex);
+            EnsureBufferSize(depthBufferIndex);
 
             ResetMatrices(Buffers[bufferIndex].Width, Buffers[bufferIndex].Height);
 
@@ -306,6 +333,7 @@ namespace FSO.LotView.Utils
             var promise = new Promise<Texture2D>(x => null);
             output = promise;
 
+            EnsureBufferSize(bufferIndex);
             ResetMatrices(Buffers[bufferIndex].Width, Buffers[bufferIndex].Height);
 
             return new _2DWorldRenderPlane(
@@ -318,7 +346,7 @@ namespace FSO.LotView.Utils
         public void ResizeBuffer(int bufferIndex, int width, int height)
         {
             var buffer = Buffers[bufferIndex];
-            if (buffer.Width != width || buffer.Height != height)
+            if (buffer.Width != width || buffer.Height != height || buffer.IsDisposed)
             {
                 Buffers[bufferIndex] = PPXDepthEngine.CreateRenderTarget(Device, 1, 0, buffer.Format, width, height, buffer.DepthStencilFormat);
                 buffer.Dispose();
@@ -389,6 +417,54 @@ namespace FSO.LotView.Utils
             });
         }
 
+        /// <summary>
+        /// SimsRedux: draws several standalone sprites (one object's pieces) together. Without multiple render targets
+        /// (phones, "nomrt") every sprite used to switch to the colour target, draw, switch to the depth target, draw
+        /// again and switch back - three target switches per sprite, which tile-based phone GPUs are slow at. Here all
+        /// the colour draws happen, then all the depth draws (each target only ever sees its sprites in the same order,
+        /// so the picture is the same). The software-depth (stencil) mode keeps one sprite at a time: its stencil marks
+        /// are per draw.
+        /// </summary>
+        public void DrawImmediateBatch(List<_2DStandaloneSprite> sprites)
+        {
+            if (sprites == null || sprites.Count == 0) return;
+            if (sprites.Count == 1 || FSOEnvironment.SoftwareDepth)
+            {
+                for (int i = 0; i < sprites.Count; i++) DrawImmediate(sprites[i]);
+                return;
+            }
+            var effect = this.Effect;
+            Texture2D startDepth = null, startMask = null;
+            try { startDepth = effect.CurrentDepthTexture; startMask = effect.CurrentMaskTexture; } catch { }
+            PPXDepthEngine.RenderPPXDepth(effect, false, (depthPass) =>
+            {
+                if (!FSOEnvironment.DirectX)
+                {
+                    Device.Indices = null; //monogame why
+                    Device.Indices = SpriteIndices;
+                }
+                // (each pass starts from the same textures the one-at-a-time drawing would have)
+                if (startDepth != null) effect.depthTexture = startDepth;
+                if (startMask != null) effect.maskTexture = startMask;
+                for (int i = 0; i < sprites.Count; i++)
+                {
+                    var sprite = sprites[i];
+                    effect.pixelTexture = sprite.Pixel;
+                    if (sprite.Depth != null) effect.depthTexture = sprite.Depth;
+                    if (sprite.Mask != null) effect.maskTexture = sprite.Mask;
+
+                    EffectPassCollection passes = effect.CurrentTechnique.Passes;
+                    EffectPass pass = passes[Math.Min(passes.Count - 1, WorldConfig.Current.DirPassOffset)];
+                    pass.Apply();
+                    if (sprite.GPUVertices != null)
+                    {
+                        Device.SetVertexBuffer(sprite.GPUVertices);
+                        Device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, 2);
+                    }
+                }
+            });
+        }
+
         public void EndImmediate()
         {
             var effect = this.Effect;
@@ -432,7 +508,10 @@ namespace FSO.LotView.Utils
                 else
                 {
                     var temp = new _2DDrawBuffer();
-                    EndDrawSprites(sprites, temp.Groups, OutputDepth);
+                    // SimsRedux: drawn once and thrown away - no GPU buffers made (and disposed) for it every frame
+                    TransientGroups = true;
+                    try { EndDrawSprites(sprites, temp.Groups, OutputDepth); }
+                    finally { TransientGroups = false; }
                     PPXDepthEngine.RenderPPXDepth(effect, false, (depth) =>
                     {
                         RenderCache(new List<_2DDrawBuffer> { temp });
@@ -686,7 +765,7 @@ namespace FSO.LotView.Utils
                 IndexBuffer ib = null;
 
                 var count = indices.Length / 3;
-                if (count > 50) //completely arbitrary number, but seems to keep things fast. dont gen if it isn't "worth it".
+                if (count > 50 && !TransientGroups) //completely arbitrary number, but seems to keep things fast. dont gen if it isn't "worth it".
                 {
                     vb = new VertexBuffer(Device, typeof(_2DSpriteVertex), vertices.Length, BufferUsage.WriteOnly);
                     vb.SetData(vertices);
@@ -719,6 +798,9 @@ namespace FSO.LotView.Utils
                 }
             }
         }
+
+        // SimsRedux: the groups being made are drawn this frame only (End without a cache)
+        private bool TransientGroups;
 
         private Vector2 GetUV(Texture2D Texture, float x, float y)
         {

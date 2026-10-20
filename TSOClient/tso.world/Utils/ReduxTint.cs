@@ -255,6 +255,7 @@ namespace FSO.LotView.Utils
 
                 var images = new List<Color[]>();
                 var seen = new HashSet<SPR2Frame>();
+                var decoded = new List<KeyValuePair<SPR2Frame, int>>(); // (what this decoded, let go after)
                 foreach (var part in parts)
                 {
                     for (int g = 0; g < Math.Max(1, (int)part.NumGraphics); g++)
@@ -270,13 +271,14 @@ namespace FSO.LotView.Utils
                                 SPR2Frame frame = null;
                                 try { frame = spr?.GetSPR2Frame(); } catch { }
                                 if (frame == null || !seen.Add(frame)) continue;
-                                try { frame.DecodeIfRequired(false); } catch { }
+                                try { decoded.Add(new KeyValuePair<SPR2Frame, int>(frame, frame.DecodeForRead())); } catch { }
                                 if (frame.PixelData != null) images.Add(frame.PixelData);
                             }
                         }
                     }
                 }
                 prof = images.Count == 0 ? null : ComputeProfile(images);
+                foreach (var d in decoded) { try { d.Key.ReleaseDecoded(d.Value); } catch { } }
                 Profiles[key] = prof;
                 return prof;
             }
@@ -370,9 +372,12 @@ namespace FSO.LotView.Utils
                 var frame = sprite?.GetSPR2Frame();
                 if (frame != null)
                 {
-                    try { frame.DecodeIfRequired(false); } catch { }
+                    int decoded = 0;
+                    try { decoded = frame.DecodeForRead(); } catch { }
                     var pd = frame.PixelData;
                     if (pd != null && pd.Length == w * h) src = (Color[])pd.Clone();
+                    // (the picture is already on the graphics card: don't keep the pixels decoded just for this)
+                    try { frame.ReleaseDecoded(decoded); } catch { }
                 }
 
                 // 2. otherwise read them back from the graphics card
@@ -394,6 +399,8 @@ namespace FSO.LotView.Utils
                 result.SetData(px);
                 result.Tag = original.Tag ?? new TextureInfo(result, w, h);
                 byTint[cacheKey] = result;
+                if (byTint.Count == 1) Order.Add(original);
+                if (++Count > MaxTinted) Shrink();
                 return result;
             }
             catch (Exception e)
@@ -440,6 +447,64 @@ namespace FSO.LotView.Utils
                 }
             }
             foreach (var d in dead) Cache.Remove(d);
+            if (dead.Count > 0) Recount();
+        }
+
+        // SimsRedux: the cache is bounded. Each original picture was kept alive by the cache for the whole game
+        // (its key), with every recoloured copy of it; now there are at most MaxTinted copies, the oldest originals'
+        // copies go first, and the whole cache is disposed when the lot closes (LotClosed).
+        private const int MaxTinted = 600;
+        private static int Count;
+        private static List<Texture2D> Order = new List<Texture2D>();
+
+        private static void Recount()
+        {
+            int n = 0;
+            foreach (var byTint in Cache.Values) n += byTint.Count;
+            Count = n;
+            Order.RemoveAll(t => !Cache.ContainsKey(t));
+        }
+
+        private static void Shrink()
+        {
+            Clean();
+            Recount();
+            // the oldest originals' copies are let go of until a quarter is free. They aren't disposed here: an object
+            // on the lot can still be drawing one (it asks again only when it's redrawn) - once nothing draws it,
+            // the graphics engine frees it.
+            int i = 0;
+            while (Count > MaxTinted * 3 / 4 && i < Order.Count)
+            {
+                Dictionary<ulong, Texture2D> byTint;
+                if (Cache.TryGetValue(Order[i], out byTint))
+                {
+                    Count -= byTint.Count;
+                    Cache.Remove(Order[i]);
+                }
+                i++;
+            }
+            if (i > 0) Order.RemoveRange(0, Math.Min(i, Order.Count));
+        }
+
+        /// <summary>
+        /// SimsRedux: the lot closed (its objects are gone): dispose every recoloured picture and forget the
+        /// originals and colour profiles (the next lot makes its own).
+        /// </summary>
+        public static void LotClosed()
+        {
+            try
+            {
+                foreach (var byTint in Cache.Values)
+                    foreach (var t in byTint.Values)
+                    {
+                        try { if (t != null && !t.IsDisposed) t.Dispose(); } catch { }
+                    }
+            }
+            catch (Exception e) { Log("lot close failed: " + e.Message); }
+            Cache.Clear();
+            Order.Clear();
+            Count = 0;
+            Profiles.Clear();
         }
 
         private static int LogCount;

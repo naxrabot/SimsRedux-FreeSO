@@ -87,10 +87,13 @@ namespace FSO.SimAntics.Utils
             return fami;
         }
 
-        public static Neighbour CreateNeighbor(uint guid, SimTemplateCreateInfo info)
+        public static Neighbour CreateNeighbor(uint guid, SimTemplateCreateInfo info) { return CreateNeighbor(guid, info, null); }
+
+        /// <summary>SimsRedux: next = the VM's own (deterministic) random, so every client makes the same Sim.</summary>
+        public static Neighbour CreateNeighbor(uint guid, SimTemplateCreateInfo info, Func<int, int> next)
         {
             PrepareTemplatePerson(guid, info);
-            return AddNeighbor(guid, 9, info.MakePersonData());
+            return AddNeighbor(guid, 9, info.MakePersonData(next));
         }
 
         public static FAMI CreateFamily(string name, int count)
@@ -142,17 +145,24 @@ namespace FSO.SimAntics.Utils
             return newFam;
         }
 
-        public static uint GenerateGUID(uint[] avoid)
+        public static uint GenerateGUID(uint[] avoid) { return GenerateGUID(avoid, null); }
+
+        /// <summary>SimsRedux: next(max) = a random in [0, max) - pass the VM's own random so every client agrees.</summary>
+        public static uint GenerateGUID(uint[] avoid, Func<int, int> next)
         {
             var objProvider = Content.Content.Get().WorldObjects;
             lock (objProvider.Entries)
             {
-                var rand = new Random();
-                var guid = (uint)rand.Next();
-                //doesnt cover entire uint space, but not really a problem right now.
-                while (objProvider.Entries.ContainsKey(guid) || avoid.Contains(guid))
+                if (next == null)
                 {
-                    guid = (uint)rand.Next();
+                    var rand = new Random();
+                    next = rand.Next;
+                }
+                var guid = (uint)next(int.MaxValue);
+                //doesnt cover entire uint space, but not really a problem right now.
+                while (objProvider.Entries.ContainsKey(guid) || (avoid != null && avoid.Contains(guid)))
+                {
+                    guid = (uint)next(int.MaxValue);
                     //todo: if you get really unlucky, you can get stuck here forever. I mean really unlucky...
                 }
                 return guid;
@@ -254,10 +264,17 @@ namespace FSO.SimAntics.Utils
             SkinTone = 0;
         }
 
-        public short[] MakePersonData()
+        public short[] MakePersonData() { return MakePersonData(null); }
+
+        /// <summary>SimsRedux: next(max) = a random in [0, max) (the VM's own when made by the game, so it's the same everywhere).</summary>
+        public short[] MakePersonData(Func<int, int> next)
         {
             var pd = new short[88];
-            var rand = new Random();
+            if (next == null)
+            {
+                var rand = new Random();
+                next = rand.Next;
+            }
 
             pd[2] = PersonalityPoints[0];
             pd[3] = PersonalityPoints[1];
@@ -265,8 +282,8 @@ namespace FSO.SimAntics.Utils
             pd[6] = PersonalityPoints[3];
             pd[7] = PersonalityPoints[4];
 
-            pd[13] = (short)(500+rand.Next(5)*100);
-            pd[14] = (short)(500 + rand.Next(5) * 100);
+            pd[13] = (short)(500+next(5)*100);
+            pd[14] = (short)(500 + next(5) * 100);
 
             pd[16] = 600;
 
@@ -281,7 +298,7 @@ namespace FSO.SimAntics.Utils
             //hi otherwise
             for (int i=46; i<56; i++)
             {
-                var pers = rand.Next(10);
+                var pers = next(10);
 
                 int nindex;
                 if (pers == 0)

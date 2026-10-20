@@ -1,4 +1,4 @@
-using FSO.Files.Formats.IFF.Chunks;
+﻿using FSO.Files.Formats.IFF.Chunks;
 using FSO.SimAntics.Engine;
 using FSO.SimAntics.Primitives;
 
@@ -79,12 +79,17 @@ namespace FSO.SimAntics
                         if (off > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                     }
                 }
-                // SimsRedux: no more than a couple of uninvited visitors a day (Utils/ReduxVisitCap.cs)
-                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxVisitCap.Skip(frame, opcode))
-                    return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
-                // SimsRedux: Smarter Sims get up from skill objects before a need runs out (Utils/ReduxExit.cs)
-                if (opcode < 4096 && FSO.SimAntics.Utils.ReduxExit.StopSkill(frame, opcode))
-                    return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
+                // (global script calls: the two hooks below are only gone into when they can apply - a cheap
+                //  check here, instead of two guarded calls and a script lookup on every global call)
+                if (opcode < 4096 && frame.VM != null && frame.VM.TS1)
+                {
+                    // SimsRedux: no more than a couple of uninvited visitors a day (Utils/ReduxVisitCap.cs)
+                    if (opcode == 369 && FSO.SimAntics.Utils.ReduxVisitCap.Skip(frame, opcode))
+                        return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
+                    // SimsRedux: Smarter Sims get up from skill objects before a need runs out (Utils/ReduxExit.cs)
+                    if (frame.Caller is VMAvatar && FSO.SimAntics.Utils.ReduxExit.StopSkill(frame, opcode))
+                        return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
+                }
                 frame.Thread.ExecuteSubRoutine(frame, opcode, (VMSubRoutineOperand)instruction.Operand);
                 return VMPrimitiveExitCode.CONTINUE;
             }

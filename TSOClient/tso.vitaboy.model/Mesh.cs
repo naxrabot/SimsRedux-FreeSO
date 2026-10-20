@@ -12,7 +12,7 @@ namespace FSO.Vitaboy
     /// <summary>
     /// 3D Mesh.
     /// </summary>
-    public class Mesh : I3DGeometry
+    public class Mesh : I3DGeometry, IDisposable
     {
         /** 3D Data **/
         public VitaboyVertex[] VertexBuffer;
@@ -112,6 +112,21 @@ namespace FSO.Vitaboy
 
         public void StoreOnGPU(GraphicsDevice device)
         {
+            // SimsRedux: meshes are shared by every Sim wearing them, and each Sim put the mesh on the graphics card
+            // again - new buffers every time, the old ones left behind. The buffers already there are reused (and
+            // filled again, as before); only a different size or device makes new ones (the old ones let go).
+            if (GPUVertexBuffer != null && !GPUVertexBuffer.IsDisposed && GPUVertexBuffer.GraphicsDevice == device
+                && GPUVertexBuffer.VertexCount == VertexBuffer.Length
+                && GPUIndexBuffer != null && !GPUIndexBuffer.IsDisposed && GPUIndexBuffer.IndexCount == IndexBuffer.Length)
+            {
+                GPUMode = true;
+                GPUVertexBuffer.SetData(VertexBuffer);
+                GPUIndexBuffer.SetData(IndexBuffer);
+                return;
+            }
+            GPUVertexBuffer?.Dispose();
+            GPUIndexBuffer?.Dispose();
+
             GPUMode = true;
             GPUVertexBuffer = new DynamicVertexBuffer(device, typeof(VitaboyVertex), VertexBuffer.Length, BufferUsage.None);
             GPUVertexBuffer.SetData(VertexBuffer);
@@ -120,9 +135,21 @@ namespace FSO.Vitaboy
             GPUIndexBuffer.SetData(IndexBuffer);
         }
 
+        /// <summary>
+        /// SimsRedux: lets go of this mesh's graphics card buffers (they're made again if it's drawn after this).
+        /// </summary>
+        public void Dispose()
+        {
+            GPUMode = false;
+            GPUVertexBuffer?.Dispose();
+            GPUIndexBuffer?.Dispose();
+            GPUVertexBuffer = null;
+            GPUIndexBuffer = null;
+        }
+
         public void InvalidateMesh()
         {
-            if (GPUMode)
+            if (GPUMode && GPUVertexBuffer != null && !GPUVertexBuffer.IsDisposed)
             {
                 GPUVertexBuffer.SetData(VertexBuffer);
             }
@@ -131,7 +158,7 @@ namespace FSO.Vitaboy
         #region I3DGeometry Members
 
         public void DrawGeometry(GraphicsDevice gd){
-            if (GPUMode){
+            if (GPUMode && GPUVertexBuffer != null && !GPUVertexBuffer.IsDisposed){
                 gd.Indices = GPUIndexBuffer;
                 gd.SetVertexBuffer(GPUVertexBuffer);
                 gd.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, VertexBuffer.Length, 0, NumPrimitives);
@@ -148,7 +175,7 @@ namespace FSO.Vitaboy
         /// </summary>
         /// <param name="gd">A GraphicsDevice instance used for drawing.</param>
         public void Draw(GraphicsDevice gd){
-            if (!GPUMode) StoreOnGPU(gd);
+            if (!GPUMode || GPUVertexBuffer == null || GPUVertexBuffer.IsDisposed || GPUIndexBuffer == null || GPUIndexBuffer.IsDisposed) StoreOnGPU(gd);
             gd.Indices = GPUIndexBuffer;
             gd.SetVertexBuffer(GPUVertexBuffer);
             gd.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, NumPrimitives);

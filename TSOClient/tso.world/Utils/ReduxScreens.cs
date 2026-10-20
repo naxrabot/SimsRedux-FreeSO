@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace FSO.LotView.Utils
 {
@@ -29,13 +30,31 @@ namespace FSO.LotView.Utils
         public static void SetPictures(List<Picture> pictures)
         {
             Pictures = pictures ?? new List<Picture>();
+            // (the old pictures' textures: an object may still be drawing one until it's redrawn - disposed when the lot closes)
+            foreach (var t in Cache.Values) if (t != null) Retired.Add(t);
             Cache.Clear();
+        }
+
+        private static List<Texture2D> Retired = new List<Texture2D>();
+
+        /// <summary>
+        /// SimsRedux: the lot closed (its objects are gone): dispose the painted pictures and forget the glass masks.
+        /// The object files are only weakly remembered (a file that's let go takes its screen list with it).
+        /// </summary>
+        public static void LotClosed()
+        {
+            foreach (var t in Cache.Values) { try { if (t != null && !t.IsDisposed) t.Dispose(); } catch { } }
+            foreach (var t in Retired) { try { if (t != null && !t.IsDisposed) t.Dispose(); } catch { } }
+            Cache.Clear();
+            Retired.Clear();
+            Masks.Clear();
+            Files.Clear();
         }
 
         public static int Count { get { return Pictures.Count; } }
 
         private class Overlay { public bool IsScreen; public SPR2 Off; public List<SPR2> Games = new List<SPR2>(); }
-        private static Dictionary<IffFile, Dictionary<uint, Overlay>> Files = new Dictionary<IffFile, Dictionary<uint, Overlay>>();
+        private static ConditionalWeakTable<IffFile, Dictionary<uint, Overlay>> Files = new ConditionalWeakTable<IffFile, Dictionary<uint, Overlay>>();
         private static Dictionary<string, Texture2D> Cache = new Dictionary<string, Texture2D>();
         private static Dictionary<string, bool[]> Masks = new Dictionary<string, bool[]>();
 
@@ -79,7 +98,7 @@ namespace FSO.LotView.Utils
                 }
             }
             catch (Exception e) { Console.WriteLine("[SimsRedux] monitor screens: " + e.Message); }
-            Files[iff] = map;
+            Files.AddOrUpdate(iff, map);
             return map;
         }
 
@@ -89,11 +108,20 @@ namespace FSO.LotView.Utils
             return iff != null && Scan(iff).Count > 0;
         }
 
+        // (frames decoded just for a Get: their pixels are let go again at its end - see SPR2Frame.ReleaseDecoded)
+        private static List<KeyValuePair<SPR2Frame, int>> Decoded = new List<KeyValuePair<SPR2Frame, int>>();
+
         private static Color[] Pixels(SPR2Frame f)
         {
             if (f == null) return null;
-            try { f.DecodeIfRequired(false); } catch { }
+            try { var d = f.DecodeForRead(); if (d != 0) Decoded.Add(new KeyValuePair<SPR2Frame, int>(f, d)); } catch { }
             return f.PixelData;
+        }
+
+        private static void ReleaseDecoded()
+        {
+            foreach (var d in Decoded) { try { d.Key.ReleaseDecoded(d.Value); } catch { } }
+            Decoded.Clear();
         }
 
         /// <summary>The glass in this view: pixels that change between the screen being off and showing something.</summary>
@@ -218,6 +246,7 @@ namespace FSO.LotView.Utils
                 Console.WriteLine("[SimsRedux] monitor picture: " + e.Message);
                 return null;
             }
+            finally { ReleaseDecoded(); }
         }
 
         private static void Seed(Color[] off, bool[] outside, Stack<int> stack, int i)

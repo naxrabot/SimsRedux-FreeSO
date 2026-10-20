@@ -19,9 +19,16 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             if (caller == null) return false;
             if (caller.Thread.Queue.Count >= VMThread.MAX_USER_ACTIONS) return false;
-            VMEntity callee = vm.Context.CreateObjectInstance(GOTO_GUID, new LotTilePos(x, y, level), Direction.NORTH).Objects[0];
-            if (callee?.Position == LotTilePos.OUT_OF_WORLD) callee.Delete(true, vm.Context);
+            // SimsRedux: null-guarded, and a marker that couldn't be placed (off the lot) is deleted and the order
+            // dropped - it used to be given the deleted marker to walk to
+            var group = vm.Context.CreateObjectInstance(GOTO_GUID, new LotTilePos(x, y, level), Direction.NORTH);
+            VMEntity callee = (group != null && group.Objects.Count > 0) ? group.Objects[0] : null;
             if (callee == null) return false;
+            if (callee.Position == LotTilePos.OUT_OF_WORLD)
+            {
+                callee.Delete(true, vm.Context);
+                return false;
+            }
             callee.PushUserInteraction(Interaction, caller, vm.Context, false, new short[] { Param0, 0, 0, 0 });
 
             return true;

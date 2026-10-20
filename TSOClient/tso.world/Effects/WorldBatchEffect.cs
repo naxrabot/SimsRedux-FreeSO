@@ -119,6 +119,10 @@ namespace FSO.LotView.Effects
                 pMaskTexture?.SetValue(value);
             }
         }
+
+        /// <summary>SimsRedux: the depth and mask pictures set right now (to put them back between drawing passes).</summary>
+        public Texture2D CurrentDepthTexture { get { return pDepthTexture?.GetValueTexture2D(); } }
+        public Texture2D CurrentMaskTexture { get { return pMaskTexture?.GetValueTexture2D(); } }
         public Texture2D ambientLight
         {
             set

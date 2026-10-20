@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using FSO.LotView.Model;
@@ -11,7 +11,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     /// SimsRedux: swaps an object on the lot for another colour/style of it, in the same spot and
     /// facing the same way. The family pays (or gets back) the difference between the two catalog
     /// prices. Refused while a Sim is using the object or something is sitting on it.
-    /// If the new version doesn't fit, the old one is put back and the money is returned.
+    /// If the new version doesn't fit, the old one (the same object, as it was) is put back and the money is returned.
     /// </summary>
     public class VMNetSwapObjectCmd : VMNetCommandBodyAbstract
     {
@@ -29,11 +29,20 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var baseObj = group.BaseObject;
             var pos = baseObj.Position;
             var dir = baseObj.Direction;
-            var oldGUID = (group.MultiTile) ? baseObj.MasterDefinition.GUID : baseObj.Object.OBJ.GUID;
             var oldPrice = group.InitialPrice;
             var newPrice = CatalogPrice(NewGUID);
 
-            baseObj.Delete(true, vm.Context);
+            // SimsRedux: the old one is only set aside (off the lot) while the new one is tried, so if the new
+            // one doesn't fit, the very same object goes back - keeping its state (colour, wear, what's in it) -
+            // instead of a fresh copy. It's deleted only once the new one is in.
+            var setAside = group.ChangePosition(LotTilePos.OUT_OF_WORLD, dir, vm.Context, VMPlaceRequestFlags.Default);
+            if (setAside.Status != VMPlacementError.Success || baseObj.Position != LotTilePos.OUT_OF_WORLD)
+            {
+                // (couldn't even lift it: nothing has changed - just give the money back)
+                if (baseObj.Position == LotTilePos.OUT_OF_WORLD) group.ChangePosition(pos, dir, vm.Context, VMPlaceRequestFlags.Default);
+                Refund(vm, caller);
+                return false;
+            }
 
             bool placed = false;
             var created = vm.Context.CreateObjectInstance(NewGUID, LotTilePos.OUT_OF_WORLD, dir);
@@ -49,20 +58,28 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 else created.Delete(vm.Context);
             }
 
-            if (!placed)
+            if (placed)
             {
-                // the new version doesn't fit here: put the old one back and give the money back
-                var restore = vm.Context.CreateObjectInstance(oldGUID, LotTilePos.OUT_OF_WORLD, dir);
-                if (restore != null && restore.Objects.Count > 0)
-                {
-                    restore.ChangePosition(pos, dir, vm.Context, VMPlaceRequestFlags.Default);
-                    restore.ExecuteEntryPoint(11, vm.Context);
-                    restore.InitialPrice = oldPrice;
-                }
-                Refund(vm, caller);
-                return false;
+                baseObj.Delete(true, vm.Context); // (the old one goes for good)
+                return true;
             }
-            return true;
+
+            // the new version doesn't fit here: the old one goes back where it was, and the money back
+            group.ChangePosition(pos, dir, vm.Context, VMPlaceRequestFlags.Default);
+            if (baseObj.Position == LotTilePos.OUT_OF_WORLD)
+            {
+                // (it couldn't go back either - make sure the family doesn't lose it: the old one is sold
+                //  for its full price instead of left off the lot)
+                baseObj.Delete(true, vm.Context);
+                if (vm.GlobalLink != null && oldPrice > 0)
+                {
+                    var who = caller?.PersistID ?? uint.MaxValue;
+                    vm.GlobalLink.PerformTransaction(vm, false, uint.MaxValue, who, oldPrice,
+                        (bool success, int transferAmount, uint uid1, uint budget1, uint uid2, uint budget2) => { });
+                }
+            }
+            Refund(vm, caller);
+            return false;
         }
 
         /// <summary>Why the swap can't happen (null = it can).</summary>

@@ -188,6 +188,14 @@ namespace FSO.Common.Utils
         /// <summary>SimsRedux: the "debugdraw" cheat - a line in the log each time a read-back happens while drawing.</summary>
         public static bool LogReadbacks;
 
+        private static RenderTarget2D _RebindScratch;
+        private static RenderTarget2D RebindScratch(GraphicsDevice gd)
+        {
+            if (_RebindScratch == null || _RebindScratch.IsDisposed || _RebindScratch.GraphicsDevice != gd)
+                _RebindScratch = new RenderTarget2D(gd, 1, 1, false, SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.PreserveContents);
+            return _RebindScratch;
+        }
+
         private static void RebindTargets(GraphicsDevice gd, RenderTargetBinding[] targets, Viewport viewport, Rectangle scissor)
         {
             try
@@ -198,8 +206,10 @@ namespace FSO.Common.Utils
                     // (a target that doesn't keep its contents would be cleared by binding it again - left alone)
                     if (rt == null || rt.IsDisposed || rt.RenderTargetUsage != RenderTargetUsage.PreserveContents) return;
                 }
-                // (binding the same targets again is skipped by the engine - so the screen first, then them)
-                gd.SetRenderTarget(null);
+                // (binding the same targets again is skipped by the engine - so something else first, then them. That
+                //  used to be the screen, which makes a phone's GPU finish and store the screen's tiles; a tiny
+                //  target of our own doesn't)
+                gd.SetRenderTarget(RebindScratch(gd));
                 gd.SetRenderTargets(targets);
                 gd.Viewport = viewport;
                 gd.ScissorRectangle = scissor;
@@ -1126,6 +1136,14 @@ namespace FSO.Common.Utils
             return newTexture;
         }
 
+        // SimsRedux: Resize and Scale made (and never let go of) a new SpriteBatch - with its own GPU buffers - every call
+        private static SpriteBatch ScaleBatch;
+        private static SpriteBatch ScaleBatchFor(GraphicsDevice gd)
+        {
+            if (ScaleBatch == null || ScaleBatch.IsDisposed || ScaleBatch.GraphicsDevice != gd) ScaleBatch = new SpriteBatch(gd);
+            return ScaleBatch;
+        }
+
         public static Texture2D Resize(GraphicsDevice gd, Texture2D texture, int newWidth, int newHeight)
         {
             RenderTarget2D renderTarget = new RenderTarget2D(
@@ -1138,7 +1156,7 @@ namespace FSO.Common.Utils
             {
                 gd.SetRenderTarget(renderTarget);
                 gd.Clear(ColorExtensions.TransparentBlack);
-                SpriteBatch batch = new SpriteBatch(gd);
+                SpriteBatch batch = ScaleBatchFor(gd);
                 batch.Begin();
                 batch.Draw(texture, destinationRectangle, Color.White);
                 batch.End();
@@ -1160,7 +1178,7 @@ namespace FSO.Common.Utils
 
             gd.SetRenderTarget(renderTarget);
 
-            SpriteBatch batch = new SpriteBatch(gd);
+            SpriteBatch batch = ScaleBatchFor(gd);
 
             Rectangle destinationRectangle = new Rectangle(0, 0, newWidth, newHeight);
 

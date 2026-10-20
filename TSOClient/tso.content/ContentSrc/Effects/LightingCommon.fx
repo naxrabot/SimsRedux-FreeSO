@@ -37,7 +37,7 @@ float4 lightColorFloor(float4 intensities) {
 
 	float fshad = intensities.a / max(0.0001, avg);
 
-	return lerp(OutsideDark, float4(intensities.rgb * LightingAdjust, 1), (fshad - MinAvg.x) * MinAvg.y);
+	return lerp(OutsideDark, float4(intensities.rgb * LightingAdjust, 1), saturate((fshad - MinAvg.x) * MinAvg.y));
 }
 
 float4 lightColorIAvg(float4 intensities, float i, float avg) {
@@ -45,7 +45,7 @@ float4 lightColorIAvg(float4 intensities, float i, float avg) {
 	float fshad = intensities.a / max(0.0001, avg);
 	fshad = lerp(fshad, 1, i);
 
-	return lerp(OutsideDark, float4(intensities.rgb * LightingAdjust, 1), (fshad - MinAvg.x) * MinAvg.y);
+	return lerp(OutsideDark, float4(intensities.rgb * LightingAdjust, 1), saturate((fshad - MinAvg.x) * MinAvg.y));
 }
 
 float4 lightColorI(float4 intensities, float i) {
@@ -56,7 +56,7 @@ float4 lightColorI(float4 intensities, float i) {
 	float fshad = intensities.a / max(0.0001, avg);
 	fshad = lerp(fshad, 1, i);
 
-	return lerp(OutsideDark, float4(intensities.rgb * LightingAdjust, 1), (fshad - MinAvg.x) * MinAvg.y);
+	return lerp(OutsideDark, float4(intensities.rgb * LightingAdjust, 1), saturate((fshad - MinAvg.x) * MinAvg.y));
 }
 
 float4 lightProcessLevel(float4 inPosition, float level) {
@@ -150,6 +150,7 @@ float4 lightProcessDirection(float4 inPosition, float3 normal) {
 
 //coeffs from http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html.
 float4 LinearToSRGB(float4 col) {
+	col.rgb = max(col.rgb, 0); //negative inputs make sqrt NaN (black) on mobile GPUs
 	float3 s1 = sqrt(col.rgb);
 	float3 s2 = sqrt(s1);
 	float3 s3 = sqrt(s2);

@@ -21,7 +21,10 @@ namespace FSO.SimAntics.Primitives
             //make the character iff, save it, and return their new neighbour id.
 
             var operand = (VMTS1MakeNewCharacterOperand)args;
-            var guid = SimitoneNeighbourGenerator.GenerateGUID(new uint[0]);
+            // SimsRedux: the VM's own random (not new Random()), so every client in a shared lot makes the same Sim.
+            var vmContext = context.VM.Context;
+            Func<int, int> next = (max) => (int)vmContext.NextRandom((ulong)Math.Max(0, max));
+            var guid = SimitoneNeighbourGenerator.GenerateGUID(new uint[0], next);
 
             //get
             var color = context.Locals[operand.ColorLocal];
@@ -34,12 +37,19 @@ namespace FSO.SimAntics.Primitives
             if (operand.AvatarType == 0)
             {
                 var simtype = ((gender > 0) ? "f" : "m") + ((age < 18) ? "c" : "m");
+                if (color < 0 || color >= ColorNames.Length) return VMPrimitiveExitCode.GOTO_FALSE; // SimsRedux: a bad skin colour fails instead of crashing
                 var skin = ColorNames[color];
                 var code = simtype;
 
-                var heads = Content.Content.Get().BCFGlobal.CollectionsByName["c"].ClothesByAvatarType[simtype].ToList(); // (SimsRedux: a copy - the unusable ones are taken out below, and that used to empty the game's own lists)
+                var bcf = Content.Content.Get().BCFGlobal;
+                System.Collections.Generic.List<string> headList, bodyList;
+                if (!bcf.CollectionsByName.ContainsKey("c") || !bcf.CollectionsByName["c"].ClothesByAvatarType.TryGetValue(simtype, out headList))
+                    return VMPrimitiveExitCode.GOTO_FALSE;
+                var heads = headList.ToList(); // (SimsRedux: a copy - the unusable ones are taken out below, and that used to empty the game's own lists)
                 if (simtype[1] == 'c') simtype += "chd";
-                var bodies = Content.Content.Get().BCFGlobal.CollectionsByName["b"].ClothesByAvatarType[simtype].ToList();
+                if (!bcf.CollectionsByName.ContainsKey("b") || !bcf.CollectionsByName["b"].ClothesByAvatarType.TryGetValue(simtype, out bodyList))
+                    return VMPrimitiveExitCode.GOTO_FALSE;
+                var bodies = bodyList.ToList();
 
                 //pick a random head and body.
 
@@ -69,12 +79,14 @@ namespace FSO.SimAntics.Primitives
                     }
                 }
 
+                if (heads.Count == 0 || bodies.Count == 0) return VMPrimitiveExitCode.GOTO_FALSE; // SimsRedux: nothing usable - fail, not crash
                 var headInd = (int)context.VM.Context.NextRandom((ulong)heads.Count);
                 var bodyInd = (int)context.VM.Context.NextRandom((ulong)bodies.Count);
 
                 var body = bodies[bodyInd];
 
                 var ind = body.IndexOf("_");
+                if (ind < 3) return VMPrimitiveExitCode.GOTO_FALSE;
                 var bodyType = body.Substring(ind - 3, 3);
                 code += bodyType;
                 info = new SimTemplateCreateInfo(code, skin);
@@ -110,6 +122,7 @@ namespace FSO.SimAntics.Primitives
                 }
 
 
+                if (outfits == null || index < 0 || index >= outfits.Length) return VMPrimitiveExitCode.GOTO_FALSE; // SimsRedux: bad outfit index fails instead of crashing
                 info.BodyStringReplace[1] = outfits[index].Item1;
             }
 
@@ -118,7 +131,7 @@ namespace FSO.SimAntics.Primitives
             for (int i = 0; i < 5; i++)
                 info.PersonalityPoints[i] = 500; //todo: randomize
 
-            var n = SimitoneNeighbourGenerator.CreateNeighbor(guid, info);
+            var n = SimitoneNeighbourGenerator.CreateNeighbor(guid, info, next);
 
             context.StackObjectID = n.NeighbourID;
             return VMPrimitiveExitCode.GOTO_TRUE;

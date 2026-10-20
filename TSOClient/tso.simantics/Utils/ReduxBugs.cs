@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using FSO.Files.Formats.IFF.Chunks;
@@ -59,7 +59,8 @@ namespace FSO.SimAntics.Utils
             foreach (var b in All(vm))
             {
                 if (b.Position.Level != pos.Level) continue;
-                var d = (float)Math.Sqrt(Math.Pow(b.Position.x - pos.x, 2) + Math.Pow(b.Position.y - pos.y, 2));
+                double ddx = b.Position.x - pos.x, ddy = b.Position.y - pos.y;
+                var d = (float)Math.Sqrt(ddx * ddx + ddy * ddy);
                 if (d <= bestD) { bestD = d; best = b; }
             }
             return best;
@@ -117,7 +118,7 @@ namespace FSO.SimAntics.Utils
                                 I(18, 254, 254, 1, 0, 0, 0, 0, 0, 0, 0),
                             }
                         };
-                        var routine = FSO.SimAntics.Engine.VMTranslator.INSTANCE.Assemble(bhav, res);
+                        var routine = FSO.SimAntics.Engine.VMTranslator.ReduxAssemble(bhav, res);
                         if (routine == null) return;
                         res.Iff.AddChunk(bhav);
                         res.RoutineCache[SprayTreeID] = routine;

@@ -41,16 +41,16 @@ VertexShaderOutput VertexShaderFunction(VertexShaderInput input)
 float4 Gradient(VertexShaderOutput input)
 {
     float mode = input.Params.x;
-    if (mode == 0) {
+    if (mode < 0.5) {
 	    //solid
 		return input.Color;
 	}
-	else if (mode == 2) {
+	else if (abs(mode - 2) < 0.5) {
 		//cone
 		float2 coneVec = normalize(input.EndPos - input.StartPos);
 		float2 myVec = normalize(input.IntPos - input.StartPos);
 
-		float angle = acos(dot(coneVec, myVec)) / input.Params.y; //clamp(, 0, 1);
+		float angle = acos(clamp(dot(coneVec, myVec), -1, 1)) / input.Params.y; //clamp(, 0, 1);
 		return lerp(input.Color2, input.Color, angle);
 	}
 	return input.Color;
@@ -66,14 +66,14 @@ float EllipseMultiplier(VertexShaderOutput input) {
 	float sL2 = smallLength*smallLength;
 	float largeLength = length(ellipseVec2);
 
-	float smallDot = dot(relPos, ellipseVec1) / sL2;
-	float largeDot = dot(relPos, ellipseVec2) / largeLength;
+	float smallDot = dot(relPos, ellipseVec1) / max(sL2, 1e-6);
+	float largeDot = dot(relPos, ellipseVec2) / max(largeLength, 1e-4);
 
 	if (largeDot < 0) {
-		largeDot /= smallLength;
+		largeDot /= max(smallLength, 1e-4);
 	}
 	else {
-		largeDot /= largeLength;
+		largeDot /= max(largeLength, 1e-4);
 	}
 
 	return 1 - clamp(length(float2(smallDot, largeDot)), 0, 1);
