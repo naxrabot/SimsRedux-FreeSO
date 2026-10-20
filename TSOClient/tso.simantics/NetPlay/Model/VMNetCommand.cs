@@ -68,6 +68,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxExterminate, typeof(VMNetReduxExterminateCmd) }, // SimsRedux
             { VMCommandType.ReduxLift, typeof(VMNetLiftObjectCmd) }, // SimsRedux
             { VMCommandType.ReduxBurglar, typeof(VMNetReduxBurglarCmd) }, // SimsRedux
+            { VMCommandType.ReduxNovel, typeof(VMNetReduxNovelCmd) }, // SimsRedux
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -192,6 +193,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxOutfit = 55,
         ReduxExterminate = 56,
         ReduxLift = 57,
-        ReduxBurglar = 58
+        ReduxBurglar = 58,
+        ReduxNovel = 59
     }
 }

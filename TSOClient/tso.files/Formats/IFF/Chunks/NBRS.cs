@@ -141,8 +141,8 @@ namespace FSO.Files.Formats.IFF.Chunks
                 var size = (Version == 0x4) ? 0xa0 : 0x200;
                 var all = new short[size / 2];
                 for (int i = 0; i < all.Length; i++) all[i] = io.ReadInt16();
-                // the game uses the first 88; SimsRedux keeps its own marked block (200-209: the Writing
-                // skill and computer activities) - only when its mark is there, so nothing else is mistaken for it
+                // the game uses the first 88; SimsRedux keeps its own marked block (200-219: the Writing
+                // skill, computer activities and novels) - only when its mark is there, so nothing else is mistaken for it
                 bool redux = all.Length > ReduxBlockEnd && all[ReduxBlockStart] == ReduxBlockMark;
                 PersonData = new short[redux ? ReduxBlockEnd + 1 : 88];
                 Array.Copy(all, PersonData, Math.Min(88, all.Length));
@@ -176,8 +176,10 @@ namespace FSO.Files.Formats.IFF.Chunks
             return Name;
         }
 
-        /// <summary>SimsRedux: its own person data block (see FSO.SimAntics.Utils.ReduxComputer), marked so it's never confused with anything else.</summary>
-        public const int ReduxBlockStart = 200, ReduxBlockEnd = 209;
+        /// <summary>SimsRedux: its own person data block (see FSO.SimAntics.Utils.ReduxComputer), marked so it's never confused with anything else.
+        /// (200-209 the Writing skill and computer activities, 210-219 novels: the one being written and the finished ones not yet sold.
+        /// A block saved before 210-219 existed simply reads them as 0: nothing written yet.)</summary>
+        public const int ReduxBlockStart = 200, ReduxBlockEnd = 219;
         public const short ReduxBlockMark = 0x5244; // "RD"
 
         public void Save(IoWriter io)

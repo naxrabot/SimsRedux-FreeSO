@@ -114,6 +114,10 @@ namespace FSO.SimAntics.Utils
         /// Called for each script call. Sims 1's car pool asks "was stack object due at work?" - on a day off
         /// the answer is no (and the day is marked as one they were meant to be away): -1, answer FALSE.
         /// Its "car pool comes in 2 hours" warnings are skipped when nobody here works today: +1, answer TRUE.
+        /// The car's "is this car for me / for stack object?" is no for a Sim on a day off: -1, answer FALSE.
+        /// (A day off is marked "not today" (-1), and the car's own check only asks "not been to work today?",
+        /// so a family member's car pool arriving at the same hour took the Sim on a day off to work too -
+        /// "Go to Work" and the car's "everyone in" both use it.)
         /// 0: carry on as normal.
         /// </summary>
         public static int DayOff(VMStackFrame frame, ushort opcode)
@@ -122,13 +126,24 @@ namespace FSO.SimAntics.Utils
             {
                 var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
                 if (routine == null) return 0;
-                // (1 due at work, 2 car pool warnings, 3 school bus - worked out once per script, see VMRoutine.ReduxKind)
+                // (1 due at work, 2 car pool warnings, 3 school bus, 4 "is this car for ...?" - worked out once per
+                //  script, see VMRoutine.ReduxKind)
                 var rk = routine.GetReduxKind();
-                int kind = rk == VMRoutine.ReduxKindDueAtWork ? 1 : (rk == VMRoutine.ReduxKindCarPool ? 2 : (rk == VMRoutine.ReduxKindSchoolBus ? 3 : 0));
+                int kind = rk == VMRoutine.ReduxKindDueAtWork ? 1 : (rk == VMRoutine.ReduxKindCarPool ? 2 : (rk == VMRoutine.ReduxKindSchoolBus ? 3 : (rk == VMRoutine.ReduxKindCarForSim ? 4 : 0)));
                 if (kind == 0) return 0;
                 var vm = frame.VM;
                 if (vm == null) return 0;
                 int day = Day(vm.Context.Clock);
+                if (kind == 4)
+                {
+                    // ("is this car for me" asks about the caller - it becomes the script's "me"; the other one
+                    //  about the stack object)
+                    var rider = (routine.Chunk?.ChunkLabel ?? "").IndexOf("stack object", StringComparison.OrdinalIgnoreCase) >= 0
+                        ? frame.StackObject as VMAvatar : frame.Caller as VMAvatar;
+                    if (rider == null) return 0;
+                    var job = rider.GetPersonData(VMPersonDataVariable.JobType);
+                    return (job > 0 && !Works(job, day)) ? -1 : 0;
+                }
                 // school is Monday to Friday: no school bus at the weekend
                 if (kind == 3) return day >= 5 ? 1 : 0;
                 if (kind == 2)

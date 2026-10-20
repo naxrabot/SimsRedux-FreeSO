@@ -76,6 +76,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 if (control != null)
                 {
                     var ava = (VMAvatar)control;
+                    // SimsRedux: the id this Sim had is let go properly (left behind, it still found this
+                    // Sim by an id it no longer had - the face showed one Sim, the plumbob none)
+                    VMAvatar oldHolder;
+                    if (ava.PersistID != 0 && ava.PersistID != ActorUID
+                        && vm.Context.ObjectQueries.AvatarsByPersist.TryGetValue(ava.PersistID, out oldHolder) && oldHolder == ava)
+                        vm.Context.ObjectQueries.RemoveAvatarPersist(ava.PersistID);
                     ava.PersistID = ActorUID;
                     ava.AvatarState.Permissions = VMTSOAvatarPermissions.Admin;
                     vm.Context.ObjectQueries.RegisterAvatarPersist(ava, ava.PersistID);

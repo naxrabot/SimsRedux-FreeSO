@@ -579,6 +579,8 @@ namespace FSO.Files.Formats.IFF.Chunks
                 y++;
             }
 
+            if (zData != null && pixelData != null && ReduxZCount < 0) ReduxFitDepth(pixelData, zData, Width, Height);
+
             this.PixelData = pixelData;
             this.PalData = palData;
             this.ZBufferData = zData;
@@ -587,6 +589,46 @@ namespace FSO.Files.Formats.IFF.Chunks
             if (Parent.ZAsAlpha) CopyZToAlpha();
             if (Parent.FloorCopy == 1) FloorCopy();
             if (Parent.FloorCopy == 2) FloorCopyWater();
+        }
+
+        /// <summary>
+        /// SimsRedux: a straight-line fit of this picture's depth against its rows (over the pixels that are drawn),
+        /// worked out once when it's decoded - so the world can tell a flat picture lying on the floor (a rug) and
+        /// how deep it sits, without keeping the depth bytes around. Count is -1 until decoded, 0 if there's no depth.
+        /// Depth at row y is about ZAt0 + ZSlope * y; ZRms is how far the pixels are from that line.
+        /// </summary>
+        public int ReduxZCount = -1;
+        public float ReduxZAt0, ReduxZSlope, ReduxZRms;
+
+        private void ReduxFitDepth(Color[] px, byte[] z, int width, int height)
+        {
+            try
+            {
+                double n = 0, sy = 0, syy = 0, sz = 0, syz = 0;
+                int len = Math.Min(Math.Min(px.Length, z.Length), width * height);
+                for (int i = 0; i < len; i++)
+                {
+                    var d = z[i];
+                    if (d >= 255 || px[i].A == 0) continue;
+                    double y = i / width;
+                    n++; sy += y; syy += y * y; sz += d; syz += y * d;
+                }
+                if (n < 10) { ReduxZAt0 = ReduxZSlope = ReduxZRms = 0; ReduxZCount = 0; return; }
+                var den = n * syy - sy * sy;
+                double b = (den == 0) ? 0 : (n * syz - sy * sz) / den;
+                double a = (sz - b * sy) / n;
+                double err = 0;
+                for (int i = 0; i < len; i++)
+                {
+                    var d = z[i];
+                    if (d >= 255 || px[i].A == 0) continue;
+                    var e = a + b * (i / width) - d;
+                    err += e * e;
+                }
+                ReduxZAt0 = (float)a; ReduxZSlope = (float)b; ReduxZRms = (float)Math.Sqrt(err / n);
+                ReduxZCount = (int)n;
+            }
+            catch (Exception) { ReduxZCount = 0; }
         }
 
         /// <summary>

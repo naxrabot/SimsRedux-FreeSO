@@ -324,6 +324,10 @@ namespace FSO.SimAntics.Primitives
                         vm.Context.ObjectQueries.RemoveAvatarPersist(caller.PersistID);
                         caller.PersistID = 0;
                     }
+                    // SimsRedux: (and any other Sim left holding the player's id - one Sim per player)
+                    foreach (var other in vm.Context.ObjectQueries.Avatars)
+                        if (other != target && other.PersistID == vm.MyUID) other.PersistID = 0;
+                    vm.Context.ObjectQueries.RemoveAvatarPersist(vm.MyUID);
 
                     target.PersistID = vm.MyUID;
                     vm.Context.ObjectQueries.RegisterAvatarPersist((VMAvatar)target, target.PersistID);

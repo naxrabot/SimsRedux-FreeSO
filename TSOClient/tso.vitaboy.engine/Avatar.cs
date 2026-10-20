@@ -371,7 +371,10 @@ namespace FSO.Vitaboy
             }
 
             //skip drawing shadows if we're drawing id
-            if (LightPositions == null || effect.CurrentTechnique == effect.Techniques[1]) return;
+            if (effect.CurrentTechnique == effect.Techniques[1]) return;
+            // SimsRedux: with Lighting off there are no shadows to draw, but the head object (the plumbob above
+            // the selected Sim) still is - it used to be skipped along with the shadows
+            if (LightPositions == null) { DrawHeadObject(device, effect); return; }
 
             if (ShadBuf == null)
             {

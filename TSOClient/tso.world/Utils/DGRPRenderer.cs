@@ -261,6 +261,7 @@ namespace FSO.LotView.Utils
                         }
                     }
 
+                    ReduxFlatDepth(world);
                     _TextureDirty = false;
                     Bounding = new Rectangle(minX, minY, maxX - minX, maxY - minY);
                 }
@@ -277,6 +278,98 @@ namespace FSO.LotView.Utils
                 Bounding = bounding ?? new Rectangle();
 
                 _Dirty &= ~ComponentRenderMode._2D;
+            }
+        }
+
+        /// <summary>
+        /// SimsRedux: a flat object lying on the floor (a rug, a mat) whose depth picture puts it deeper than the
+        /// game's own rugs is drawn with a depth made for it instead: the floor's own depth at each row, as far in
+        /// front of the floor as the game's rugs are (about 7 steps). The Sims Online's braided rag rug sits right
+        /// on the floor line, 7 steps deeper than every other rug, and the floor then hid parts of it - horizontal
+        /// streaks and missing pieces. Only objects that are clearly flat on the floor are touched: no picture rises
+        /// more than a few pixels above the tile's back corner, the pictures reach into the tile's front half, and
+        /// each picture's depth runs along the floor (it slopes like the floor, row by row, close to the floor line).
+        /// Everything else - and every rug that already sits where the game's rugs do - keeps its own depth.
+        /// </summary>
+        private void ReduxFlatDepth(WorldState world)
+        {
+            try
+            {
+                if (Items.Count == 0) return;
+                int div = 1 << Math.Max(0, Math.Min(2, (int)WorldZoom.Near - (int)world.Zoom)); // (near pixels per pixel)
+                int minTop = int.MaxValue, maxBottom = int.MinValue;
+                foreach (var item in Items)
+                {
+                    var spr = item.Sprite;
+                    if (spr.RenderMode != _2DBatchRenderMode.Z_BUFFER || spr.Depth == null || spr.Pixel == null) return;
+                    if (item.DGRPSprite == null || item.DGRPSprite.ObjectOffset.Z != 0) return;
+                    // the picture's top, relative to the object's own ground point (the tile's back corner is 32 near pixels up)
+                    int top = (int)item.DGRPSprite.SpriteOffset.Y - spr.DestRect.Height;
+                    minTop = Math.Min(minTop, top * div);
+                    maxBottom = Math.Max(maxBottom, (top + spr.DestRect.Height) * div);
+                }
+                if (minTop < -40 || maxBottom < 16) return;
+
+                bool tooDeep = false;
+                foreach (var item in Items)
+                {
+                    var frame = item.DGRPSprite.GetSPR2Frame();
+                    if (frame == null) return;
+                    if (frame.ReduxZCount < 0) frame.DecodeIfRequired(true); // (worked out when it's decoded)
+                    if (frame.ReduxZCount <= 0) return;
+                    int h = item.Sprite.DestRect.Height;
+                    int top = (int)item.DGRPSprite.SpriteOffset.Y - h;
+                    float floorSlope = -TextureGenerator.FLAT_Z_INC * div;
+                    if (Math.Abs(frame.ReduxZSlope - floorSlope) > 0.25f * -floorSlope) return; // not sloping like the floor
+                    if (frame.ReduxZRms > 3 + div) return; // bumpy: a real 3D shape
+                    float mid = h / 2f;
+                    float dev = (frame.ReduxZAt0 + frame.ReduxZSlope * mid) - ReduxFloorZ(top + mid, div);
+                    if (dev < -16 || dev > 8) return; // not at floor level (on a counter, in the air)
+                    if (dev > -3) tooDeep = true; // (rugs sit 4-11 steps in front of the floor line; this one is on it)
+                }
+                if (!tooDeep) return;
+
+                foreach (var item in Items)
+                {
+                    var spr = item.Sprite;
+                    var depth = ReduxFlatDepthTexture(world.Device, spr.Pixel.Height, (int)item.DGRPSprite.SpriteOffset.Y - spr.DestRect.Height, div);
+                    if (depth != null) spr.Depth = depth;
+                }
+            }
+            catch (Exception) { } // (the object keeps its own depth)
+        }
+
+        /// <summary>SimsRedux: the floor's depth step at a row (pixels from the object's ground point, at this zoom).</summary>
+        private static float ReduxFloorZ(float row, int div)
+        {
+            return 255 - TextureGenerator.FLAT_Z_INC * (div * row + 32);
+        }
+
+        private static Dictionary<long, Texture2D> ReduxFlatDepthCache = new Dictionary<long, Texture2D>();
+
+        /// <summary>
+        /// A depth picture (one pixel wide - every column is the same) for a picture <paramref name="height"/> rows
+        /// tall whose top row is <paramref name="top"/> pixels from the object's ground point: the floor's depth at
+        /// each row, 7 steps nearer - where the game's own rugs sit.
+        /// </summary>
+        private static Texture2D ReduxFlatDepthTexture(GraphicsDevice gd, int height, int top, int div)
+        {
+            if (gd == null || height <= 0 || height > 4096) return null;
+            long key = ((long)height << 32) | ((long)(top & 0xFFFFFF) << 4) | (long)div;
+            lock (ReduxFlatDepthCache)
+            {
+                Texture2D tex;
+                if (ReduxFlatDepthCache.TryGetValue(key, out tex) && tex != null && !tex.IsDisposed) return tex;
+                var data = new Color[height];
+                for (int y = 0; y < height; y++)
+                {
+                    var z = (byte)Math.Max(0, Math.Min(254, Math.Round(ReduxFloorZ(top + y, div) - 7)));
+                    data[y] = new Color(z, z, z, z);
+                }
+                tex = new Texture2D(gd, 1, height);
+                tex.SetData(data);
+                ReduxFlatDepthCache[key] = tex;
+                return tex;
             }
         }
 

@@ -82,7 +82,8 @@ namespace FSO.SimAntics.Primitives
                     case VMSetToNextSearchType.FamilyMember:
                         entities = context.VM.Context.ObjectQueries.Avatars; break;
                     case VMSetToNextSearchType.ObjectOfType:
-                        entities = context.VM.Context.ObjectQueries.GetObjectsByGUID(operand.GUID); break;
+                        // (SimsRedux: the phone's "Call Cab..." gets the cab, not Old Town's trolley - Utils/ReduxTraffic.cs)
+                        entities = context.VM.Context.ObjectQueries.GetObjectsByGUID(FSO.SimAntics.Utils.ReduxTraffic.CabService(context, operand.GUID)); break;
                     case VMSetToNextSearchType.ObjectWithCategoryEqualToSP0:
                         entities = context.VM.Context.ObjectQueries.GetObjectsByCategory(context.Args[0]); break;
                     case VMSetToNextSearchType.FSOObjectOfSemiGlobal:

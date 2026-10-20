@@ -20,6 +20,32 @@ namespace FSO.SimAntics.Utils
     public static class ReduxTraffic
     {
         public const short Marker = 99;
+
+        /// <summary>Hot Date's cab service (the phone's cab) and Unleashed's Old Town trolley service (lot-wide objects).</summary>
+        public const uint CabServiceGUID = 0xA6F31853, TrolleyServiceGUID = 0xEAA79D86;
+
+        /// <summary>
+        /// SimsRedux: the phone's "Call Cab..." (its script "Auto Call Cab") picks who comes by the lot and the
+        /// expansion packs: on a community lot - and on a home lot whenever Hot Date's cab service didn't
+        /// answer - that was Unleashed's Old Town trolley ("Get In"). A cab is a cab now: while the lot has
+        /// Hot Date's cab service, that script finds it wherever it looked for the trolley service. (Vacation
+        /// Island, Studio Town and Magic Town keep their own rides home.) Worked out from the script's name
+        /// and the lot's own objects, so every player's game picks the same.
+        /// </summary>
+        public static uint CabService(Engine.VMStackFrame frame, uint guid)
+        {
+            if (guid != TrolleyServiceGUID) return guid;
+            try
+            {
+                var vm = frame?.VM;
+                if (vm == null || !vm.TS1) return guid;
+                var label = frame.Routine?.Chunk?.ChunkLabel;
+                if (label == null || label.IndexOf("call cab", StringComparison.OrdinalIgnoreCase) < 0) return guid;
+                var cabs = vm.Context.ObjectQueries.GetObjectsByGUID(CabServiceGUID);
+                return (cabs != null && cabs.Count > 0) ? CabServiceGUID : guid;
+            }
+            catch { return guid; }
+        }
         /// <summary>Set while a traffic car is being moved (placement rules don't apply to it).</summary>
         [ThreadStatic] public static bool Moving;
         /// <summary>1/16ths of a tile a car moves each tick (about 3.75 tiles a second at normal speed).</summary>
