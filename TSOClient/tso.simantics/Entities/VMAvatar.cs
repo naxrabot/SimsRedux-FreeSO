@@ -767,8 +767,8 @@ namespace FSO.SimAntics
 
         public virtual short GetPersonData(VMPersonDataVariable variable)
         {
-            // (SimsRedux: 200-209 are its own block - the computer activities and Writing skill, Utils/ReduxComputer.cs)
-            if ((ushort)variable > 100 && ((ushort)variable < 200 || (ushort)variable > 209)) throw new Exception("Person Data out of bounds!");
+            // (SimsRedux: 200-219 are its own block - the computer activities, Writing skill and novels, Utils/ReduxComputer.cs)
+            if ((ushort)variable > 100 && ((ushort)variable < FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockStart || (ushort)variable > FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockEnd)) throw new Exception("Person Data out of bounds!");
             VMTSOJobInfo jobInfo = null;
             switch (variable)
             {
@@ -873,8 +873,8 @@ namespace FSO.SimAntics
 
         public virtual bool SetPersonData(VMPersonDataVariable variable, short value)
         {
-            // (SimsRedux: 200-209 are its own block - the computer activities and Writing skill, Utils/ReduxComputer.cs)
-            if ((ushort)variable > 100 && ((ushort)variable < 200 || (ushort)variable > 209)) throw new Exception("Person Data out of bounds!");
+            // (SimsRedux: 200-219 are its own block - the computer activities, Writing skill and novels, Utils/ReduxComputer.cs)
+            if ((ushort)variable > 100 && ((ushort)variable < FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockStart || (ushort)variable > FSO.Files.Formats.IFF.Chunks.Neighbour.ReduxBlockEnd)) throw new Exception("Person Data out of bounds!");
             VMTSOJobInfo jobInfo;
             switch (variable)
             {

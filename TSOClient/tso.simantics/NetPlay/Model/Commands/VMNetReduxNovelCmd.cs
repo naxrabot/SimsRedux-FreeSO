@@ -21,6 +21,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public override bool Verify(VM vm, VMAvatar caller)
         {
             if (caller == null || caller.IsPet || !vm.TS1) return false;
+            // (only the family who lives here is paid: anyone else would just lose the novel)
+            if (!FSO.SimAntics.Utils.ReduxComputer.IsMyFamily(caller)) return false;
             return FSO.SimAntics.Utils.ReduxComputer.CanSellNovel(caller, Slot);
         }
 
