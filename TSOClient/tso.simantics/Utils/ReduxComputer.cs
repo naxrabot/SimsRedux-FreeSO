@@ -10,8 +10,9 @@ using System.Linq;
 namespace FSO.SimAntics.Utils
 {
     /// <summary>
-    /// SimsRedux: more to do on the computer, like The Sims 3 - Practice Writing, Write a Novel (in five
-    /// genres), Surf the Web, Chat Online and Hack - plus the Writing skill they build.
+    /// SimsRedux: more to do on the computer, like The Sims 3 - Practice Writing, Write a Novel (in seven
+    /// genres, kept from start to finish: "Continue Novel: <title>" picks it up again, and a finished one goes
+    /// into the Sim's inventory to be sold), Surf the Web, Chat Online and Hack - plus the Writing skill they build.
     ///
     /// No game file is changed. When a computer is loaded, its pie menu (interaction table) gets the new
     /// entries in memory. Each one uses the computer's own "Play" routine for the Sim's part (walking
@@ -22,7 +23,7 @@ namespace FSO.SimAntics.Utils
     /// </summary>
     public static class ReduxComputer
     {
-        // ---- where it's kept on each Sim: SimsRedux's own person data block (200-209), marked at 200 ----
+        // ---- where it's kept on each Sim: SimsRedux's own person data block (200-219), marked at 200 ----
         // It's saved with the house, kept in the neighbourhood file (NBRS keeps the marked block) and
         // travels with the Sim online, like the Sims 1 skills.
         private const int Mark = 200;
@@ -40,6 +41,12 @@ namespace FSO.SimAntics.Utils
         private const int LastMinute = 206;
         /// <summary>Hacking: minutes since the last pay-out.</summary>
         private const int HackMinutes = 207;
+        // (208-209: ReduxSkillByDoing)
+        /// <summary>The current novel's title (its seed + 1, 1-256), 0 = not picked yet.</summary>
+        public const int NovelSeed = 210;
+        // (211: kept free)
+        /// <summary>The finished novels not sold yet, one a slot (0 = empty): genre &lt;&lt; 12 | quality &lt;&lt; 8 | title seed.</summary>
+        public const int ShelfFirst = 212, ShelfLast = 219;
 
         /// <summary>
         /// Before the neighbourhood is saved: each Sim's block goes into their neighbourhood entry, so it's
@@ -75,8 +82,11 @@ namespace FSO.SimAntics.Utils
 
         public enum Kind { None, PracticeWriting, WriteNovel, SurfWeb, ChatOnline, Hack, PlayTwistedMetal2 }
 
-        public static readonly string[] Genres = { "", "Romance", "Sci-Fi", "Mystery", "Fantasy", "Children's" };
-        private static readonly float[] GenrePay = { 1f, 1.2f, 1f, 1.1f, 1f, 0.8f };
+        // (the numbers are saved on the Sims: new genres only ever go on the end)
+        public static readonly string[] Genres = { "", "Romance", "Sci-Fi", "Mystery", "Fantasy", "Children's", "Horror", "Comedy" };
+        private static readonly float[] GenrePay = { 1f, 1.2f, 1f, 1.1f, 1f, 0.8f, 1.05f, 1f };
+        /// <summary>The pie menu entry that picks up the novel on the go (shown as "Continue Novel: title").</summary>
+        public const string ContinueNovelLabel = "Continue Novel";
 
         private class Entry { public Kind Kind; public int Genre; public uint PlayIndex; public string Label; }
         // per kind of computer: its new entries by pie menu number, and by name (a running action is
@@ -115,13 +125,17 @@ namespace FSO.SimAntics.Utils
 
                     var map = new Dictionary<uint, Entry>();
                     Add(ttab, ttas, play, map, "Practice Writing", Kind.PracticeWriting, 0);
-                    for (int g = 1; g < Genres.Length; g++)
+                    for (int g = 1; g <= 5; g++)
                         Add(ttab, ttas, play, map, "Write a Novel/" + Genres[g], Kind.WriteNovel, g);
                     Add(ttab, ttas, play, map, "Surf the Web", Kind.SurfWeb, 0);
                     Add(ttab, ttas, play, map, "Chat Online", Kind.ChatOnline, 0);
                     Add(ttab, ttas, play, map, "Hack", Kind.Hack, 0);
                     // games are kept together under "Play Games" (more can be added the same way: "Play Games/<name>")
                     Add(ttab, ttas, play, map, "Play Games/Twisted Metal 2", Kind.PlayTwistedMetal2, 0);
+                    // (added later: kept after the others so the older entries keep their numbers)
+                    for (int g = 6; g < Genres.Length; g++)
+                        Add(ttab, ttas, play, map, "Write a Novel/" + Genres[g], Kind.WriteNovel, g);
+                    Add(ttab, ttas, play, map, ContinueNovelLabel, Kind.WriteNovel, 0); // (genre 0: the one on the go)
                     Patched[ttab] = map;
                     PlayIndex[ttab] = play.TTAIndex;
                     ByName[ttab] = map.Values.GroupBy(x => x.Label).ToDictionary(g => g.Key, g => g.First());
@@ -261,9 +275,11 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>
         /// The pie menu for an object: on a computer, its own "Play" moves into the Play Games menu (as
-        /// Computer Games), next to Twisted Metal 2 and any games added later.
+        /// Computer Games), next to Twisted Metal 2 and any games added later. "Continue Novel" shows the
+        /// title of the novel the Sim has on the go, and isn't there when they have none. (Also used when
+        /// an interaction is checked before it's queued, so it's only ever offered with a novel to continue.)
         /// </summary>
-        public static void AdjustPie(VMEntity obj, List<VMPieMenuInteraction> pie)
+        public static void AdjustPie(VMEntity obj, List<VMPieMenuInteraction> pie, VMEntity caller = null)
         {
             try
             {
@@ -275,6 +291,12 @@ namespace FSO.SimAntics.Utils
                     if (p == null || p.Global || p.ID != play) continue;
                     if (p.Name != null && p.Name.Contains("/")) continue;
                     p.Name = ComputerGamesLabel;
+                }
+                if (pie.Any(p => p != null && !p.Global && p.Name == ContinueNovelLabel))
+                {
+                    var title = CurrentNovelTitle(caller as VMAvatar);
+                    if (title == null) pie.RemoveAll(p => p != null && !p.Global && p.Name == ContinueNovelLabel);
+                    else foreach (var p in pie) if (p != null && !p.Global && p.Name == ContinueNovelLabel) p.Name = ContinueNovelLabel + ": " + title;
                 }
             }
             catch { }
@@ -314,7 +336,7 @@ namespace FSO.SimAntics.Utils
 
             // the progress bar over their head (like studying): the next Writing level, or the novel
             if (kind == Kind.PracticeWriting) ShowProgress(ava, Get(ava, WritingSkill) >= 1000 ? 99 : Get(ava, WritingSkill) % 100);
-            else if (kind == Kind.WriteNovel) ShowProgress(ava, Get(ava, NovelGenre) == genre ? Get(ava, NovelProgress) / 10 : 0);
+            else if (kind == Kind.WriteNovel) ShowProgress(ava, (genre == 0 || Get(ava, NovelGenre) == genre) ? Get(ava, NovelProgress) / 10 : 0);
 
             // work, not play: the computer's Play routine stops once Fun is full, so while writing,
             // chatting or hacking Fun is held just below that and the Sim keeps at it until told to stop
@@ -338,32 +360,7 @@ namespace FSO.SimAntics.Utils
                     break;
 
                 case Kind.WriteNovel:
-                    {
-                        if (Get(ava, NovelGenre) != genre)
-                        {
-                            // a different story: the one on the go is put aside and this one started
-                            if (Get(ava, NovelGenre) != 0 && Get(ava, NovelProgress) > 0)
-                                Notice(ava, "A New Story", ava.Name + " put the " + Genres[Clamp(Get(ava, NovelGenre), 0, 5)] + " novel aside and started a " + Genres[genre] + " one.");
-                            Set(ava, NovelGenre, genre);
-                            Set(ava, NovelProgress, 0);
-                        }
-                        AddSkill(ava, SkillGain(level) / 3);
-                        // about 8 hours for a beginner, 3 for a master
-                        int step = Math.Max(1, (int)Math.Round(1000.0 / (60.0 * (8.0 - 0.5 * Math.Min(10, level)))));
-                        int progress = Get(ava, NovelProgress) + step;
-                        if (progress >= 1000)
-                        {
-                            int pay = (int)((200 + level * 120) * GenrePay[genre]) + (int)ctx.NextRandom(101);
-                            GiveMoney(ava, pay);
-                            Set(ava, NovelsWritten, Math.Min(30000, Get(ava, NovelsWritten) + 1));
-                            Set(ava, NovelProgress, 0);
-                            Set(ava, NovelGenre, 0);
-                            Notice(ava, "Novel Finished!", ava.Name + " finished a " + Genres[genre] + " novel" +
-                                (IsMyFamily(ava) ? " and sold it for §" + pay + "." : "."));
-                            ava.Thread.CancelAction(action.UID);
-                        }
-                        else Set(ava, NovelProgress, progress);
-                    }
+                    WriteNovel(ava, action, genre, level, ctx);
                     break;
 
                 case Kind.SurfWeb:
@@ -406,6 +403,193 @@ namespace FSO.SimAntics.Utils
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// A game minute of novel writing. "Write a Novel/genre" carries on with the novel on the go if it's
+        /// that genre, or puts it aside and starts a new one; "Continue Novel" (genre 0) carries on with the
+        /// one on the go. How fast depends on Writing and Creativity (and a little Logic); a finished novel
+        /// goes on the Sim's shelf of unsold novels (their inventory), to be sold - nothing is paid until then.
+        /// </summary>
+        private static void WriteNovel(VMAvatar ava, VMQueuedAction action, int genre, int level, VMContext ctx)
+        {
+            int current = Get(ava, NovelGenre);
+            if (genre <= 0)
+            {
+                genre = current;
+                if (genre <= 0 || genre >= Genres.Length)
+                {
+                    Notice(ava, "No Novel", ava.Name + " has no novel on the go. Start one with Write a Novel.");
+                    ava.Thread.CancelAction(action.UID);
+                    return;
+                }
+            }
+            if (genre >= Genres.Length) return;
+            if (current != genre)
+            {
+                // a different story: the one on the go is put aside and this one started
+                if (current > 0 && current < Genres.Length && Get(ava, NovelProgress) > 0)
+                    Notice(ava, "A New Story", ava.Name + " put \"" + NovelTitle(current, Math.Max(0, Get(ava, NovelSeed) - 1)) + "\" aside and started a new " + Genres[genre] + " novel.");
+                Set(ava, NovelGenre, genre);
+                Set(ava, NovelProgress, 0);
+                Set(ava, NovelSeed, 1 + (int)ctx.NextRandom(256));
+                Notice(ava, "A New Novel", ava.Name + " started writing \"" + NovelTitle(genre, Get(ava, NovelSeed) - 1) + "\", a " + Genres[genre] + " novel.");
+            }
+            else if (Get(ava, NovelSeed) <= 0) Set(ava, NovelSeed, 1 + (int)ctx.NextRandom(256)); // (one started before novels had titles)
+
+            AddSkill(ava, SkillGain(level) / 3);
+            // about 9 game hours for a beginner, down to 2.5 for a master writer with lots of Creativity
+            int creativity = Clamp(ava.GetPersonData(VMPersonDataVariable.CreativitySkill) / 100, 0, 10);
+            int logic = Clamp(ava.GetPersonData(VMPersonDataVariable.LogicSkill) / 100, 0, 10);
+            double hours = Math.Max(2.5, 9.0 - 0.35 * Math.Min(10, level) - 0.3 * creativity - 0.1 * logic);
+            int step = Math.Max(1, (int)Math.Round(1000.0 / (60.0 * hours)));
+            int progress = Get(ava, NovelProgress) + step;
+            if (progress < 1000) { Set(ava, NovelProgress, progress); return; }
+
+            // finished: how good it is comes from Creativity and Writing (and a little Logic), plus luck
+            int quality = Clamp((creativity * 45 + Math.Min(10, level) * 40 + logic * 15) / 100 + (int)ctx.NextRandom(4), 0, 15);
+            int seed = Clamp(Get(ava, NovelSeed) - 1, 0, 255);
+            var title = NovelTitle(genre, seed);
+            Set(ava, NovelsWritten, Math.Min(30000, Get(ava, NovelsWritten) + 1));
+            Set(ava, NovelProgress, 0);
+            Set(ava, NovelGenre, 0);
+            Set(ava, NovelSeed, 0);
+            int slot = -1;
+            for (int i = ShelfFirst; i <= ShelfLast; i++) if (Get(ava, i) == 0) { slot = i; break; }
+            if (slot < 0)
+            {
+                // (no room for another unsold one: this one sells straight away)
+                int pay = NovelPrice(genre, quality);
+                GiveMoney(ava, pay);
+                Notice(ava, "Novel Finished!", ava.Name + " finished \"" + title + "\"" + (IsMyFamily(ava) ? " and sold it for §" + pay + "." : "."));
+            }
+            else
+            {
+                Set(ava, slot, (genre << 12) | (quality << 8) | seed);
+                Notice(ava, "Novel Finished!", ava.Name + " finished \"" + title + "\", a " + Genres[genre] + " novel. It's in "
+                    + ava.Name + "'s inventory - sell it from there for about §" + NovelPrice(genre, quality) + ".");
+            }
+            ava.Thread.CancelAction(action.UID);
+        }
+
+        // ---- novels: titles, prices and the unsold ones ----
+
+        private static readonly string[][] TitleAdj =
+        {
+            new string[0],
+            new[] { "Tender", "Secret", "Forbidden", "Endless", "Midnight", "Summer", "Stolen", "Sweet", "Wild", "Golden", "Reckless", "Silken" },
+            new[] { "Final", "Silent", "Distant", "Quantum", "Neon", "Frozen", "Hollow", "Infinite", "Crimson", "Lost", "Electric", "Fallen" },
+            new[] { "Silent", "Missing", "Last", "Crooked", "Hidden", "Poisoned", "Locked", "Broken", "Velvet", "Twelfth", "Shadowed", "Quiet" },
+            new[] { "Dragon's", "Emerald", "Sorcerer's", "Ancient", "Shattered", "Enchanted", "Silver", "Iron", "Wandering", "Thorned", "Moonlit", "Seventh" },
+            new[] { "Very Hungry", "Brave Little", "Sleepy", "Silly", "Magic", "Giant", "Tiny", "Curious", "Grumpy", "Happy", "Purple", "Lost" },
+            new[] { "Crawling", "Hungry", "Bleeding", "Whispering", "Rotting", "Faceless", "Cursed", "Restless", "Grinning", "Drowned", "Buried", "Hollow" },
+            new[] { "Accidental", "Awkward", "Unlikely", "Hopeless", "Ridiculous", "Totally Normal", "Slightly Haunted", "Overdue", "Misplaced", "Fabulous", "Unpaid", "Second-Hand" },
+        };
+        private static readonly string[][] TitleNoun =
+        {
+            new string[0],
+            new[] { "Kiss", "Heart", "Promise", "Embrace", "Rose", "Longing", "Desire", "Vow", "Waltz", "Affair", "Letter", "Garden" },
+            new[] { "Frontier", "Signal", "Colony", "Machine", "Star", "Horizon", "Android", "Orbit", "Nebula", "Protocol", "Moon", "Fleet" },
+            new[] { "Witness", "Key", "Alibi", "Clue", "Verdict", "Butler", "Inheritance", "Room", "Shadow", "Confession", "Diamond", "Stranger" },
+            new[] { "Crown", "Sword", "Kingdom", "Prophecy", "Tower", "Quest", "Throne", "Grimoire", "Forest", "Oath", "Realm", "Heir" },
+            new[] { "Bear", "Dragon", "Caterpillar", "Robot", "Pony", "Llama", "Puppy", "Tugboat", "Monster", "Penguin", "Treehouse", "Kitten" },
+            new[] { "House", "Thing", "Doll", "Hunger", "Cellar", "Visitor", "Night", "Grave", "Mirror", "Asylum", "Lake", "Attic" },
+            new[] { "Wedding", "Llama", "Vacation", "Plumber", "Neighbor", "Diet", "Mustache", "Landlord", "Haircut", "Barbecue", "Pizza", "Gnome" },
+        };
+        private static readonly string[][] TitleTail =
+        {
+            new string[0],
+            new[] { "in Paris", "by Moonlight", "at Dawn", "Under the Stars", "on Sim Lane", "After Dark" },
+            new[] { "of Andromeda", "Beyond Tomorrow", "in Zero Gravity", "of the Void", "on Mars", "from Planet X" },
+            new[] { "at Midnight", "on the Night Train", "in the Library", "at Pleasantview Manor", "of the Old Pier", "in Room 13" },
+            new[] { "of the North", "of Ashes", "Beyond the Mountains", "of the Elves", "in the Mist", "of Seven Kingdoms" },
+            new[] { "Goes to School", "Finds a Friend", "Learns to Share", "Saves the Day", "Can't Sleep", "Goes to the Moon" },
+            new[] { "Beneath the Floor", "in the Dark", "Next Door", "That Wouldn't Die", "at the End of the Road", "Under the Bed" },
+            new[] { "Goes Wrong", "Strikes Again", "for Dummies", "Ruins Everything", "on Vacation", "and Other Disasters" },
+        };
+
+        /// <summary>A novel's title from its genre and title seed (0-255): the same seed always gives the same title.</summary>
+        public static string NovelTitle(int genre, int seed)
+        {
+            if (genre <= 0 || genre >= TitleAdj.Length) return "Untitled";
+            seed &= 255;
+            var adj = TitleAdj[genre]; var noun = TitleNoun[genre]; var tail = TitleTail[genre];
+            int h = seed * 2654435 + 12345;
+            string a = adj[(seed + h / 7 % 13) % adj.Length], n = noun[(seed * 7 + 3) % noun.Length], t = tail[(seed / 3 + seed * 5) % tail.Length];
+            switch ((seed / 5) % 4)
+            {
+                case 0: return "The " + a + " " + n;
+                case 1: return "The " + n + " " + t;
+                case 2: return a + " " + n + " " + t;
+                default: return "The " + a + " " + n + " " + t;
+            }
+        }
+
+        /// <summary>What a finished novel sells for: its quality (0-15) and genre.</summary>
+        public static int NovelPrice(int genre, int quality)
+        {
+            if (genre <= 0 || genre >= GenrePay.Length) return 0;
+            return (int)((150 + Clamp(quality, 0, 15) * 95) * GenrePay[genre]);
+        }
+
+        /// <summary>The title of the novel a Sim has on the go, or null if none.</summary>
+        public static string CurrentNovelTitle(VMAvatar ava)
+        {
+            if (ava == null) return null;
+            int genre = Get(ava, NovelGenre);
+            if (genre <= 0 || genre >= Genres.Length) return null;
+            int seed = Get(ava, NovelSeed);
+            // (one started before novels had titles gets its title as soon as they write on it again)
+            if (seed <= 0) return "a " + Genres[genre] + " novel (" + Get(ava, NovelProgress) / 10 + "%)";
+            return NovelTitle(genre, seed - 1) + " (" + Get(ava, NovelProgress) / 10 + "%)";
+        }
+
+        /// <summary>A finished novel not sold yet.</summary>
+        public class Novel
+        {
+            public int Slot, Genre, Quality, Seed, Price;
+            public string Title;
+            public string GenreName { get { return Genres[Genre]; } }
+        }
+
+        /// <summary>A Sim's finished novels not sold yet (shown in their inventory).</summary>
+        public static List<Novel> Novels(VMAvatar ava)
+        {
+            var list = new List<Novel>();
+            if (ava == null) return list;
+            for (int i = ShelfFirst; i <= ShelfLast; i++)
+            {
+                var n = ReadNovel(ava, i);
+                if (n != null) list.Add(n);
+            }
+            return list;
+        }
+
+        private static Novel ReadNovel(VMAvatar ava, int slot)
+        {
+            if (slot < ShelfFirst || slot > ShelfLast) return null;
+            int v = Get(ava, slot);
+            if (v <= 0) return null;
+            int genre = (v >> 12) & 7, quality = (v >> 8) & 15, seed = v & 255;
+            if (genre <= 0 || genre >= Genres.Length) return null;
+            return new Novel { Slot = slot, Genre = genre, Quality = quality, Seed = seed, Title = NovelTitle(genre, seed), Price = NovelPrice(genre, quality) };
+        }
+
+        /// <summary>Can this Sim sell the novel in this slot? (VMNetReduxNovelCmd)</summary>
+        public static bool CanSellNovel(VMAvatar ava, int slot)
+        {
+            return ava != null && !ava.Dead && ReadNovel(ava, slot) != null;
+        }
+
+        /// <summary>Sells a finished novel from a Sim's inventory: the family gets its price. (VMNetReduxNovelCmd, run by every player's game alike.)</summary>
+        public static bool SellNovel(VMAvatar ava, int slot)
+        {
+            var n = ReadNovel(ava, slot);
+            if (n == null) return false;
+            Set(ava, slot, 0);
+            GiveMoney(ava, n.Price);
+            Notice(ava, "Novel Sold", ava.Name + " sold \"" + n.Title + "\"" + (IsMyFamily(ava) ? " for §" + n.Price + "." : "."));
+            return true;
         }
 
         /// <summary>

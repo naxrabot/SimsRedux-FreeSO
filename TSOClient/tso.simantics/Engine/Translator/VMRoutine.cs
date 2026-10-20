@@ -29,7 +29,7 @@ namespace FSO.SimAntics
         /// </summary>
         public sbyte ReduxKind = -1;
         public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
-            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5;
+            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6;
 
         public sbyte GetReduxKind()
         {
@@ -42,6 +42,7 @@ namespace FSO.SimAntics
                 else if (label.IndexOf("due at work", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindDueAtWork;
                 else if (label.IndexOf("warnings car pool", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindCarPool;
                 else if (label.IndexOf("school bus schedule", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindSchoolBus;
+                else if (label.StartsWith("is this car for", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindCarForSim;
                 else kind = ReduxKindNone;
                 ReduxKind = kind;
             }
@@ -68,7 +69,7 @@ namespace FSO.SimAntics
                         if (keep < 0) return VMPrimitiveExitCode.GOTO_FALSE; // (a need is low: they stop)
                     }
                     // SimsRedux: days off work (Utils/ReduxWeek.cs)
-                    else if (kind == ReduxKindDueAtWork || kind == ReduxKindCarPool || kind == ReduxKindSchoolBus)
+                    else if (kind == ReduxKindDueAtWork || kind == ReduxKindCarPool || kind == ReduxKindSchoolBus || kind == ReduxKindCarForSim)
                     {
                         var off = FSO.SimAntics.Utils.ReduxWeek.DayOff(frame, opcode);
                         if (off < 0) return VMPrimitiveExitCode.GOTO_FALSE;

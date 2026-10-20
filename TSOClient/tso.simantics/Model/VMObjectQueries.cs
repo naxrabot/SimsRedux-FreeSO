@@ -237,7 +237,10 @@ namespace FSO.SimAntics.Model
             if (obj is VMAvatar)
             {
                 Avatars.Remove(obj);
-                AvatarsByPersist.Remove(obj.PersistID);
+                // SimsRedux: only forget the id if it's this Sim's - a townie leaving with an old copy of
+                // the player's id used to make the player's own Sim unfindable (no face, no needs)
+                VMAvatar held;
+                if (AvatarsByPersist.TryGetValue(obj.PersistID, out held) && held == obj) AvatarsByPersist.Remove(obj.PersistID);
             }
             else if (obj.PersistID > 0 && obj.MultitileGroup.Objects.Count == 1)
             {

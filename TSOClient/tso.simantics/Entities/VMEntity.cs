@@ -976,7 +976,7 @@ namespace FSO.SimAntics
                         actionS.Entry = ia;
                         actionS.Global = global;
                     }
-                    FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, actionStrings); // SimsRedux
+                    FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, actionStrings, caller); // SimsRedux
                     FSO.SimAntics.Utils.ReduxLeftovers.AdjustPie(this, actionStrings);
                 }
                 else
@@ -1058,7 +1058,7 @@ namespace FSO.SimAntics
                 }
             }
 
-            FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, pie); // SimsRedux: the computer's Play goes under Play Games
+            FSO.SimAntics.Utils.ReduxComputer.AdjustPie(this, pie, caller); // SimsRedux: the computer's Play goes under Play Games
             FSO.SimAntics.Utils.ReduxLeftovers.AdjustPie(this, pie); // SimsRedux: leftovers
             return pie;
         }

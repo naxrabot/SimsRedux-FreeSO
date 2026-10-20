@@ -7,7 +7,7 @@ namespace FSO.SimAntics.Utils
     /// <summary>
     /// SimsRedux: Sims get better at things by doing them (The Sims 2 way), not only by studying.
     /// Cooking a meal raises Cooking, repairing raises Mechanical, chatting and joking raise Charisma,
-    /// swimming and dancing raise Body, stargazing raises Logic. Slower than studying, and slower the
+    /// swimming, dancing and shooting hoops raise Body, stargazing raises Logic. Slower than studying, and slower the
     /// better they already are. A game minute at a time while the Sim is actually doing it (not while
     /// walking over), kept on the Sim (person data), so every player in an online house agrees.
     /// </summary>
@@ -19,18 +19,23 @@ namespace FSO.SimAntics.Utils
         private struct Rule
         {
             public string[] Words;
+            /// <summary>If set, only on an object whose name has one of these (the hoop's "Play" isn't the pool table's).</summary>
+            public string[] Objects;
             public VMPersonDataVariable Skill;
             public string Name;
             public float Speed; // 1 = one level in 2 game hours for a beginner
-            public Rule(VMPersonDataVariable skill, string name, float speed, params string[] words) { Skill = skill; Name = name; Speed = speed; Words = words; }
+            public Rule(VMPersonDataVariable skill, string name, float speed, params string[] words) { Skill = skill; Name = name; Speed = speed; Words = words; Objects = null; }
+            public Rule(string[] objects, VMPersonDataVariable skill, string name, float speed, params string[] words) : this(skill, name, speed, words) { Objects = objects; }
         }
 
         private static readonly Rule[] Rules =
         {
+            // (sports objects first: their interactions are just "Play" / "Join")
+            new Rule(new[] { "basketball", "volleyball", "tetherball", "trampoline" }, VMPersonDataVariable.BodySkill, "Body", 0.7f, "play", "join", "shoot", "practice", "dunk", "jump", "bounce"),
             new Rule(VMPersonDataVariable.CookingSkill, "Cooking", 1f, "have a meal", "serve meal", "have lite meal", "cook", "prepare", "make breakfast", "make lunch", "make dinner", "grill", "bake", "barbecue", "flip"),
             new Rule(VMPersonDataVariable.MechanicalSkill, "Mechanical", 1f, "repair", "fix", "unclog", "tinker"),
             new Rule(VMPersonDataVariable.CharismaSkill, "Charisma", 0.3f, "talk", "joke", "entertain", "tell ", "flirt", "compliment", "brag", "chat", "gossip"),
-            new Rule(VMPersonDataVariable.BodySkill, "Body", 0.7f, "swim", "dance", "jog"),
+            new Rule(VMPersonDataVariable.BodySkill, "Body", 0.7f, "swim", "dance", "jog", "basketball", "shoot hoops", "volleyball", "snowboard", "skate", "hike"),
             // (no Logic rule: the telescope already teaches Logic by itself)
         };
 
@@ -80,12 +85,22 @@ namespace FSO.SimAntics.Utils
             catch (Exception) { }
         }
 
-        private static int FindRule(string name)
+        private static int FindRule(string name, VMEntity obj)
         {
             name = name.ToLowerInvariant();
+            string objName = null;
             for (int i = 0; i < Rules.Length; i++)
+            {
+                if (Rules[i].Objects != null)
+                {
+                    if (objName == null) objName = (obj?.Object?.OBJ?.ChunkLabel ?? "").ToLowerInvariant();
+                    bool onIt = false;
+                    foreach (var o in Rules[i].Objects) if (objName.Contains(o)) { onIt = true; break; }
+                    if (!onIt) continue;
+                }
                 foreach (var w in Rules[i].Words)
                     if (name.Contains(w)) return i;
+            }
             return -1;
         }
 
@@ -101,7 +116,7 @@ namespace FSO.SimAntics.Utils
                 //  the name and searched it for ~30 words every tick for every Sim)
                 if (action.ReduxSkillRule < -1 || !ReferenceEquals(action.ReduxSkillRuleName, name))
                 {
-                    action.ReduxSkillRule = (sbyte)FindRule(name);
+                    action.ReduxSkillRule = (sbyte)FindRule(name, action.Callee);
                     action.ReduxSkillRuleName = name;
                 }
                 int found = action.ReduxSkillRule;

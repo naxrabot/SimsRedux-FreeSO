@@ -599,7 +599,8 @@ namespace FSO.SimAntics.Primitives
             try
             {
                 var job = sim.GetPersonData(VMPersonDataVariable.JobType);
-                if (job > 0 && !sim.IsChild)
+                // (not on a day off - no car pool comes: Utils/ReduxWeek.cs)
+                if (job > 0 && !sim.IsChild && (!vm.TS1 || FSO.SimAntics.Utils.ReduxWeek.Works(job, FSO.SimAntics.Utils.ReduxWeek.Day(vm.Context.Clock))))
                 {
                     var lvl = Content.Content.Get().Jobs?.GetJobLevel(job, sim.GetPersonData(VMPersonDataVariable.JobPromotionLevel));
                     if (lvl != null)

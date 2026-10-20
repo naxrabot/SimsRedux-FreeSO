@@ -38,6 +38,16 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 caller.PersistID = 0;
             }
 
+            // SimsRedux: a player controls one Sim. Any other Sim still holding this player's id (the
+            // lot's start-up gave it out twice, or the id lookup had lost track of the old Sim) lets go
+            // too - two Sims with one id left the plumbob, face and needs on different Sims, or none.
+            if (ActorUID != 0)
+            {
+                foreach (var other in vm.Context.ObjectQueries.Avatars)
+                    if (other != target && other.PersistID == ActorUID) other.PersistID = 0;
+                vm.Context.ObjectQueries.RemoveAvatarPersist(ActorUID);
+            }
+
             // (a leftover id from an earlier visit is forgotten, so it can't point at this Sim any more)
             if (target.PersistID != 0 && target.PersistID != ActorUID) vm.Context.ObjectQueries.RemoveAvatarPersist(target.PersistID);
             target.PersistID = ActorUID;
