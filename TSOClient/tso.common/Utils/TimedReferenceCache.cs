@@ -162,7 +162,7 @@ namespace FSO.Common.Utils
                 //i made this. if we're perma cache ensure a permanent reference.
                 if (TimedReferenceController.CurrentType == CacheType.PERMANENT)
                 {
-                    PermaRef.Add(created);
+                    lock (PermaRef) PermaRef.Add(created); // (SimsRedux: the catalog's picture thread loads objects too)
                     PermaMode = true;
                 }
                 return created;
