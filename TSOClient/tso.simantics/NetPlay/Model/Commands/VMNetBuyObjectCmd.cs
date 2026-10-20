@@ -137,6 +137,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public override bool Verify(VM vm, VMAvatar caller)
         {
             if (Verified) return true; //set internally when transaction succeeds. trust that the verification happened.
+            // SimsRedux: the server's Item Editor - a deleted item can't be bought by anyone, a developer item only by an
+            // Admin: online, a player whose town account is an Admin (vm.ReduxAdmins); here, this game's own player
+            // (single player, or the host's own game). Placed ones still sell as usual.
+            if (vm.TS1 && Content.TS1.ReduxCatalogOverrides.Refuses(GUID, FromNet ? vm.ReduxAdmins.Contains(ActorUID) : Content.TS1.ReduxCatalogOverrides.ShowDev)) return false;
             value = 0; //do not trust value from net
             if (!vm.TS1)
             {

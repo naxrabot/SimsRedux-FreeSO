@@ -500,6 +500,13 @@ namespace FSO.SimAntics.Engine
 #endif
 
                 if (e is ThreadAbortException) throw e;
+                // SimsRedux soak test: told about every exception (before the dialog cooldown, so none go uncounted).
+                // Null outside the soak test; it only looks, never changes anything.
+                var onException = ReduxOnException;
+                if (onException != null)
+                {
+                    try { onException(this, Entity, e, (Stack.Count > 0) ? Stack[Stack.Count - 1] : null); } catch { }
+                }
                 // full details for the console - once per error dialog: a script failing every tick wrote its whole
                 // stack trace every tick (slow, especially in the browser), while the dialog was shown once (SimsRedux)
                 if (DialogCooldown == 0) Console.WriteLine("[SimsRedux] SimAntics exception in " + Entity?.ToString() + ": " + e);
@@ -537,6 +544,18 @@ namespace FSO.SimAntics.Engine
                 }
             }
 #endif
+        }
+
+        /// <summary>
+        /// SimsRedux soak test: called for every SimAntics exception a thread catches (thread, its entity, the
+        /// exception, the frame that was running or null). Null unless the soak test is running.
+        /// </summary>
+        public static Action<VMThread, VMEntity, Exception, VMStackFrame> ReduxOnException;
+
+        /// <summary>SimsRedux soak test: which values the failing line was reading (as the exception dialog shows them).</summary>
+        public string ReduxDescribeFailure(VMStackFrame context)
+        {
+            return (context == null) ? "" : DescribeFailure(context);
         }
 
         /// <summary>

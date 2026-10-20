@@ -189,6 +189,10 @@ namespace FSO.Content.TS1
                 if (priced > 0) Console.WriteLine("[SimsRedux] " + priced + " Buy items had no price - priced like similar items");
             }
             catch (Exception e) { Console.WriteLine("[SimsRedux] pricing free Buy items: " + e.Message); }
+            // SimsRedux: the server's Item Editor - its names, prices and descriptions, and developer-only and deleted
+            // items kept out of Buy and Build mode (see ReduxCatalogOverrides; they may arrive later and are applied then)
+            try { ReduxCatalogOverrides.Attach(ItemsByCategory, ItemsByGUID); }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] item changes: " + e.Message); }
             var globalSims = Entries.Values.Where(x => x.GlobalSimObject);
             ControllerObjects.Clear();
             ControllerObjects.AddRange(globalSims);
