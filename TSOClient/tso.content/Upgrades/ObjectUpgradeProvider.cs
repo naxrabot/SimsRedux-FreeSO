@@ -45,8 +45,17 @@ namespace FSO.Content.Upgrades
 
         public void SaveJSONTuning()
         {
-            var result = JsonConvert.SerializeObject(ActiveFile);
-            FSOFile.WriteAllText("Content/upgrades.json", result);
+            // SimsRedux: the game's Content folder may not be writable (the Mac app's is inside its signed bundle,
+            // the browser's is the website's) - not being able to keep the tuning mustn't stop the game
+            try
+            {
+                var result = JsonConvert.SerializeObject(ActiveFile);
+                FSOFile.WriteAllText("Content/upgrades.json", result);
+            }
+            catch (System.Exception e)
+            {
+                System.Console.WriteLine("[SimsRedux] couldn't save Content/upgrades.json: " + e.Message);
+            }
         }
 
         public void LoadNetTuning(byte[] data)
