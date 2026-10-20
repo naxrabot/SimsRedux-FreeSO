@@ -105,7 +105,7 @@ namespace FSO.Common.Utils
                 var oldDS = gd.DepthStencilState;
                 //completely special case.
                 SetTarget(gd, color);
-                gd.DepthStencilState = SWColorState(forceDepth, StencilValue);
+                gd.DepthStencilState = SWColorState(gd, forceDepth, StencilValue);
                 effect.Parameters["depthMap"]?.SetValue(depth);
                 effect.Parameters["depthOutMode"]?.SetValue(false);
                 proc(false);
@@ -116,7 +116,7 @@ namespace FSO.Common.Utils
                 effect.Parameters["depthMap"]?.SetValue((Texture2D)null);
                 effect.Parameters["depthOutMode"]?.SetValue(true);
                 SetTarget(gd, depth);
-                gd.DepthStencilState = SWDepthState(forceDepth, StencilValue);
+                gd.DepthStencilState = SWDepthState(gd, forceDepth, StencilValue);
                 proc(true);
 
                 gd.DepthStencilState = oldDS;
@@ -149,9 +149,21 @@ namespace FSO.Common.Utils
         // they only differ by the stencil number (1-255) and whether depth is forced, so each is made once.
         private static DepthStencilState[] SWColorStates = new DepthStencilState[512];
         private static DepthStencilState[] SWDepthStates = new DepthStencilState[512];
+        // (a state is tied to the graphics device it was first used on: a new device - the graphics lost and made
+        //  again - gets new ones, like TextureUtils' ScaleBatchFor and RebindScratch)
+        private static GraphicsDevice SWStatesDevice;
 
-        private static DepthStencilState SWColorState(bool forceDepth, int stencil)
+        private static void SWStatesFor(GraphicsDevice gd)
         {
+            if (SWStatesDevice == gd) return;
+            SWStatesDevice = gd;
+            SWColorStates = new DepthStencilState[512];
+            SWDepthStates = new DepthStencilState[512];
+        }
+
+        private static DepthStencilState SWColorState(GraphicsDevice gd, bool forceDepth, int stencil)
+        {
+            SWStatesFor(gd);
             int i = (forceDepth ? 256 : 0) + (stencil & 255);
             var s = SWColorStates[i];
             if (s != null) return s;
@@ -177,8 +189,9 @@ namespace FSO.Common.Utils
             return s;
         }
 
-        private static DepthStencilState SWDepthState(bool forceDepth, int stencil)
+        private static DepthStencilState SWDepthState(GraphicsDevice gd, bool forceDepth, int stencil)
         {
+            SWStatesFor(gd);
             int i = (forceDepth ? 256 : 0) + (stencil & 255);
             var s = SWDepthStates[i];
             if (s != null) return s;

@@ -1239,12 +1239,9 @@ namespace FSO.LotView
                 Blueprint.Terrain?.Dispose();
                 Blueprint.RoofComp?.Dispose();
             }
-            if (!(this is SubWorldComponent))
-            {
-                // SimsRedux: the lot's objects are gone - their recoloured and monitor pictures go with them
-                try { Utils.ReduxTint.LotClosed(); } catch (Exception e) { Console.WriteLine("[SimsRedux] tint cache: " + e.Message); }
-                try { Utils.ReduxScreens.LotClosed(); } catch (Exception e) { Console.WriteLine("[SimsRedux] screen cache: " + e.Message); }
-            }
+            // SimsRedux: the recoloured and monitor picture caches (ReduxTint, ReduxScreens) are shared by every World -
+            // they're cleared by the lot screen when the lot's own world goes (TS1GameScreen), not here: a preview
+            // world (Create a Sim, a house picture) going away mustn't take the open lot's pictures with it
             GraphicsModeControl.ModeChanged -= SetGraphicsMode;
         }
     }
