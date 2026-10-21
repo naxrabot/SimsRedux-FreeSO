@@ -39,6 +39,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public override bool Execute(VM vm, VMAvatar caller)
         {
             //careful here! if the object can't be placed, we have to put their object back
+            // SimsRedux: a Sims 1 lot has no inventory (and no TSO object state) - turned down, never a crash
+            if (vm.TS1) return false;
             if (!vm.Context.ObjectQueries.MultitileByPersist.ContainsKey(Info.GUID) && TryPlace(vm, caller))
             {
                 if (CreatedGroup.BaseObject is VMGameObject)
@@ -191,6 +193,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         /// <returns></returns>
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            if (vm.TS1) return false; // SimsRedux: no inventory on a Sims 1 lot
             if (Verified) return true; //set internally when transaction succeeds. trust that the verification happened.
             //typically null caller, non-roommate cause failure. some lot specific things may apply.
             Mode = vm.PlatformState.Validator.GetPurchaseMode(Mode, caller, 0, true);

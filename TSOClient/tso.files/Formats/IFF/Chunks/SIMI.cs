@@ -84,7 +84,9 @@ namespace FSO.Files.Formats.IFF.Chunks
                 io.WriteInt32(0);
                 io.WriteInt32(0x3E);
                 io.WriteCString("IMIS", 4);
-                var items = (Version > 0x3E) ? 0x40 : 0x20;
+                // SimsRedux: always written as version 0x3E, which Read takes as 32 globals - writing 64 here (when the
+                // loaded file was newer) made the saved lot unreadable (EndOfStream reading it back).
+                var items = 0x20;
 
                 GlobalData = new short[38];
 

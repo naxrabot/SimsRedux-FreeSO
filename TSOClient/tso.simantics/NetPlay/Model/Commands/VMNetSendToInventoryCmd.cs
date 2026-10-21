@@ -17,6 +17,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             //inventory move completed in verification, delete it now.
             //TODO: some modes for this command. LOCK object (so it cannot be used while we save it), DELETE LOCKED, UNLOCK object (something bad happened)
 
+            // SimsRedux: a Sims 1 lot has no inventory (and its objects no TSO state) - turned down, never a crash
+            if (vm.TS1) return false;
             var obj = vm.GetObjectByPersist(ObjectPID);
             if (obj != null && obj is VMGameObject)
             {
@@ -52,6 +54,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            if (vm.TS1) return false; // SimsRedux: no inventory on a Sims 1 lot
             if (Verified) return true;
             if (ObjectPID == 0) return false;
             var targObj = vm.GetObjectByPersist(ObjectPID);
