@@ -159,7 +159,7 @@ namespace FSO.Common.Rendering.Framework
             // pictures differently), so the Mac uses its own system pointers - the normal arrow, a hand, a wait cursor...
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
             {
-                foreach (CursorType t in Enum.GetValues(typeof(CursorType))) m_CursorMap[t] = new CursorGroup(SystemCursorFor(t));
+                foreach (CursorType t in System.Enum.GetValues(typeof(CursorType))) m_CursorMap[t] = new CursorGroup(SystemCursorFor(t));
                 CurrentCursor = (CursorType)(-1);
                 SetCursor(CursorType.Normal);
                 return;
