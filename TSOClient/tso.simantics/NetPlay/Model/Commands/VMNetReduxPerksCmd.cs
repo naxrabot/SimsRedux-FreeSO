@@ -40,6 +40,19 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         kv.Value.MaidDay = had.MaidDay; kv.Value.GardenerDay = had.GardenerDay;
                         kv.Value.MaidUsed = had.MaidUsed; kv.Value.GardenerUsed = had.GardenerUsed;
                     }
+                    // (a family that drops out of the table - e.g. its free days ran out and it has no other perks -
+                    //  keeps its counters here, so if it comes back its free days used on this lot still count as used)
+                    if (vm.ReduxPerks != null)
+                        foreach (var kv in vm.ReduxPerks.Families)
+                        {
+                            if (next.Families.ContainsKey(kv.Key)) continue;
+                            var had = kv.Value;
+                            if (had.MaidUsed == 0 && had.GardenerUsed == 0 && had.MaidDay < 0 && had.GardenerDay < 0) continue;
+                            next.Families[kv.Key] = new VMReduxPerks.Entry
+                            {
+                                MaidUsed = had.MaidUsed, GardenerUsed = had.GardenerUsed, MaidDay = had.MaidDay, GardenerDay = had.GardenerDay,
+                            };
+                        }
                     vm.ReduxPerks = next;
                     return true;
                 case PerkAction.Money:

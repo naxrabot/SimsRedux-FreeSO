@@ -30,7 +30,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var pos = baseObj.Position;
             var dir = baseObj.Direction;
             var oldPrice = group.InitialPrice;
-            var newPrice = CatalogPrice(NewGUID);
+            // SimsRedux: the new one remembers what was really paid for it - the old one's remembered price plus the
+            // difference charged here (never the full catalog price, or a Buy mode discount + swap + sell makes money).
+            // Difference comes from the lot (Verify) with the command, so every game sets the same price.
+            var newPrice = Math.Max(0, oldPrice + Difference);
 
             // SimsRedux: the old one is only set aside (off the lot) while the new one is tried, so if the new
             // one doesn't fit, the very same object goes back - keeping its state (colour, wear, what's in it) -
@@ -112,6 +115,21 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             return false;
         }
 
+        /// <summary>
+        /// What the family pays (+) or gets back (-) for swapping this object for newGUID: the difference of the two
+        /// catalog prices - but never more back than the object is remembered as costing (it may have been bought with
+        /// a discount). The new one then remembers the old price plus this.
+        /// </summary>
+        public static int PriceDifference(VMEntity obj, uint newGUID)
+        {
+            var group = obj?.MultitileGroup;
+            if (group == null || group.BaseObject == null) return 0;
+            var oldGUID = (group.MultiTile) ? group.BaseObject.MasterDefinition.GUID : group.BaseObject.Object.OBJ.GUID;
+            var diff = CatalogPrice(newGUID) - CatalogPrice(oldGUID);
+            if (diff < 0) diff = Math.Max(diff, -Math.Max(0, group.InitialPrice));
+            return diff;
+        }
+
         private static int CatalogPrice(uint guid)
         {
             var item = Content.Content.Get().WorldCatalog.GetItemByGUID(guid);
@@ -127,7 +145,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var oldGUID = (group.MultiTile) ? group.BaseObject.MasterDefinition.GUID : group.BaseObject.Object.OBJ.GUID;
             if (oldGUID == NewGUID) return false;
 
-            Difference = CatalogPrice(NewGUID) - CatalogPrice(oldGUID);
+            Difference = PriceDifference(obj, NewGUID);
             if (Difference == 0 || vm.GlobalLink == null)
             {
                 Verified = true;

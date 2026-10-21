@@ -31,6 +31,16 @@ namespace FSO.SimAntics.Utils
 
             public Entry Clone() { return (Entry)MemberwiseClone(); }
 
+            /// <summary>Any effect at all (false: only the lot's own free-day counters are kept - see VMNetReduxPerksCmd).</summary>
+            public bool HasEffects
+            {
+                get
+                {
+                    return Skill != 0 || Decay != 0 || Bills != 0 || Buy != 0 || Job != 0 || Plumbob != 0 || NameColor != 0
+                        || !string.IsNullOrEmpty(Badge) || !string.IsNullOrEmpty(Title) || Maid > 0 || Gardener > 0;
+                }
+            }
+
             /// <summary>The same effects (the used counters and days aside - those are the lot's own).</summary>
             public bool SameAs(Entry o)
             {
@@ -57,10 +67,14 @@ namespace FSO.SimAntics.Utils
             return c;
         }
 
+        /// <summary>The same effects for the same families (families with no effects - only free-day counters kept - aside).</summary>
         public bool SameAs(VMReduxPerks o)
         {
-            if (o == null || o.Families.Count != Families.Count) return false;
-            foreach (var kv in Families) if (!o.Families.TryGetValue(kv.Key, out var e) || !kv.Value.SameAs(e)) return false;
+            if (o == null) return false;
+            foreach (var kv in Families)
+                if (kv.Value.HasEffects && (!o.Families.TryGetValue(kv.Key, out var e) || !kv.Value.SameAs(e))) return false;
+            foreach (var kv in o.Families)
+                if (kv.Value.HasEffects && (!Families.TryGetValue(kv.Key, out var e) || !e.SameAs(kv.Value))) return false;
             return true;
         }
 
@@ -236,11 +250,11 @@ namespace FSO.SimAntics.Utils
                 var vm = context?.VM;
                 var e = OfLotFamily(vm);
                 if (e == null) return amount;
-                var what = Words(context);
-                if (e.Bills > 0 && what.Contains("bill") && !what.Contains("billiard"))
-                    return amount - amount * Math.Min((int)e.Bills, 100) / 100;
-                bool maid = what.Contains("maid") || what.Contains("housekeep");
-                bool gardener = !maid && what.Contains("garden");
+                var what = Payee(context);
+                if (what == PayeeKind.Bills)
+                    return (e.Bills > 0) ? amount - amount * Math.Min((int)e.Bills, 100) / 100 : amount;
+                bool maid = what == PayeeKind.Maid;
+                bool gardener = what == PayeeKind.Gardener;
                 if (!maid && !gardener) return amount;
                 var clock = vm.Context.Clock;
                 int day = clock.Year * 400 + clock.Month * 32 + clock.DayOfMonth;
@@ -259,26 +273,35 @@ namespace FSO.SimAntics.Utils
             catch { return amount; }
         }
 
-        /// <summary>
-        /// What's paying, in lower case: the action being done (its name and script), the script running, who runs it
-        /// and its object (the game's own English names - every game on the lot has the same files).
-        /// </summary>
-        private static string Words(VMStackFrame context)
+        private enum PayeeKind { Other, Bills, Maid, Gardener }
+
+        // (from the game files - the same in every language and on every game: object GUIDs and BHAV labels,
+        //  never a Sim's name or an interaction's (translated) name, which a player could pick or that differ by language)
+        private const uint BillsGUID = 0xD840F488;      // Bills.iff "Bills" - its "Pay Bills" trees, the overdue/evict ones
+        private const string MailboxPayBills = "CT - Pay Bills"; // MailBox.iff: where the bills are actually paid
+        private const uint MaidGUID = 0xC61931DC;       // People/maid.iff "NPC Maid"
+        private const uint GardenerGUID = 0xD62B91B4;   // People/gardener.iff "NPC Gardener"
+
+        private static uint GuidOf(VMEntity ent)
         {
-            var parts = new List<string>();
-            var action = context.Thread?.ActiveAction;
-            if (action != null) { parts.Add(action.Name); parts.Add(action.ActionRoutine?.Chunk?.ChunkLabel); }
-            parts.Add(context.Routine?.Chunk?.ChunkLabel);
-            parts.Add(context.Routine?.Rti?.Name);
-            var caller = context.Caller;
-            if (caller != null)
-            {
-                parts.Add((caller as VMAvatar)?.Name);
-                parts.Add(caller.Object?.OBJ?.ChunkLabel);
-                try { parts.Add(caller.Object?.Resource?.MainIff?.Filename); } catch { }
-            }
-            try { parts.Add(context.CodeOwner?.Resource?.MainIff?.Filename); } catch { }
-            return string.Join("|", parts.Where(p => !string.IsNullOrEmpty(p))).ToLowerInvariant();
+            try { return ent?.Object?.OBJ?.GUID ?? 0; } catch { return 0; }
+        }
+
+        /// <summary>
+        /// Who this money is for, from the game files only: the bills (the Bills object's own code, or the mailbox's
+        /// "CT - Pay Bills" tree), or the maid / gardener (their own code - "get paid", "leave", "Dismiss" - or code
+        /// run by them: the NPC controller's "normal take" that the game's "NPC Get Paid" runs on their thread).
+        /// </summary>
+        private static PayeeKind Payee(VMStackFrame context)
+        {
+            uint owner = 0;
+            try { owner = context.CodeOwner?.OBJ?.GUID ?? 0; } catch { owner = 0; }
+            var label = (context.Routine?.Chunk?.ChunkLabel ?? "").TrimEnd('\0').Trim();
+            if (owner == BillsGUID || label == MailboxPayBills) return PayeeKind.Bills;
+            var caller = GuidOf(context.Caller); // (the Sim whose thread this is)
+            if (owner == MaidGUID || caller == MaidGUID) return PayeeKind.Maid;
+            if (owner == GardenerGUID || caller == GardenerGUID) return PayeeKind.Gardener;
+            return PayeeKind.Other;
         }
 
         // ---------------------------------------------------------------- money and gifts (VMNetReduxPerksCmd)

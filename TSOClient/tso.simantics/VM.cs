@@ -106,6 +106,13 @@ namespace FSO.SimAntics
         /// </summary>
         public FSO.SimAntics.Utils.ReduxHeldObjects ReduxHeld = new FSO.SimAntics.Utils.ReduxHeldObjects();
         private string ReduxHeldNoticed; // (which held objects the player was last told about - once per lot, not on every reload)
+        /// <summary>
+        /// SimsRedux: true while loading a state another game is already running exactly as it is - an online join or
+        /// resync (VMStateSyncCmd), the lot's own self-resync, a replay checkpoint. Such a load must not change
+        /// anything (or this game and the lot would differ - a desync), so the "busy with an object that isn't there"
+        /// clean-up (VMThread.Load) only happens when a lot is loaded from its save on disk.
+        /// </summary>
+        public bool ReduxLoadingLiveState;
 
         internal VMNetDriver Driver;
         public VMHeadlineRendererProvider Headline;
