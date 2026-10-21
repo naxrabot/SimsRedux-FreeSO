@@ -246,10 +246,27 @@ namespace FSO.HIT
 
         public uint HitlistChoose() //returns a random id from the hitlist
         {
-            Random rand = new Random();
-            if (Hitlist != null) return Hitlist.IDs[rand.Next(Hitlist.IDs.Count)];
-            else return 0;
+            // SimsRedux 15.4: a "smart list" never picks the same sound twice in a row when it has others to pick
+            // from (the Sims' sound design: smart lists are "random selection with control of repetition"). A plain
+            // random pick from a list of two or three - most of the Sims' voice lines and page turns - said the very
+            // same line again about every other time. (Sound only: nothing here touches the simulation.)
+            var list = Hitlist;
+            if (list == null || list.IDs == null || list.IDs.Count == 0) return 0;
+            int count = list.IDs.Count;
+            int pick;
+            lock (ReduxPickLock)
+            {
+                pick = ReduxPickRandom.Next(count);
+                int last;
+                if (count > 1 && ReduxLastPick.TryGetValue(list, out last) && last == pick)
+                    pick = (pick + 1 + ReduxPickRandom.Next(count - 1)) % count; // (any of the others)
+                ReduxLastPick[list] = pick;
+            }
+            return list.IDs[pick];
         }
+        private static readonly object ReduxPickLock = new object();
+        private static readonly Random ReduxPickRandom = new Random();
+        private static readonly Dictionary<Hitlist, int> ReduxLastPick = new Dictionary<Hitlist, int>();
 
         public byte ReadByte()
         {
@@ -281,12 +298,16 @@ namespace FSO.HIT
             ActiveTrack = audContent.GetTrack(value, fallback, ResGroup);
             if (ActiveTrack != null)
             {
+                // SimsRedux 15.4: the sound picked from the track's list is this play's own pick. It was written back
+                // into the track itself - shared by every later play of that sound for the rest of the session - so
+                // the first random pick became the only one ever heard again.
+                uint soundID = ActiveTrack.SoundID;
                 if (ActiveTrack.HitlistID != 0)
                 {
                     LoadHitlist(ActiveTrack.HitlistID);
-                    if (ActiveTrack.SoundID == 0) ActiveTrack.SoundID = HitlistChoose();
+                    if (soundID == 0) soundID = HitlistChoose();
                 }
-                Patch = audContent.GetPatch(ActiveTrack.SoundID, ResGroup);
+                Patch = audContent.GetPatch(soundID, ResGroup);
             } else
             {
                 //make it up?

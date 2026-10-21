@@ -51,6 +51,21 @@ namespace FSO.SimAntics.Engine.Primitives
             action.Flags |= TTABFlags.FSOSkipPermissions;
             if (operand.PushTailContinuation) action.Flags |= TTABFlags.FSOPushTail;
             if (operand.PushHeadContinuation) action.Flags |= TTABFlags.FSOPushHead;
+            // SimsRedux 15.4: what a Sim's running interaction pushes onto that same Sim at its own ("inherited")
+            // priority is the rest of that interaction - a social's own side of the conversation ("Joke - Person
+            // A", "Talk - Person A"). It goes right after the running interaction (VMThread.EnqueueAction), not
+            // behind the other orders the player has queued.
+            // Never for an action that pushes itself again (the same object and menu entry) or for a push made by
+            // something that was itself placed this way: a repeating chain would keep jumping ahead of the
+            // player's queued orders, so they'd never run (those are placed by priority, as before).
+            if (context.VM.TS1 && operand.Priority == VMPushPriority.Inherited && context.ActionTree
+                && context.StackObject == context.Caller && !operand.PushHeadContinuation && !operand.PushTailContinuation)
+            {
+                var running = context.Thread?.ActiveAction;
+                if (running != null && (running.Flags & VMThread.ReduxContinuation) == 0
+                    && !(running.Callee == action.Callee && running.InteractionNumber == action.InteractionNumber))
+                    action.Flags |= VMThread.ReduxContinuation;
+            }
 
             context.StackObject.Thread.EnqueueAction(action);
             if (context.StackObject is VMAvatar && context.Caller is VMAvatar && context.StackObject != context.Caller)
