@@ -36,8 +36,9 @@ namespace FSO.SimAntics.Utils
             {
                 get
                 {
+                    // (Maid / Gardener: a family's free days are never below 0; the town entry's service percent can be)
                     return Skill != 0 || Decay != 0 || Bills != 0 || Buy != 0 || Job != 0 || Plumbob != 0 || NameColor != 0
-                        || !string.IsNullOrEmpty(Badge) || !string.IsNullOrEmpty(Title) || Maid > 0 || Gardener > 0;
+                        || !string.IsNullOrEmpty(Badge) || !string.IsNullOrEmpty(Title) || Maid != 0 || Gardener != 0;
                 }
             }
 
@@ -52,6 +53,26 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>Family number -> its perks. Families without any aren't listed.</summary>
         public Dictionary<short, Entry> Families = new Dictionary<short, Entry>();
+
+        /// <summary>
+        /// SimsRedux 15.2 Game Rules: family number 0 (never a real family - Get refuses it) is the TOWN entry: the
+        /// server's Game Rules and running events, put on the lot by the game in SINGLE PLAYER ONLY (ReduxRules in
+        /// Simitone.Client; online lots never get one). Its numbers mean the same as a family's, and may be negative
+        /// (the other way): Skill % faster, Decay % slower, Bills % cheaper, Buy % off, Job % more, and Maid / Gardener
+        /// = the maid's / gardener's charge % cheaper. Title is "town" (so it always counts as having effects). It's
+        /// saved and sent like the rest of the table - no new save format. ReduxPerkRules adds it to each family's own.
+        /// </summary>
+        public const short TownKey = 0;
+
+        /// <summary>The town entry (Game Rules - single player only), or null.</summary>
+        public Entry Town
+        {
+            get
+            {
+                Entry e;
+                return Families.TryGetValue(TownKey, out e) ? e : null;
+            }
+        }
 
         public Entry Get(int family)
         {
@@ -129,6 +150,10 @@ namespace FSO.SimAntics.Utils
     ///   service VMTS1Budget: the maid's / gardener's charge is free on up to Maid / Gardener game days
     /// Only the family living on the lot pays bills, buys and is paid (the game's one budget); skills and needs follow
     /// each Sim's own family (a visiting player's Sims too).
+    /// 15.2 Game Rules: the town entry (VMReduxPerks.TownKey - single player only) is added to every family's own
+    /// percent (it may be negative - slower skills, faster needs, dearer bills...), the totals kept in range; the
+    /// maid's / gardener's charge (after any free day) is the town's Maid / Gardener % cheaper; and Buy mode prices
+    /// take an event's sale (ReduxTownSale) on top - only where the town entry is.
     /// </summary>
     public static class ReduxPerkRules
     {
@@ -142,6 +167,28 @@ namespace FSO.SimAntics.Utils
         {
             var fam = vm?.TS1State?.CurrentFamily;
             return fam == null ? null : vm.ReduxPerks?.Get(fam.ChunkID);
+        }
+
+        /// <summary>The town's Game Rules on this lot (single player only - see VMReduxPerks.TownKey), or null.</summary>
+        private static VMReduxPerks.Entry Town(VM vm)
+        {
+            return vm?.ReduxPerks?.Town;
+        }
+
+        /// <summary>A family's percent plus the town's, kept between lo and hi.</summary>
+        private static int Sum(VMReduxPerks.Entry e, VMReduxPerks.Entry t, Func<VMReduxPerks.Entry, short> pick, int lo, int hi)
+        {
+            int v = (e != null ? pick(e) : 0) + (t != null ? pick(t) : 0);
+            return Math.Max(lo, Math.Min(hi, v));
+        }
+
+        /// <summary>amount made c % cheaper (c may be negative: dearer; at most 100: free). Never below 0.</summary>
+        private static int Cheaper(int amount, int c)
+        {
+            if (c == 0 || amount <= 0) return amount;
+            c = Math.Max(-400, Math.Min(100, c));
+            // (the same sum as before 15.2 for a perk's discount - every game on a lot works it out alike)
+            return (int)Math.Max(0L, Math.Min(int.MaxValue, (long)amount - (long)amount * c / 100));
         }
 
         private static bool IsSkill(VMPersonDataVariable v)
@@ -160,14 +207,18 @@ namespace FSO.SimAntics.Utils
             {
                 if (ava == null || !IsSkill(v) || context?.VM == null || !context.VM.TS1) return value;
                 var e = Of(context.VM, ava);
-                if (e == null || e.Skill <= 0) return value;
+                var t = ava.IsPet ? null : Town(context.VM);
+                // (the family's perk, plus the town's Game Rule - which may be negative: slower)
+                int c = Sum(e, t, x => x.Skill, -100, 1000);
+                if (c == 0) return value;
                 int old = ava.GetPersonData(v);
                 if (value <= old || value > 1000 || old < 0) return value;
-                int extra = (value - old) * e.Skill;
-                int bonus = extra / 100;
+                // the rise times (100 + c)% - the part of a point that doesn't come out whole by the fixed roll
+                long scaled = (long)(value - old) * (100 + c);
+                int rise = (int)(scaled / 100);
                 long ticks = context.VM.Context?.Clock?.Ticks ?? 0;
-                if (Roll(ticks, ava.ObjectID, (int)v) < extra % 100) bonus++;
-                return (short)Math.Min(1000, value + bonus);
+                if (Roll(ticks, ava.ObjectID, (int)v) < (int)(scaled % 100)) rise++;
+                return (short)Math.Max(old, Math.Min(1000, old + rise));
             }
             catch { return value; }
         }
@@ -177,9 +228,12 @@ namespace FSO.SimAntics.Utils
         {
             try
             {
-                var e = Of(ava?.Thread?.Context?.VM, ava);
-                if (e == null || e.Skill <= 0 || gain <= 0) return gain;
-                return gain + gain * e.Skill / 100;
+                var vm = ava?.Thread?.Context?.VM;
+                var e = Of(vm, ava);
+                var t = (ava == null || ava.IsPet) ? null : Town(vm);
+                int c = Sum(e, t, x => x.Skill, -100, 1000);
+                if (c == 0 || gain <= 0) return gain;
+                return Math.Max(0, (int)((long)gain * (100 + c) / 100));
             }
             catch { return gain; }
         }
@@ -202,8 +256,11 @@ namespace FSO.SimAntics.Utils
             try
             {
                 var e = Of(context?.VM, ava);
-                if (e == null || e.Decay <= 0) return frac;
-                return frac * (100 - Math.Min((int)e.Decay, 100)) / 100;
+                var t = (ava == null || ava.IsPet) ? null : Town(context?.VM);
+                // (% slower: the family's perk plus the town's Game Rule - negative is faster, at most 5 times as fast)
+                int s = Sum(e, t, x => x.Decay, -400, 100);
+                if (s == 0) return frac;
+                return (int)((long)frac * (100 - s) / 100);
             }
             catch { return frac; }
         }
@@ -216,26 +273,44 @@ namespace FSO.SimAntics.Utils
                 if (pay <= 0 || context?.VM == null) return pay;
                 var ava = (context.Caller as VMAvatar) ?? (context.StackObject as VMAvatar);
                 var e = Of(context.VM, ava) ?? OfLotFamily(context.VM);
-                if (e == null || e.Job <= 0) return pay;
-                return (short)Math.Min(short.MaxValue, pay + pay * e.Job / 100);
+                int c = Sum(e, Town(context.VM), x => x.Job, -100, 1000);
+                if (c == 0) return pay;
+                return (short)Math.Max(0, Math.Min(short.MaxValue, (long)pay * (100 + c) / 100));
             }
             catch { return pay; }
         }
 
         /// <summary>VMNetBuyObjectCmd (on the lot, before it's sent to everyone): Buy % off for the family living here.</summary>
-        public static int BuyPrice(VM vm, int value)
+        public static int BuyPrice(VM vm, int value) { return BuyPrice(vm, value, 0); }
+
+        /// <summary>
+        /// VMNetBuyObjectCmd with the item: the family's Buy % off plus the town's Game Rule, then - single player only
+        /// (the lot has the town entry) - an event's sale on this item (ReduxTownSale).
+        /// </summary>
+        public static int BuyPrice(VM vm, int value, uint guid)
         {
             try
             {
-                var e = OfLotFamily(vm);
-                if (e == null || e.Buy <= 0 || value <= 0) return value;
-                return value - value * Math.Min((int)e.Buy, 100) / 100;
+                if (value <= 0) return value;
+                var t = Town(vm);
+                int c = Sum(OfLotFamily(vm), t, x => x.Buy, -400, 100);
+                int price = Cheaper(value, c);
+                if (t != null && guid != 0) price = Cheaper(price, ReduxTownSale.PercentOff(guid));
+                return price;
             }
             catch { return value; }
         }
 
         /// <summary>The Buy mode price the player sees (the same sum as BuyPrice) - for the catalog's price labels.</summary>
-        public static int ShownPrice(VM vm, int price) { return BuyPrice(vm, price); }
+        public static int ShownPrice(VM vm, int price) { return BuyPrice(vm, price, 0); }
+        public static int ShownPrice(VM vm, int price, uint guid) { return BuyPrice(vm, price, guid); }
+
+        /// <summary>The sale's percent off this item on this lot right now (0: none) - single player only.</summary>
+        public static int SaleOff(VM vm, uint guid)
+        {
+            try { return Town(vm) == null || guid == 0 ? 0 : ReduxTownSale.PercentOff(guid); }
+            catch { return 0; }
+        }
 
         /// <summary>
         /// VMTS1Budget: an amount about to come off the family's money (amount &gt; 0). The bills cost Bills % less; the
@@ -249,26 +324,40 @@ namespace FSO.SimAntics.Utils
             {
                 var vm = context?.VM;
                 var e = OfLotFamily(vm);
-                if (e == null) return amount;
+                var t = Town(vm); // (15.2 Game Rules - single player only)
+                if (e == null && t == null) return amount;
                 var what = Payee(context);
                 if (what == PayeeKind.Bills)
-                    return (e.Bills > 0) ? amount - amount * Math.Min((int)e.Bills, 100) / 100 : amount;
+                    return Cheaper(amount, Sum(e, t, x => x.Bills, -400, 100));
                 bool maid = what == PayeeKind.Maid;
                 bool gardener = what == PayeeKind.Gardener;
                 if (!maid && !gardener) return amount;
-                var clock = vm.Context.Clock;
-                int day = clock.Year * 400 + clock.Month * 32 + clock.DayOfMonth;
-                if (maid)
+                // the family's free days first (Level Rewards); otherwise the town's maid / gardener cost rule
+                if (e != null)
                 {
-                    if (e.MaidDay == day) return 0;
-                    if (e.Maid <= 0) return amount;
-                    if (!justTest) { e.Maid--; e.MaidUsed++; e.MaidDay = day; }
-                    return 0;
+                    var clock = vm.Context.Clock;
+                    int day = clock.Year * 400 + clock.Month * 32 + clock.DayOfMonth;
+                    if (maid)
+                    {
+                        if (e.MaidDay == day) return 0;
+                        if (e.Maid > 0)
+                        {
+                            if (!justTest) { e.Maid--; e.MaidUsed++; e.MaidDay = day; }
+                            return 0;
+                        }
+                    }
+                    else
+                    {
+                        if (e.GardenerDay == day) return 0;
+                        if (e.Gardener > 0)
+                        {
+                            if (!justTest) { e.Gardener--; e.GardenerUsed++; e.GardenerDay = day; }
+                            return 0;
+                        }
+                    }
                 }
-                if (e.GardenerDay == day) return 0;
-                if (e.Gardener <= 0) return amount;
-                if (!justTest) { e.Gardener--; e.GardenerUsed++; e.GardenerDay = day; }
-                return 0;
+                if (t == null) return amount;
+                return Cheaper(amount, maid ? t.Maid : t.Gardener);
             }
             catch { return amount; }
         }
