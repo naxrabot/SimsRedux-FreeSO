@@ -155,6 +155,15 @@ namespace FSO.Common.Rendering.Framework
 
         public void Init(string basepath, bool ts1)
         {
+            // SimsRedux: on a Mac the game's own cursor pictures came out wrong (macOS draws custom cursors from
+            // pictures differently), so the Mac uses its own system pointers - the normal arrow, a hand, a wait cursor...
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
+            {
+                foreach (CursorType t in Enum.GetValues(typeof(CursorType))) m_CursorMap[t] = new CursorGroup(SystemCursorFor(t));
+                CurrentCursor = (CursorType)(-1);
+                SetCursor(CursorType.Normal);
+                return;
+            }
             // SimsRedux: never crash over a missing cursor; skip it and keep the normal one
             var map = GenMap();
             var curPath = "UIGraphics/Shared/cursors/";
@@ -204,6 +213,23 @@ namespace FSO.Common.Rendering.Framework
             m_CursorMap[CursorType.Normal] = arrow ?? new CursorGroup(MouseCursor.Arrow);
             CurrentCursor = (CursorType)(-1); // force the next SetCursor to apply
             SetCursor(CursorType.Normal);
+        }
+
+        /// <summary>SimsRedux: the system pointer closest to each of the game's cursors (Mac).</summary>
+        private static MouseCursor SystemCursorFor(CursorType t)
+        {
+            switch (t)
+            {
+                case CursorType.IBeam: return MouseCursor.IBeam;
+                case CursorType.Hourglass: return MouseCursor.Wait;
+                case CursorType.Hand: case CursorType.Finger: return MouseCursor.Hand;
+                case CursorType.Pan: case CursorType.SimsMove: return MouseCursor.SizeAll;
+                case CursorType.NoDrop: return MouseCursor.No;
+                case CursorType.SimsPlace: case CursorType.SimsRaise: case CursorType.SimsLower: case CursorType.SimsLevel:
+                case CursorType.Water: case CursorType.Hole: case CursorType.Bulldoze: case CursorType.SimsDelete:
+                    return MouseCursor.Crosshair;
+                default: return MouseCursor.Arrow;
+            }
         }
 
         public CursorGroup GetCurrentGroup()
