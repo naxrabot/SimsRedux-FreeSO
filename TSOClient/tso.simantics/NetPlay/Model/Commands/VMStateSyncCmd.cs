@@ -34,7 +34,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     // If an async load is happening, we assume that it's in the game client instead of the server and force the thread's UseWorld to true.
                     VM.UseWorld = true;
                     vm.FSOVClientJoin = (vm.Context.Architecture == null);
-                    vm.LoadAsync(State);
+                    // (SimsRedux: the lot's state exactly as it's running there - nothing cleaned up on the way in)
+                    vm.ReduxLoadingLiveState = true;
+                    try { vm.LoadAsync(State); }
+                    finally { vm.ReduxLoadingLiveState = false; }
                     // SimsRedux: the surrounding-lots scenery is a Sims Online thing; Sims 1 lots have none
                 if (!vm.TS1 && VM.UseWorld && vm.Context.Blueprint.SubWorlds.Count == 0) VMLotTerrainRestoreTools.RestoreSurroundings(vm, vm.HollowAdj);
                     GameThread.InUpdate(() =>
@@ -45,7 +48,9 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
             else
             {
-                vm.Load(State);
+                vm.ReduxLoadingLiveState = true; // (SimsRedux: as above)
+                try { vm.Load(State); }
+                finally { vm.ReduxLoadingLiveState = false; }
                 // SimsRedux: the surrounding-lots scenery is a Sims Online thing; Sims 1 lots have none
                 if (!vm.TS1 && VM.UseWorld && vm.Context.Blueprint.SubWorlds.Count == 0) VMLotTerrainRestoreTools.RestoreSurroundings(vm, vm.HollowAdj);
             }

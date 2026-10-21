@@ -332,7 +332,10 @@ namespace FSO.SimAntics.NetPlay.Drivers
             {
                 SelfResync = false;
                 var save = vm.Save();
-                vm.Load(save);
+                // (SimsRedux: the lot's own state back as it was - no load-time clean-up, the players don't do it)
+                vm.ReduxLoadingLiveState = true;
+                try { vm.Load(save); }
+                finally { vm.ReduxLoadingLiveState = false; }
                 vm.EODHost.SelfResync();
             }
 

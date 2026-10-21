@@ -1425,7 +1425,7 @@ namespace FSO.SimAntics.Engine
             // - and the same when it was busy with an object held back (Utils/ReduxHeldObjects: e.g. a Sims 1 table
             // with a missing sculpture on it) or no longer there, like a missing object dropped from a Sim's hands.
             // (The held-object checks only run on a lot with such objects; "acting on something that isn't in the
-            // save" is checked on every lot - see ReduxBusyWithMissing.)
+            // save" is checked on every lot loaded from disk - not on an online join/resync - see ReduxBusyWithMissing.)
             if (Stack.Any(f => f.CodeOwner == null) || Queue.Any(q => q.CodeOwner == null)
                 || ReduxBusyWithMissing(input, context))
             {
@@ -1462,6 +1462,9 @@ namespace FSO.SimAntics.Engine
             // stop with a SimAntics error on its first use of it, e.g. "Go Here" Standard entry, "Tease Scare")
             if (held == null || !held.AnyMissing)
             {
+                // (only when the lot comes from its save on disk: an online join/resync takes the lot's running state
+                // exactly as it is - cleaning it up here would make this game differ from the lot, a desync)
+                if (context.VM.ReduxLoadingLiveState) return false;
                 if (input.Stack != null)
                     foreach (var f in input.Stack)
                         if (f != null && isGone(f.Callee)) return true;

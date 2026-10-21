@@ -30,7 +30,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var pos = baseObj.Position;
             var dir = baseObj.Direction;
             var oldPrice = group.InitialPrice;
-            var newPrice = CatalogPrice(NewGUID);
+            // SimsRedux: the new one remembers what was really paid for it - the old one's remembered price plus the
+            // difference charged here (never the full catalog price, or a Buy mode discount + swap + sell makes money).
+            // Difference comes from the lot (Verify) with the command, so every game sets the same price.
+            var newPrice = Math.Max(0, oldPrice + Difference);
 
             // SimsRedux: the old one is only set aside (off the lot) while the new one is tried, so if the new
             // one doesn't fit, the very same object goes back - keeping its state (colour, wear, what's in it) -
@@ -128,6 +131,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (oldGUID == NewGUID) return false;
 
             Difference = CatalogPrice(NewGUID) - CatalogPrice(oldGUID);
+            // (never give back more than the old one is remembered as costing: it may have been bought with a discount)
+            if (Difference < 0) Difference = Math.Max(Difference, -Math.Max(0, group.InitialPrice));
             if (Difference == 0 || vm.GlobalLink == null)
             {
                 Verified = true;
