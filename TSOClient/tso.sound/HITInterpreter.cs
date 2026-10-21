@@ -136,7 +136,9 @@ namespace FSO.HIT
         {
             var src = thread.ReadByte();
             if (thread.WaitRemain == -1) thread.WaitRemain = thread.ReadVar(src);
-            thread.WaitRemain -= 16; //assuming tick rate is 60 times a second
+            // (SimsRedux 15.4: the sound scripts tick once a frame - 16ms at 60 frames a second, as before; at a higher
+            //  frame rate the waits between a Sim's "now and then" sounds no longer get shorter)
+            thread.WaitRemain -= Math.Max(1, 1000 / Math.Max(1, FSO.Common.FSOEnvironment.RefreshRate));
             if (thread.WaitRemain > 0)
             {
                 thread.PC -= 2;

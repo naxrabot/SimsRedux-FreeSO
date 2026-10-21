@@ -1044,6 +1044,14 @@ namespace FSO.SimAntics.Engine
             else if ((invocation.Flags & TTABFlags.FSOPushHead) > 0)
                 //place right after active interaction, ignoring all priorities.
                 this.Queue.Insert(ActiveQueueBlock + 1, invocation);
+            else if (Context.VM.TS1 && (invocation.Flags & ReduxContinuation) > 0 && ReduxContinuationFits(invocation))
+            {
+                // SimsRedux 15.4: the rest of the running interaction (see ReduxContinuation) runs next, ahead of
+                // the player's other queued orders (after any earlier part of it already waiting there, in order).
+                int at = ActiveQueueBlock + 1;
+                while (at < Queue.Count && (Queue[at].Flags & ReduxContinuation) > 0) at++;
+                this.Queue.Insert(at, invocation);
+            }
             else if ((invocation.Flags & (TTABFlags.FSOPushTail | leapfrog)) > 0 && invocation.Mode != VMQueueMode.ParentExit)
             {
                 //this one's weird. start at the left til there's a lower priority. (eg. parent exit or idle)
@@ -1099,6 +1107,33 @@ namespace FSO.SimAntics.Engine
                 this.Queue.Insert(ActiveQueueBlock + 1, invocation); //this is more important than all other queued items that are not running, so stick this to run next.
             }
             EvaluateQueuePriorities();
+        }
+
+        /// <summary>
+        /// SimsRedux 15.4: marks an interaction a Sim's running interaction pushed onto that same Sim at its own
+        /// ("inherited") priority - the rest of that interaction (VMPushInteraction). A Sims 1 social is two steps: the
+        /// pie-menu action ("Joke") makes the conversation, pushes "Joke - Person B" on the other Sim and "Joke - Person
+        /// A" on this one, and ends. Placed by priority, "Person A" went BEHIND every order already queued at the same
+        /// priority - so with Talk, Joke and Hug queued the Sim walked off to start the Joke while the other Sim stood
+        /// waiting for the Talk, which timed out, and each conversation in the queue broke the next ("cancelled").
+        /// Saved with the action's flags, so a loaded or joined game places it the same way.
+        /// </summary>
+        public const TTABFlags ReduxContinuation = (TTABFlags)(1 << 26);
+
+        /// <summary>
+        /// SimsRedux 15.4: a continuation goes next only past plain orders that don't outrank it - never ahead of a
+        /// higher-priority order (the player's order still beats a Sim's own autonomous chat) or a parent's
+        /// idle/exit step. Otherwise it's placed by priority as before.
+        /// </summary>
+        private bool ReduxContinuationFits(VMQueuedAction invocation)
+        {
+            if (invocation.Mode != VMQueueMode.Normal || ActiveQueueBlock < 0) return false;
+            for (int i = ActiveQueueBlock + 1; i < Queue.Count; i++)
+            {
+                var q = Queue[i];
+                if (q.Mode != VMQueueMode.Normal || q.Priority > invocation.Priority) return false;
+            }
+            return true;
         }
 
         public void CancelAction(ushort actionUID)

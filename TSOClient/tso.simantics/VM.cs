@@ -307,6 +307,12 @@ namespace FSO.SimAntics
                 forward.Normalize();
                 listener.Forward = forward;
                 Context.World.State.SimSpeed = Math.Max(0, SpeedMultiplier);
+                // SimsRedux 15.4: tell the sound scripts how fast the game is running - their "SimSpeed" (0 normal,
+                // 1 fast, 2 fastest). The Sims' own sound scripts read it to leave out footsteps, mutters and other
+                // "every few seconds" sounds at the faster speeds; nothing ever set it, so at speed 2 and 3 every
+                // Sim's skill-building loop (studying, cooking, repairing...) voiced each animation pass, three to
+                // ten times as often as it was made to. Sound only: the simulation never reads it.
+                HIT.HITVM.Get()?.WriteGlobal(0, SpeedMultiplier >= 10 ? 2 : (SpeedMultiplier >= 2 ? 1 : 0));
             }
 
             if (LastFrameSpeed != SpeedMultiplier)

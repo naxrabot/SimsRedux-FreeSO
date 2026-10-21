@@ -145,6 +145,13 @@ namespace FSO.Common.Rendering.Framework
         /// </summary>
         public static Func<string, byte[]> ExtraSource;
 
+        /// <summary>
+        /// SimsRedux: use the computer's own pointers (the normal arrow, a hand, a wait cursor...) instead of the game's
+        /// cursor pictures. Always on a Mac; the Windows app's game (Simitone.Windows -native) turns it on before the game
+        /// starts. The website and the other builds leave it off.
+        /// </summary>
+        public static bool UseSystemCursors;
+
         private Stream OpenCursor(string basepath, string curPath, string name)
         {
             var path = Path.Combine(basepath ?? "", curPath, name);
@@ -157,7 +164,8 @@ namespace FSO.Common.Rendering.Framework
         {
             // SimsRedux: on a Mac the game's own cursor pictures came out wrong (macOS draws custom cursors from
             // pictures differently), so the Mac uses its own system pointers - the normal arrow, a hand, a wait cursor...
-            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
+            // (Windows app too: the pictures came out grey, small on a high-DPI screen and with the click point off)
+            if (UseSystemCursors || System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
             {
                 foreach (CursorType t in System.Enum.GetValues(typeof(CursorType))) m_CursorMap[t] = new CursorGroup(SystemCursorFor(t));
                 CurrentCursor = (CursorType)(-1);
@@ -215,7 +223,7 @@ namespace FSO.Common.Rendering.Framework
             SetCursor(CursorType.Normal);
         }
 
-        /// <summary>SimsRedux: the system pointer closest to each of the game's cursors (Mac).</summary>
+        /// <summary>SimsRedux: the system pointer closest to each of the game's cursors (Mac, Windows app).</summary>
         private static MouseCursor SystemCursorFor(CursorType t)
         {
             switch (t)

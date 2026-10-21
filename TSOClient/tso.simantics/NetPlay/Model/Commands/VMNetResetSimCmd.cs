@@ -27,6 +27,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
             sim.Thread.BlockingState = null;
             sim.Reset(vm.Context);
+            // SimsRedux 15.4: a reset doesn't take a Sim out of the object holding them (lying in a bed, sitting on a
+            // sofa): they stood inside it and couldn't walk anywhere until it was deleted. Put them on the nearest
+            // open spot, as the debug menu's un-stick does. (Lot state only, so every game on the lot does the same.)
+            if (vm.TS1 && sim.Container is VMGameObject) VMNetDebugSimCmd.MoveToFreeSpot(vm, sim);
             return true;
         }
 

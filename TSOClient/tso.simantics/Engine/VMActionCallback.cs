@@ -54,7 +54,7 @@ namespace FSO.SimAntics.Engine
                     var ttas = global ? vm.Context.GlobalTTAs : Target.TreeTableStrings;
                     var Action = tt.InteractionByIndex[(byte)Interaction];
                     ActionID = Action.ActionFunction;
-                    ActionFlags = Action.Flags;
+                    ActionFlags = Action.Flags & ~VMThread.ReduxContinuation; // (SimsRedux 15.4: engine-only bit, never from an object's file)
                     ActionName = ttas.GetString((int)Action.TTAIndex);
                 }
 

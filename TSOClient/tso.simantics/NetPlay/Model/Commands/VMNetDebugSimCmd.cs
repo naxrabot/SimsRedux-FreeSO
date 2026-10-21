@@ -117,7 +117,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         }
 
         /// <summary>Tries tiles in growing rings around the Sim (same floor first, then the ground floor).</summary>
-        private static bool MoveToFreeSpot(VM vm, VMAvatar sim)
+        internal static bool MoveToFreeSpot(VM vm, VMAvatar sim) // (SimsRedux 15.4: also used by VMNetResetSimCmd)
         {
             var arch = vm.Context.Architecture;
             var start = sim.Position;

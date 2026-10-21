@@ -22,7 +22,14 @@ namespace FSO.SimAntics.Primitives
             if (owner == null) return VMPrimitiveExitCode.GOTO_TRUE;
             var lastThread = owner.SoundThreads.FirstOrDefault(x => x?.Name == fwav?.Name);
 
-            if ((lastThread?.Sound as HITThread)?.Interruptable == true) lastThread = null;
+            // An "interrupt" sound started again by the same object restarts (a button pressed again, a slap). But a
+            // REPEATING one that is still going carries on (SimsRedux 15.4): a script that asks for its looping
+            // sound on every pass of its loop cut it off and started it from the top each time - the old one never
+            // finishes (it repeats), so the new one never got to play and the sound just stuttered from the start
+            // over and over.
+            var lastHit = lastThread?.Sound as HITThread;
+            if (lastHit?.Interruptable == true
+                && !(context.VM.TS1 && !lastHit.Dead && (lastThread.Loop || lastHit.Loop))) lastThread = null;
             if (fwav != null && lastThread == null)
             {
                 var thread = HITVM.Get().PlaySoundEvent(fwav.Name);

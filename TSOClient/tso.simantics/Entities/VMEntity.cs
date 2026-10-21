@@ -1105,7 +1105,7 @@ namespace FSO.SimAntics
                 Args = args,
                 InteractionNumber = interaction,
                 Priority = (short)VMQueuePriority.UserDriven,
-                Flags = Action.Flags,
+                Flags = Action.Flags & ~VMThread.ReduxContinuation, // (SimsRedux 15.4: that bit is set by the engine only, never taken from an object's file)
                 Flags2 = Action.Flags2,
             };
             // SimsRedux: the new computer activities run as the computer's own Play (Utils/ReduxComputer.cs)
