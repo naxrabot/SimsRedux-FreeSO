@@ -115,6 +115,7 @@ namespace FSO.SimAntics.Entities
                         break;
                 }
 
+                frac = FSO.SimAntics.Utils.ReduxPerkRules.Decay(avatar, context, frac); // SimsRedux Level Rewards: needs drop slower with a perk
                 MotiveFractions[i] += (short)frac;
                 if (MotiveFractions[i] >= 1000)
                 {

@@ -39,6 +39,10 @@ namespace FSO.SimAntics.Engine.Primitives
                     priority = (short)VMQueuePriority.Idle; mode = VMQueueMode.Idle; break;
             }
 
+            // SimsRedux: the interaction's object (or the Sim to push it on) can be gone - e.g. the Fancy Feet Cake's
+            // entertainer left while "Watch stripper" pushes "watch" on the guests. Push nothing (false), as for a
+            // missing interaction, instead of a SimAntics error.
+            if (interactionSource == null || context.StackObject == null) return VMPrimitiveExitCode.GOTO_FALSE;
             var action = interactionSource.GetAction(operand.Interaction, context.StackObject, context.VM.Context, false);
             if (action == null) return VMPrimitiveExitCode.GOTO_FALSE;
             if (operand.UseCustomIcon) action.IconOwner = context.VM.GetObjectById((short)context.Locals[operand.IconLocation]);

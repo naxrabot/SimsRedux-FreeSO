@@ -173,6 +173,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 var dcPercent = VMBuildableAreaInfo.GetDiscountFor(item.Value, vm);
                 value = (price * (100 - dcPercent)) / 100;
                 if (Mode == PurchaseMode.Donate) value -= (value * 2) / 3;
+                // SimsRedux Level Rewards: the Buy mode discount of the family living here (worked out here, on the lot)
+                if (vm.TS1) value = FSO.SimAntics.Utils.ReduxPerkRules.BuyPrice(vm, value);
             }
 
             //TODO: fine grained purchase control based on user status

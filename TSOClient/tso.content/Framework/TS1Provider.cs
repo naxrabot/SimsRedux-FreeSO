@@ -189,6 +189,27 @@ namespace FSO.Content.Framework
             return default(T);
         }
 
+        /// <summary>
+        /// SimsRedux: the file read and decoded without going into the content cache (for data the caller keeps its
+        /// own copy of - e.g. sounds, which the sound card keeps). Falls back to the cached Get if that fails.
+        /// </summary>
+        public virtual T ThrowawayGet(string name)
+        {
+            IContentReference result = null;
+            if (Entries.TryGetValue(name, out result))
+            {
+                try
+                {
+                    var item = result.GetThrowawayGeneric();
+                    if (item != null) return Converter(item);
+                }
+                catch { }
+                return Converter(result.GetGeneric());
+            }
+
+            return default(T);
+        }
+
         public T Get(uint type, uint fileID)
         {
             throw new NotImplementedException();

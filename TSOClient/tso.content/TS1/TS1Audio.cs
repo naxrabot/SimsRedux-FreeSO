@@ -225,10 +225,51 @@ namespace FSO.Content.TS1
             return result;
         }
 
+        /// <summary>SimsRedux: how many sounds are decoded and kept right now, and about how big (for the memory notes).</summary>
+        public int ReduxCachedSounds { get { lock (SFXCache) return SFXCache.Count; } }
+        public long ReduxCachedBytes;
+        private Dictionary<Patch, long> ReduxSizes = new Dictionary<Patch, long>();
+
+        /// <summary>
+        /// SimsRedux: a lot was left - let go of the sounds decoded for it. ("remember to clear the sfx cache between
+        /// lots!" - nothing ever did: every different sound heard stayed in memory for good, as raw sound data, so the
+        /// game kept growing the longer it ran and the more Sims, objects and lots it met.) What's still wanted is
+        /// decoded again the next time it plays. Sounds still playing (or about to) are kept - inUse - so nothing is
+        /// freed under a playing note; they go at a later lot change.
+        /// </summary>
+        public void ReduxLotClosed(ICollection<Patch> inUse)
+        {
+            var old = new List<SoundEffect>();
+            HashSet<SoundEffect> kept;
+            lock (SFXCache)
+            {
+                foreach (var key in SFXCache.Keys.ToList())
+                {
+                    if (inUse != null && inUse.Contains(key)) continue;
+                    var sfx = SFXCache[key];
+                    SFXCache.Remove(key);
+                    long size;
+                    if (ReduxSizes.TryGetValue(key, out size)) { ReduxCachedBytes -= size; ReduxSizes.Remove(key); }
+                    if (sfx != null) old.Add(sfx);
+                }
+                kept = new HashSet<SoundEffect>(SFXCache.Values);
+            }
+            foreach (var sfx in old.Distinct())
+            {
+                if (kept.Contains(sfx)) continue;
+                try { sfx.Dispose(); } catch { }
+            }
+        }
+
         public SoundEffect GetSFX(Patch patch)
         {
             if (patch == null) return null;
-            if (SFXCache.ContainsKey(patch)) return SFXCache[patch];
+            lock (SFXCache)
+            {
+                SoundEffect cached;
+                if (SFXCache.TryGetValue(patch, out cached) && cached != null && !cached.IsDisposed) return cached;
+                SFXCache.Remove(patch);
+            }
 
             var aud = GetAudioFrom(patch.Filename);
             if (aud != null)
@@ -236,7 +277,17 @@ namespace FSO.Content.TS1
                 var stream = new MemoryStream(aud.Data);
                 var sfx = SoundEffect.FromStream(stream);
                 stream.Close();
-                SFXCache.Add(patch, sfx);
+                lock (SFXCache)
+                {
+                    SoundEffect raced;
+                    if (SFXCache.TryGetValue(patch, out raced) && raced != null && !raced.IsDisposed) { try { sfx.Dispose(); } catch { } return raced; }
+                    SFXCache[patch] = sfx;
+                    long size = aud.Data?.Length ?? 0;
+                    long prevSize;
+                    if (ReduxSizes.TryGetValue(patch, out prevSize)) ReduxCachedBytes -= prevSize;
+                    ReduxSizes[patch] = size;
+                    ReduxCachedBytes += size;
+                }
                 switch (aud.Filetype)
                 {
                     case 2:
@@ -264,16 +315,18 @@ namespace FSO.Content.TS1
             fileName = fileName.ToLowerInvariant();
             var ext = Path.GetExtension(fileName);
             var fname = Path.GetFileName(fileName);
+            // (SimsRedux: not through the content cache - the sound effect made from it keeps its own copy, and with
+            //  the cache keeping everything (Windows) every decoded sound was held twice, forever)
             switch (ext)
             {
                 case ".wav":
-                    return WAVSounds.Get(fname);
+                    return WAVSounds.ThrowawayGet(fname);
                 case ".mp3":
-                    return MP3Sounds.Get(fname);
+                    return MP3Sounds.ThrowawayGet(fname);
                 case ".xa":
-                    return XASounds.Get(fname);
+                    return XASounds.ThrowawayGet(fname);
                 case ".utk":
-                    return UTKSounds.Get(fname);
+                    return UTKSounds.ThrowawayGet(fname);
             }
             Console.WriteLine("what... "+ext);
             return null;

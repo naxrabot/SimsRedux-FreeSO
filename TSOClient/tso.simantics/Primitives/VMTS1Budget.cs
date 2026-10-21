@@ -17,6 +17,8 @@ namespace FSO.SimAntics.Primitives
 
             // SimsRedux: a serving of leftovers from the fridge is already paid for (Utils/ReduxLeftovers.cs)
             if (amount > 0 && FSO.SimAntics.Utils.ReduxLeftovers.IsFreeServing(context)) return VMPrimitiveExitCode.GOTO_TRUE;
+            // SimsRedux Level Rewards: cheaper bills, free maid / gardener days (Utils/ReduxPerks.cs)
+            if (amount > 0) amount = FSO.SimAntics.Utils.ReduxPerkRules.Budget(context, amount, (operand.Flags & VMTransferFundsFlags.JustTest) != 0);
 
             var oldBudget = context.VM.TS1State.CurrentFamily?.Budget ?? 0;
             var newBudget = oldBudget - amount;

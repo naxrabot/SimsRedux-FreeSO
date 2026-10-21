@@ -21,6 +21,8 @@ namespace FSO.Vitaboy
         public Skeleton BaseSkeleton { get; set; }
         public List<Vector2> LightPositions;
         public DGRP3DMesh HeadObject;
+        /// <summary>SimsRedux Level Rewards: a recoloured plumbob - this picture instead of the head object's own (null = its own).</summary>
+        public Texture2D HeadObjectTexture;
         public float HeadObjectRotation;
         public float HeadObjectSpeedyVel;
         public bool HideHead;
@@ -464,7 +466,7 @@ namespace FSO.Vitaboy
                 var geom = headObj.Geoms[i];
                 foreach (var item in geom)
                 {
-                    effect.Parameters["MeshTex"]?.SetValue(item.Key);
+                    effect.Parameters["MeshTex"]?.SetValue(HeadObjectTexture ?? item.Key);
                     effect.Parameters["HOToonSpecThresh"]?.SetValue(0.5f);
                     effect.Parameters["HOToonSpecColor"]?.SetValue(new Vector3(multi * ((headObj.Geoms.Count-1) - i)));
 

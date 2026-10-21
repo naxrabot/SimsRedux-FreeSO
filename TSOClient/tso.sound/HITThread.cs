@@ -393,6 +393,13 @@ namespace FSO.HIT
             return -1;
         }
 
+        /// <summary>SimsRedux: the sounds this thread's notes are playing from (kept when the sound cache is let go).</summary>
+        public void ReduxAddPatches(HashSet<Patch> set)
+        {
+            if (Notes == null) return;
+            foreach (var note in Notes) if (note?.Sound != null) set.Add(note.Sound);
+        }
+
         /// <summary>
         /// Is a note active?
         /// </summary>

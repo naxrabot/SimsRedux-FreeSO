@@ -24,7 +24,7 @@ namespace FSO.SimAntics.Marshals
         // 36 - FSO Inventory Token (inventory ops async state has temp list)
         // 37 - Inventory Token Total
         // 38 - Direct Control Frame
-        public static readonly int LATEST_VERSION = 43; // SimsRedux: 39 adds object colour tints, 40 the Sims' brain memory, 41 wall items' height, 42 object size (scale), 43 animations' play-and-wait ticks
+        public static readonly int LATEST_VERSION = 44; // SimsRedux: 39 adds object colour tints, 40 the Sims' brain memory, 41 wall items' height, 42 object size (scale), 43 animations' play-and-wait ticks, 44 the Level Rewards perk table
 
         public int Version = LATEST_VERSION;
         public bool Compressed = true;
@@ -40,6 +40,8 @@ namespace FSO.SimAntics.Marshals
         public short ObjectId = 1;
 
         public DynamicTuning Tuning;
+        /// <summary>SimsRedux (version 44): the lot's Level Rewards perk table (Utils/ReduxPerks.cs) - after everything else.</summary>
+        public FSO.SimAntics.Utils.VMReduxPerks ReduxPerks;
 
         public void Deserialize(BinaryReader reader)
         {
@@ -110,6 +112,9 @@ namespace FSO.SimAntics.Marshals
                     Tuning = new DynamicTuning(reader);
             }
 
+            // SimsRedux (44): the Level Rewards perk table
+            if (Version >= 44 && reader.ReadBoolean()) ReduxPerks = FSO.SimAntics.Utils.VMReduxPerks.Read(reader);
+
             if (Compressed)
             {
                 reader.BaseStream.Close();
@@ -169,6 +174,10 @@ namespace FSO.SimAntics.Marshals
 
             writer.Write(Tuning != null);
             if (Tuning != null) Tuning.SerializeInto(writer);
+
+            // SimsRedux (44): the Level Rewards perk table
+            writer.Write(ReduxPerks != null);
+            if (ReduxPerks != null) ReduxPerks.SerializeInto(writer);
 
             if (Compressed)
             {

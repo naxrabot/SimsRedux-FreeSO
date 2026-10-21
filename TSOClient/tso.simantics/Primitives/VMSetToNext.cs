@@ -107,6 +107,17 @@ namespace FSO.SimAntics.Primitives
 
                 bool loop = (operand.SearchType == VMSetToNextSearchType.ObjectOnSameTile) || (operand.SearchType == VMSetToNextSearchType.FamilyMember);
 
+                // (SimsRedux: "next family member" from a pointer that isn't a Sim (Tragic Clown Generator's "Magic Growth - Qualify?"
+                // starts from an object) used to throw InvalidCastException. Use the lot family's number instead; the wrap-around
+                // below still ends the search (the pointer isn't in the avatar list), so a BHAV loop can't spin.)
+                short ptrFamily = 0;
+                if (operand.SearchType == VMSetToNextSearchType.FamilyMember)
+                {
+                    if (Pointer is VMAvatar ptrAva) ptrFamily = ptrAva.GetPersonData(Model.VMPersonDataVariable.TS1FamilyNumber);
+                    else if (context.VM.TS1State?.CurrentFamily != null) ptrFamily = (short)context.VM.TS1State.CurrentFamily.ChunkID;
+                    else return VMPrimitiveExitCode.GOTO_FALSE;
+                }
+
                 var ind = VM.FindNextIndexInObjList(entities, targetValue);
                 for (int i=ind; i<entities.Count; i++) //generic search through all objects
                 {
@@ -123,8 +134,7 @@ namespace FSO.SimAntics.Primitives
                                 return VMPrimitiveExitCode.GOTO_FALSE;
                                 throw new VMSimanticsException("Not implemented!", context);
                             case VMSetToNextSearchType.FamilyMember:
-                                found = ((VMAvatar)temp).GetPersonData(Model.VMPersonDataVariable.TS1FamilyNumber) ==
-                                        ((VMAvatar)Pointer).GetPersonData(Model.VMPersonDataVariable.TS1FamilyNumber);
+                                found = ((VMAvatar)temp).GetPersonData(Model.VMPersonDataVariable.TS1FamilyNumber) == ptrFamily;
                                 // context.VM.TS1State.CurrentFamily?.FamilyGUIDs?.Contains(((VMAvatar)temp).Object.OBJ.GUID) ?? false;
                                 break;
                             default:
@@ -151,7 +161,7 @@ namespace FSO.SimAntics.Primitives
                     VMEntity first = entities.FirstOrDefault();
                     if (operand.SearchType == VMSetToNextSearchType.FamilyMember)
                     {
-                        short familyNumber = ((VMAvatar)Pointer).GetPersonData(Model.VMPersonDataVariable.TS1FamilyNumber);
+                        short familyNumber = ptrFamily;
                         foreach (VMEntity ent in entities)
                         {
                             if (((VMAvatar)ent).GetPersonData(Model.VMPersonDataVariable.TS1FamilyNumber) == familyNumber)

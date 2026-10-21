@@ -168,7 +168,11 @@ namespace FSO.SimAntics.Engine.Utils
 
                 case VMVariableScope.JobData: //33 jobdata(temp0, temp1), used a few times to test if a person is at work but that isn't relevant for tso...
                     if (!context.VM.TS1) throw new VMSimanticsException("Only valid in TS1.", context);
-                    return Content.Content.Get().Jobs.GetJobData((ushort)context.Thread.TempRegisters[0], context.Thread.TempRegisters[1], data);
+                    {
+                        var jobData = Content.Content.Get().Jobs.GetJobData((ushort)context.Thread.TempRegisters[0], context.Thread.TempRegisters[1], data);
+                        // SimsRedux Level Rewards: the job's pay (data 1) is more with a job pay perk (Utils/ReduxPerks.cs)
+                        return data == 1 ? FSO.SimAntics.Utils.ReduxPerkRules.Salary(context, jobData) : jobData;
+                    }
 
                 case VMVariableScope.NeighborhoodData: //34
                     return 0; //tutorial values only
@@ -578,10 +582,11 @@ namespace FSO.SimAntics.Engine.Utils
                     return (context.StackObject as VMAvatar)?.SetMotiveData((VMMotive)context.Thread.TempRegisters[data], value) ?? false; // SimsRedux: non-person -> false
 
                 case VMVariableScope.MyPersonData: //18
-                    return (context.Caller as VMAvatar)?.SetPersonData((VMPersonDataVariable)data, value) ?? false; // SimsRedux: non-person -> false
+                    // (SimsRedux Level Rewards: a skill going up rises more with a skill perk - Utils/ReduxPerks.cs)
+                    { var me = context.Caller as VMAvatar; return me?.SetPersonData((VMPersonDataVariable)data, FSO.SimAntics.Utils.ReduxPerkRules.SkillWrite(context, me, (VMPersonDataVariable)data, value)) ?? false; } // SimsRedux: non-person -> false
 
                 case VMVariableScope.StackObjectPersonData: //19
-                    return (context.StackObject as VMAvatar)?.SetPersonData((VMPersonDataVariable)data, value) ?? false; // SimsRedux: non-person -> false
+                    { var so = context.StackObject as VMAvatar; return so?.SetPersonData((VMPersonDataVariable)data, FSO.SimAntics.Utils.ReduxPerkRules.SkillWrite(context, so, (VMPersonDataVariable)data, value)) ?? false; } // SimsRedux: non-person -> false
 
                 case VMVariableScope.MySlot: //20
                     throw new VMSimanticsException("Not implemented...", context);
@@ -617,10 +622,10 @@ namespace FSO.SimAntics.Engine.Utils
                     return SetTreeAd(context, 0, (ushort)data, value);
 
                 case VMVariableScope.MyPersonDataByTemp: //30
-                    return (context.Caller as VMAvatar)?.SetPersonData((VMPersonDataVariable)context.Thread.TempRegisters[data], value) ?? false; // SimsRedux: non-person -> false
+                    { var me = context.Caller as VMAvatar; var pv = (VMPersonDataVariable)context.Thread.TempRegisters[data]; return me?.SetPersonData(pv, FSO.SimAntics.Utils.ReduxPerkRules.SkillWrite(context, me, pv, value)) ?? false; } // SimsRedux: non-person -> false
 
                 case VMVariableScope.StackObjectPersonDataByTemp: //31
-                    return (context.StackObject as VMAvatar)?.SetPersonData((VMPersonDataVariable)context.Thread.TempRegisters[data], value) ?? false; // SimsRedux: non-person -> false
+                    { var so = context.StackObject as VMAvatar; var pv = (VMPersonDataVariable)context.Thread.TempRegisters[data]; return so?.SetPersonData(pv, FSO.SimAntics.Utils.ReduxPerkRules.SkillWrite(context, so, pv, value)) ?? false; } // SimsRedux: non-person -> false
 
                 case VMVariableScope.NeighborPersonData: //32
                     throw new VMSimanticsException("Not implemented...", context);

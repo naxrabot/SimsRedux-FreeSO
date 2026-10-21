@@ -70,6 +70,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxBurglar, typeof(VMNetReduxBurglarCmd) }, // SimsRedux
             { VMCommandType.ReduxNovel, typeof(VMNetReduxNovelCmd) }, // SimsRedux
             { VMCommandType.ReduxScale, typeof(VMNetScaleObjectCmd) }, // SimsRedux
+            { VMCommandType.ReduxPerks, typeof(VMNetReduxPerksCmd) }, // SimsRedux: Level Rewards (Utils/ReduxPerks.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -196,6 +197,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxLift = 57,
         ReduxBurglar = 58,
         ReduxNovel = 59,
-        ReduxScale = 64 // SimsRedux: object size (60-63 left free for other Redux commands)
+        ReduxScale = 64, // SimsRedux: object size (60-62 left free for other Redux commands)
+        ReduxPerks = 63 // SimsRedux: Level Rewards - the lot's perk table, money and gifts (VMNetReduxPerksCmd)
     }
 }

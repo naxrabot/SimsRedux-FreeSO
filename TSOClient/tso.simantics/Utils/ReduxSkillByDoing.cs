@@ -141,6 +141,7 @@ namespace FSO.SimAntics.Utils
                 int level = skill / 100;
                 // hundredths of a skill point this minute: a level in about 2 game hours at first, ~7 at level 9
                 int gain = (int)(rule.Speed * 10000.0 / (120.0 * (1.0 + level / 4.0)));
+                gain = ReduxPerkRules.SkillGain(ava, gain); // (Level Rewards: faster with a skill perk)
                 int carry = ReduxComputer.Get(ava, Carry) + gain;
                 int whole = carry / 100;
                 ReduxComputer.Set(ava, Carry, carry % 100);

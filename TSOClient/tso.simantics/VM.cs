@@ -268,6 +268,11 @@ namespace FSO.SimAntics
         /// </summary>
         public HashSet<uint> ReduxAdmins = new HashSet<uint>();
         /// <summary>
+        /// SimsRedux Level Rewards: each player family's perks on this lot (Utils/ReduxPerks.cs). Part of the lot's state -
+        /// saved, sent to players joining, changed only by VMNetReduxPerksCmd.
+        /// </summary>
+        public FSO.SimAntics.Utils.VMReduxPerks ReduxPerks = new FSO.SimAntics.Utils.VMReduxPerks();
+        /// <summary>
         /// SimsRedux online: the lot never pauses (set on the server and on every player's game alike).
         /// A question only holds up the Sim it's about; everyone else carries on, as in The Sims Online.
         /// </summary>
@@ -764,7 +769,8 @@ namespace FSO.SimAntics
                 GlobalState = (short[])GlobalState.Clone(),
                 PlatformState = PlatformState,
                 ObjectId = ObjectId,
-                Tuning = Tuning
+                Tuning = Tuning,
+                ReduxPerks = ReduxPerks?.Clone() // SimsRedux: Level Rewards (version 44)
             };
             ReduxHeld.AddTo(save); // SimsRedux: the objects held back go back into every save
             return save;
@@ -978,6 +984,7 @@ namespace FSO.SimAntics
                 TSOState.Names = ((VMTSOLotState)lastPlatformState).Names;
             }
             ObjectId = input.ObjectId;
+            ReduxPerks = input.ReduxPerks?.Clone() ?? new FSO.SimAntics.Utils.VMReduxPerks(); // SimsRedux: Level Rewards (older saves: none)
             if (ReduxHeld.Holds(ObjectId)) ObjectId = NextObjID(); // (SimsRedux: a held object keeps its ID)
             // SimsRedux: tell the player (once) that some objects here are kept but not shown
             if (ReduxHeld.Any)

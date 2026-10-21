@@ -108,6 +108,19 @@ namespace FSO.HIT
             PlayQueue.Add(note);
         }
 
+        /// <summary>
+        /// SimsRedux: every sound a note is playing (or about to play) from right now - the sound cache keeps these
+        /// when it lets go of the rest (TS1Audio.ReduxLotClosed), so nothing still playing loses its sound data.
+        /// </summary>
+        public HashSet<Patch> ReduxPatchesInUse()
+        {
+            var set = new HashSet<Patch>();
+            foreach (var item in PlayQueue) if (item?.Sound != null) set.Add(item.Sound);
+            foreach (var snd in Sounds) (snd as HITThread)?.ReduxAddPatches(set);
+            foreach (var snd in ActiveEvents.Values) (snd as HITThread)?.ReduxAddPatches(set);
+            return set;
+        }
+
         public bool NightclubMode;
 
         private static int SoundFailures;

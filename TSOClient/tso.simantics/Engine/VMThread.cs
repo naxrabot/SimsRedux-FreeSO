@@ -462,7 +462,7 @@ namespace FSO.SimAntics.Engine
                         Entity.ExecuteEntryPoint(1, Context, false);
                         if (Stack.Count == 0) return;
                     }
-                    if ((!Stack.LastOrDefault().ActionTree) || (!Queue[0].Callee.Dead)) //main or our target is not dead
+                    if ((!Stack.LastOrDefault().ActionTree) || (Queue[0].Callee != null && !Queue[0].Callee.Dead)) //main or our target is not dead (SimsRedux: a missing target counts as dead)
                     {
 #if IDE_COMPAT
                         if (ThreadBreak == VMThreadBreakMode.ReturnTrue)
@@ -547,8 +547,12 @@ namespace FSO.SimAntics.Engine
 
                 if (!IsCheck)
                 {
-                    context.Callee.Reset(context.VM.Context);
-                    context.Caller.Reset(context.VM.Context);
+                    // SimsRedux: the object acted on can be gone (null) - e.g. a Go Here whose marker wasn't in the
+                    // loaded save. Resetting it threw out of the whole VM tick ("couldn't update TS1GameScreen",
+                    // then "Tick wrong! Got #, Missed #"); reset whoever is still there instead.
+                    context.Callee?.Reset(context.VM.Context);
+                    if (context.Caller != null) context.Caller.Reset(context.VM.Context);
+                    else Entity?.Reset(context.VM.Context);
                     if (Delete) Entity.Delete(true, context.VM.Context);
                 } else
                 {
@@ -1133,7 +1137,7 @@ namespace FSO.SimAntics.Engine
                 {
                     ReduxQueueNote(this, interaction, "it was cancelled before it started");
                     Queue.Remove(interaction);
-                    if (Context.VM.TS1) interaction.Callee.ExecuteEntryPoint(4, Context, true, Entity); //queue skipped
+                    if (Context.VM.TS1) interaction.Callee?.ExecuteEntryPoint(4, Context, true, Entity); //queue skipped (SimsRedux: its object can be gone)
                 }
                 else
                 {
@@ -1420,7 +1424,8 @@ namespace FSO.SimAntics.Engine
             // what it was doing and starts over, instead of the whole lot failing to load
             // - and the same when it was busy with an object held back (Utils/ReduxHeldObjects: e.g. a Sims 1 table
             // with a missing sculpture on it) or no longer there, like a missing object dropped from a Sim's hands.
-            // (Only on a lot with such objects - other lots load exactly as before.)
+            // (The held-object checks only run on a lot with such objects; "acting on something that isn't in the
+            // save" is checked on every lot - see ReduxBusyWithMissing.)
             if (Stack.Any(f => f.CodeOwner == null) || Queue.Any(q => q.CodeOwner == null)
                 || ReduxBusyWithMissing(input, context))
             {
@@ -1444,14 +1449,28 @@ namespace FSO.SimAntics.Engine
         /// <summary>
         /// SimsRedux: was this thread saved busy with an object held back for missing files (as the one acted on,
         /// the stack object or the interaction's icon), or acting on an object that isn't there (it would crash on
-        /// its first tick)? Only asked on a lot that has held-back or dropped objects - false everywhere else.
+        /// its first tick)? The held-back checks only on a lot that has held-back or dropped objects; the "isn't
+        /// there" check (the object acted on) on every lot.
         /// </summary>
         private static bool ReduxBusyWithMissing(VMThreadMarshal input, VMContext context)
         {
-            var held = context?.VM?.ReduxHeld;
-            if (held == null || !held.AnyMissing) return false;
-            Func<short, bool> isHeld = (id) => id != 0 && (held.Holds(id) || held.Dropped.Contains(id));
+            if (context?.VM == null) return false;
+            var held = context.VM.ReduxHeld;
             Func<short, bool> isGone = (id) => id > 0 && context.VM.GetObjectById(id) == null;
+            // (15.1: on every lot, something saved busy with an object that isn't in the save - a visitor left out
+            // of the house's save, a "go here" marker - starts over: it used to load with nothing to act on and
+            // stop with a SimAntics error on its first use of it, e.g. "Go Here" Standard entry, "Tease Scare")
+            if (held == null || !held.AnyMissing)
+            {
+                if (input.Stack != null)
+                    foreach (var f in input.Stack)
+                        if (f != null && isGone(f.Callee)) return true;
+                if (input.Queue != null)
+                    foreach (var q in input.Queue)
+                        if (q != null && isGone(q.Callee)) return true;
+                return false;
+            }
+            Func<short, bool> isHeld = (id) => id != 0 && (held.Holds(id) || held.Dropped.Contains(id));
             if (input.Stack != null)
                 foreach (var f in input.Stack)
                     if (f != null && (isHeld(f.Callee) || isHeld(f.StackObject) || isHeld(f.Caller) || isGone(f.Callee))) return true;
