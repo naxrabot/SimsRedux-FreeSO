@@ -1145,6 +1145,8 @@ namespace FSO.SimAntics
 
         public VMPlacementError IsUserMovable(VMContext context, bool deleting)
         {
+            // SimsRedux: a wall detail made on the server (the panel's Item Editor) stays put - only an Admin's game moves, sells or deletes it
+            if (Object != null && Object.OBJ != null && FSO.Content.TS1.ReduxCustomObjects.LocksOut(Object.OBJ.GUID)) return VMPlacementError.CantBePickedup;
             if (context.Cheats.MoveObjects) // for ts1 moveobjects cheat
                 return VMPlacementError.Success;
             foreach (var obj in MultitileGroup.Objects)
@@ -1432,6 +1434,9 @@ namespace FSO.SimAntics
             }
 
             if (rotPart == 0) return;
+
+            // SimsRedux: a wall detail (ReduxCustomObjects) shares its wall with a painting, but still hides with the wall when walls are cut away
+            if (!exclusive && UseWorld && Object != null && FSO.Content.TS1.ReduxCustomObjects.IsDetail(Object.OBJ.GUID)) ((ObjectComponent)WorldUI).AdjacentWall = (WallSegments)rotPart;
 
             if (exclusive)
             {

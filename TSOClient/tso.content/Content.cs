@@ -97,6 +97,14 @@ namespace FSO.Content
         public static string ReduxCreatorDir { get { return Path.Combine(FSOEnvironment.ContentDir, "redux/creator/"); } }
 
         /// <summary>
+        /// SimsRedux: items made on the server from pictures (the panel's Item Editor > New item from picture), downloaded
+        /// by the game into its own folder (Simitone.Client's ReduxCustomItems: UserDir/redux_custom/&lt;server&gt;/, listed in
+        /// its manifest.txt). Set before the content loads; null or empty = none.
+        /// </summary>
+        public static string ReduxCustomDir;
+        public const string ReduxCustomTag = "~redux-custom/";
+
+        /// <summary>
         /// SimsRedux: The Sims Online's own folder (TSOClient - the one with housedata and objectdata in it),
         /// "" = none. In the browser it's "/tso/" (downloaded from the server by Admins and Testers).
         /// Its content is only used while ReduxTSOContent is on (set before the content loads, like
@@ -159,6 +167,7 @@ namespace FSO.Content
         {
             if (file != null && file.StartsWith(ReduxModTag)) return Path.Combine(ReduxModsDir, file.Substring(ReduxModTag.Length));
             if (file != null && file.StartsWith(ReduxCreatorTag)) return Path.Combine(ReduxCreatorDir, file.Substring(ReduxCreatorTag.Length));
+            if (file != null && file.StartsWith(ReduxCustomTag) && !string.IsNullOrEmpty(ReduxCustomDir)) return Path.Combine(ReduxCustomDir, file.Substring(ReduxCustomTag.Length));
             return Path.Combine(TS1BasePath, file);
         }
 
@@ -166,6 +175,7 @@ namespace FSO.Content
         {
             AddManifest(files, ReduxModsDir, ReduxModTag, "mod");
             if (ReduxCreatorContent) AddManifest(files, ReduxCreatorDir, ReduxCreatorTag, "creator");
+            if (!string.IsNullOrEmpty(ReduxCustomDir)) AddManifest(files, ReduxCustomDir, ReduxCustomTag, "server-made (from pictures)");
         }
 
         /// <summary>SimsRedux: adds the files a folder's manifest.txt lists (one per line, # = comment) to the game's file list.</summary>

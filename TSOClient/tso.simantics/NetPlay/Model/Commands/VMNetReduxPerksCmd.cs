@@ -45,7 +45,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     if (vm.ReduxPerks != null)
                         foreach (var kv in vm.ReduxPerks.Families)
                         {
-                            if (next.Families.ContainsKey(kv.Key)) continue;
+                            if (next.Families.ContainsKey(kv.Key) || kv.Key == VMReduxPerks.TownKey) continue; // (15.2: the town entry is never kept over)
                             var had = kv.Value;
                             if (had.MaidUsed == 0 && had.GardenerUsed == 0 && had.MaidDay < 0 && had.GardenerDay < 0) continue;
                             next.Families[kv.Key] = new VMReduxPerks.Entry

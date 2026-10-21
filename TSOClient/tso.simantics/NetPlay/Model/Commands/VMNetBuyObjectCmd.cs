@@ -174,7 +174,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 value = (price * (100 - dcPercent)) / 100;
                 if (Mode == PurchaseMode.Donate) value -= (value * 2) / 3;
                 // SimsRedux Level Rewards: the Buy mode discount of the family living here (worked out here, on the lot)
-                if (vm.TS1) value = FSO.SimAntics.Utils.ReduxPerkRules.BuyPrice(vm, value);
+                // (15.2: plus the town's Game Rules and an event's sale on this item - single player only)
+                if (vm.TS1) value = FSO.SimAntics.Utils.ReduxPerkRules.BuyPrice(vm, value, GUID);
             }
 
             //TODO: fine grained purchase control based on user status
