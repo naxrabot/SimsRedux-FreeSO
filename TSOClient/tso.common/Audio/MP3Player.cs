@@ -62,6 +62,51 @@ namespace FSO.Common.Audio
         private readonly ArrayPool<byte> _pool = ArrayPool<byte>.Shared;
         private readonly bool _preload;
 
+        // SimsRedux: the file is closed only when nothing is reading it. Switching stations (or the radio going
+        // off) disposes the player from the game thread while the background decoder may be mid-read - closing
+        // the file under it gave "Cannot access a closed file". Now Dispose asks for the close, and the last
+        // read in progress does it when it finishes.
+        private readonly object _streamLock = new();
+        private int _readers;
+        private bool _closeWanted, _streamClosed;
+
+        /// <summary>Reads decoded audio; 0 (end of the song) once the player has been disposed.</summary>
+        private int ReadStream(byte[] buffer, int offset, int count)
+        {
+            lock (_streamLock)
+            {
+                if (_closeWanted || _streamClosed || _stream == null) return 0;
+                _readers++;
+            }
+            try { return _stream.Read(buffer, offset, count); }
+            catch (ObjectDisposedException) { return 0; }
+            finally
+            {
+                lock (_streamLock)
+                {
+                    _readers--;
+                    if (_closeWanted && _readers == 0) CloseStreamLocked();
+                }
+            }
+        }
+
+        /// <summary>Closes the file now, or as soon as the read in progress is done.</summary>
+        private void CloseStream()
+        {
+            lock (_streamLock)
+            {
+                _closeWanted = true;
+                if (_readers == 0) CloseStreamLocked();
+            }
+        }
+
+        private void CloseStreamLocked()
+        {
+            if (_streamClosed) return;
+            _streamClosed = true;
+            try { _stream?.Dispose(); } catch { }
+        }
+
 
         /// <summary>
         /// Initializes a new MP3Player instance with default buffering options.
@@ -112,15 +157,31 @@ namespace FSO.Common.Audio
                     Task.Delay(1000).ContinueWith(t => { if (!_disposed) Start(); });
                     return;
                 }
-                _stream = new MP3Stream(file);
+                lock (_streamLock)
+                {
+                    // (disposed while the file was opening: nothing to play)
+                    if (_disposed || _closeWanted) { try { file.Dispose(); } catch { } return; }
+                    try { _stream = new MP3Stream(file); }
+                    catch { try { file.Dispose(); } catch { } throw; }
+                    _readers++;
+                }
+                try { _stream.DecodeFrames(1); }
+                finally
+                {
+                    lock (_streamLock)
+                    {
+                        _readers--;
+                        if (_closeWanted && _readers == 0) CloseStreamLocked();
+                    }
+                }
+                if (_disposed) return;
                 Console.WriteLine("[SimsRedux] music: playing " + System.IO.Path.GetFileName(_path));
-                _stream.DecodeFrames(1);
                 var freq = _stream.Frequency;
 
                 lock (_controlLock)
                 {
                     // (disposed while the file was opening - e.g. during a load retry: close it here, Dispose already ran)
-                    if (_disposed) { _stream?.Dispose(); return; }
+                    if (_disposed) { CloseStream(); return; }
 
                     _inst = new DynamicSoundEffectInstance(freq, AudioChannels.Stereo)
                     {
@@ -159,7 +220,7 @@ namespace FSO.Common.Audio
                             if (_nextBuffers.Count < _maxBuffers)
                             {
                                 var rent = _pool.Rent(_bufferSize);
-                                int read = _stream.Read(rent, 0, rent.Length);
+                                int read = ReadStream(rent, 0, rent.Length);
 
                                 if (read <= 0)
                                 {
@@ -177,11 +238,18 @@ namespace FSO.Common.Audio
                         }
                     }
                     catch (OperationCanceledException) { }
+                    catch (Exception e)
+                    {
+                        // a damaged song: stop it and let the radio go on to the next one
+                        if (!_disposed) Console.WriteLine("[SimsRedux] music: couldn't play " + _path + ": " + e.Message);
+                        _endOfStream = true;
+                    }
                 }, token);
             }
             catch (Exception e)
             {
-                Console.WriteLine("[SimsRedux] music: couldn't play " + _path + ": " + e.Message);
+                // (stopped while starting - a station switch or the radio going off - isn't a problem)
+                if (!_disposed && !(e is ObjectDisposedException)) Console.WriteLine("[SimsRedux] music: couldn't play " + _path + ": " + e.Message);
                 _endOfStream = true;
             }
         }
@@ -193,7 +261,7 @@ namespace FSO.Common.Audio
             try
             {
                 int read;
-                while ((read = _stream!.Read(tmp, 0, tmp.Length)) > 0)
+                while ((read = ReadStream(tmp, 0, tmp.Length)) > 0)
                 {
                     ms.Write(tmp, 0, read);
                 }
@@ -215,7 +283,7 @@ namespace FSO.Common.Audio
             for (int i = 0; i < _initialBuffers && !token.IsCancellationRequested; i++)
             {
                 var buf = _pool.Rent(_bufferSize);
-                int bytesRead = _stream!.Read(buf, 0, _bufferSize);
+                int bytesRead = ReadStream(buf, 0, _bufferSize);
 
                 if (bytesRead <= 0)
                 {
@@ -255,8 +323,9 @@ namespace FSO.Common.Audio
                 _disposed = true;
                 _cts?.Cancel();
                 _inst?.Dispose();
-                _stream?.Dispose();
             }
+            // (not while the decoder is reading it: closed when that read is done)
+            CloseStream();
 
             while (_nextBuffers.TryDequeue(out var tuple))
             {

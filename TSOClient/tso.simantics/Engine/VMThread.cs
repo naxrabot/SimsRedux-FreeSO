@@ -283,6 +283,18 @@ namespace FSO.SimAntics.Engine
                     ActiveQueueBlock++;
                     return true;
                 }
+                else if (!IsCheck && ActiveQueueBlock > -1 && Context.VM.TS1 && item.Mode == VMQueueMode.Normal
+                    && item.Priority >= (short)VMQueuePriority.UserDriven)
+                {
+                    // SimsRedux: a player's order looked at from INSIDE a running interaction (Sims 1 lets an
+                    // interaction's "idle, allow push" run the next order on top of it) whose check says no right
+                    // now stays in the queue, in its place, for when it really comes up - after the running
+                    // interaction has finished (it's already been told to: a higher-priority order is waiting).
+                    // It was dropped here: a Sim getting out of bed in the morning (still lying down / asleep to
+                    // the checks) lost every order the player gave while the animation played. When it comes up
+                    // from the Sim's own loop (no interaction running) a check that says no still drops it, below.
+                    return false;
+                }
                 else
                 {
                     ReduxQueueNote(this, item, (item.Mode == VMQueueMode.ParentIdle && Entity.GetFlag(VMEntityFlags.InteractionCanceled))
@@ -1057,8 +1069,19 @@ namespace FSO.SimAntics.Engine
                             // cancelling an item that has started doesn't take it out of the queue, so it cancelled the same
                             // one forever and froze the game: found by the headless test, the pedestrian portal pushing
                             // "leave" onto a busy neighbour.)
+                            // Only items that can really be skipped (not started, normal, not must-run - the ones
+                            // CancelAction takes out of the queue): cancelling any other kind goes down CancelAction's
+                            // "cancel what's running" branch, which flags the Sim's CURRENT interaction as cancelled and
+                            // drops its priority to 0 - so queueing an order cut short whatever the Sim was in the middle
+                            // of (getting out of bed in the morning) instead of skipping the item behind it.
                             var later = new List<ushort>();
-                            for (int j = i; j < this.Queue.Count; j++) later.Add(this.Queue[j].UID);
+                            for (int j = i; j < this.Queue.Count; j++)
+                            {
+                                var q = this.Queue[j];
+                                if (!q.Flags.HasFlag(TTABFlags.MustRun)
+                                    && (q.Mode == VMQueueMode.Normal || q.Flags.HasFlag(TTABFlags.FSODirectControl)))
+                                    later.Add(q.UID);
+                            }
                             foreach (var uid in later) CancelAction(uid);
                         }
                         EvaluateQueuePriorities();
