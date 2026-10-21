@@ -72,7 +72,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
                 return true;
             }
-            else if (vm.GlobalLink != null && item != null)
+            else if (vm.GlobalLink != null && item != null && caller != null) // (SimsRedux: no caller - e.g. sent by the game itself - nothing to refund to)
             {
                 vm.GlobalLink.PerformTransaction(vm, false, uint.MaxValue, caller.PersistID, (int)value,
                 (bool success, int transferAmount, uint uid1, uint budget1, uint uid2, uint budget2) =>

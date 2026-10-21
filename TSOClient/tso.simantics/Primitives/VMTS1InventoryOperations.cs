@@ -59,8 +59,10 @@ namespace FSO.SimAntics.Primitives
 
             var neighbourhood = Content.Content.Get().Neighborhood;
             var inTarget = (operand.UseObjectInTemp4) ? context.VM.GetObjectById(context.Thread.TempRegisters[4]) : context.Caller;
-            if (inTarget is VMGameObject) { }
-            var target = (VMAvatar)(inTarget);
+            // SimsRedux: only Sims have an inventory - an object here (e.g. the Tragic Clown Generator's "Magic Growth -
+            // Qualify?" asking about itself) answers "no" instead of throwing (found by the headless test)
+            var target = inTarget as VMAvatar;
+            if (target == null) return VMPrimitiveExitCode.GOTO_FALSE;
             var neighbour = target.GetPersonData(Model.VMPersonDataVariable.NeighborId);
             var inventory = neighbourhood.GetInventoryByNID(neighbour);
             var count = (operand.CountInTemp) ? context.Thread.TempRegisters[0] : 1;

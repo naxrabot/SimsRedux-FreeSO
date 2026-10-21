@@ -1053,10 +1053,13 @@ namespace FSO.SimAntics.Engine
                             // queue skip all items with a lower priority (after this interaction)
                             // i've verified this happens in ts1, but I don't know if it does in TSO so i've locked it for now.
                             i += 2;
-                            while (i < this.Queue.Count)
-                            {
-                                CancelAction(this.Queue[i].UID);
-                            }
+                            // SimsRedux: cancel each of them once. (This looped "while there are items after it" - but
+                            // cancelling an item that has started doesn't take it out of the queue, so it cancelled the same
+                            // one forever and froze the game: found by the headless test, the pedestrian portal pushing
+                            // "leave" onto a busy neighbour.)
+                            var later = new List<ushort>();
+                            for (int j = i; j < this.Queue.Count; j++) later.Add(this.Queue[j].UID);
+                            foreach (var uid in later) CancelAction(uid);
                         }
                         EvaluateQueuePriorities();
                         return;
