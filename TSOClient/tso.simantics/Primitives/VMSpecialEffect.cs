@@ -12,9 +12,25 @@ namespace FSO.SimAntics.Primitives
             var operand = (VMSpecialEffectOperand)args;
             if (context.VM.TS1 && VM.UseWorld)
             {
-                if (((byte)operand.Flags & (1<<3)) > 0) context.VM.Context.World.CenterTo(context.StackObject.WorldUI);
+                // SimsRedux: the camera is each player's own. With other players on the lot (a visit, the online
+                // town), it only jumps for an effect on your own Sim - the others' moments don't pull it away.
+                if (((byte)operand.Flags & (1<<3)) > 0 && CameraIsMine(context.VM, context.StackObject))
+                    context.VM.Context.World.CenterTo(context.StackObject.WorldUI);
             }
             return VMPrimitiveExitCode.GOTO_TRUE;
+        }
+
+        /// <summary>SimsRedux: may something about this object move this player's camera? Always alone (single
+        /// player); with other players on the lot, only for this player's own Sim.</summary>
+        public static bool CameraIsMine(VM vm, VMEntity obj)
+        {
+            if (obj == null) return false;
+            var me = vm.MyUID;
+            bool others = false;
+            foreach (var a in vm.Context.ObjectQueries.Avatars)
+                if (a.PersistID != 0 && a.PersistID != me) { others = true; break; }
+            if (!others) return true;
+            return obj is VMAvatar && obj.PersistID == me;
         }
     }
 

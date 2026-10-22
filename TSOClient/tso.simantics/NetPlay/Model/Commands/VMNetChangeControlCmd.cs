@@ -55,7 +55,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             vm.SetGlobalValue(3, target.ObjectID);
 
             // (a Sim who is away - at work, say - isn't on the lot: there's nothing to look at)
-            if (VM.UseWorld && target.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD)
+            // (and only on the player's own screen: another player switching Sims doesn't move your camera)
+            if (VM.UseWorld && ActorUID == vm.MyUID && target.Position != FSO.LotView.Model.LotTilePos.OUT_OF_WORLD)
             {
                 vm.Context.World.CenterTo(target.WorldUI);
             }
