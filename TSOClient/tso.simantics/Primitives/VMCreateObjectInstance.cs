@@ -98,6 +98,8 @@ namespace FSO.SimAntics.Engine.Primitives
                 if (neigh == null) return VMPrimitiveExitCode.GOTO_FALSE;
                 guid = neigh.GUID;
             }
+            // SimsRedux: Makin' Magic's Mystery Man isn't made (the same answer as "no room for him"; Utils/ReduxMysteryMan.cs)
+            if (FSO.SimAntics.Utils.ReduxMysteryMan.Block(context.VM, guid)) return VMPrimitiveExitCode.GOTO_FALSE;
 
             if (operand.NoDuplicate && operand.Position != VMCreateObjectPosition.InMyHand && operand.Position != VMCreateObjectPosition.InSlot0OfStackObject) {
                 var objs = context.VM.Context.ObjectQueries.GetObjectsAt(tpos);
