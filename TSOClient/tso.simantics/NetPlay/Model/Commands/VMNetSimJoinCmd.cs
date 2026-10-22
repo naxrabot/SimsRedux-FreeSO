@@ -26,7 +26,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             {
                 // SimsRedux multiplayer: a friend visiting with their own Sim. The host has already
                 // added the Sim's character file and neighbour data to everyone's game, so it can
-                // be created like any other Sim. It appears next to the host's selected Sim.
+                // be created like any other Sim. It appears out front by the mailbox.
                 if (vm.GetAvatarByPersist(ActorUID) != null) return true;
                 FSO.SimAntics.Entities.VMMultitileGroup group;
                 // (a player's game must never stop over a visitor's Sim: if it can't be made here,
@@ -35,8 +35,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 catch (Exception e) { Console.WriteLine("[SimsRedux] couldn't make a visiting Sim (" + AvatarState.CustomGUID.ToString("X8") + "): " + e); return true; }
                 var visitor = group?.BaseObject as VMAvatar;
                 if (visitor == null) return true;
+                // (16.1: they arrive out front, by the mailbox at the street, and walk up to the house - like any
+                //  guest. No mailbox: next to the host's selected Sim, as before.)
+                var curb = vm.Entities.FirstOrDefault(x => x.Object?.OBJ != null && (x.Object.OBJ.GUID == 0xEF121974 || x.Object.OBJ.GUID == 0x1D95C9B0) && x.Position != LotTilePos.OUT_OF_WORLD);
+                if (curb != null) VMFindLocationFor.FindLocationFor(visitor, curb, vm.Context, VMPlaceRequestFlags.Default);
                 var near = vm.GetObjectById(vm.GetGlobalValue(3)) ?? vm.Entities.FirstOrDefault(x => x is VMAvatar && x != visitor && x.Position != LotTilePos.OUT_OF_WORLD);
-                if (near != null) VMFindLocationFor.FindLocationFor(visitor, near, vm.Context, VMPlaceRequestFlags.Default);
+                if (visitor.Position == LotTilePos.OUT_OF_WORLD && near != null) VMFindLocationFor.FindLocationFor(visitor, near, vm.Context, VMPlaceRequestFlags.Default);
                 if (visitor.Position == LotTilePos.OUT_OF_WORLD) visitor.SetPosition(LotTilePos.FromBigTile(2, 2, 1), Direction.NORTH, vm.Context);
                 visitor.PersistID = ActorUID;
                 // treat the friend's Sim like one of the household, not a visiting neighbour
