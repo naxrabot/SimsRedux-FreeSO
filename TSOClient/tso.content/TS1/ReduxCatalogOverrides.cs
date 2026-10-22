@@ -13,6 +13,9 @@ namespace FSO.Content.TS1
     ///       a placed one's value starts from - on an online lot the lot works it out, so every player pays the same)
     ///   dev:     a developer item - only Admin accounts see it in Buy and Build mode and search, and buy it
     ///   deleted: nobody sees or buys it any more (Admins neither); placed ones stay and can still be sold
+    ///   cat / sub (SimsRedux 15.9): where a Buy mode item is listed - its category (0 Seating ... 7 Lighting) and
+    ///       sub-category (one sub-sort bit, 0-7). Only the catalog's lists change (an item moves from one category's
+    ///       list to another's); buying and placing don't depend on it. Build mode items keep theirs.
     ///
     /// A hidden item stays a catalog item (GetItemByGUID) like the water rugs (ObjectCatalogItem.ReduxHidden): placed
     /// ones keep their price, info and sell value; it's only taken out of the category lists, so Buy and Build mode,
@@ -29,6 +32,8 @@ namespace FSO.Content.TS1
             /// <summary>-1: the item's own price.</summary>
             public int Price = -1;
             public bool Dev, Deleted;
+            /// <summary>SimsRedux 15.9: Buy mode category 0-7 (-1: its own) and sub-category bit 0-7 (-1: its own).</summary>
+            public int Category = -1, Subsort = -1;
         }
 
         private static readonly object Lock = new object();
@@ -125,18 +130,29 @@ namespace FSO.Content.TS1
                 }
                 ByGuid[kv.Key] = item;
             }
+            // (the lists are made again from the originals; an item given another Buy mode category goes to that one's list)
+            var lists = new List<ObjectCatalogItem>[ByCategory.Length];
             for (int c = 0; c < ByCategory.Length && c < OriginalLists.Length; c++)
+                if (ByCategory[c] != null && OriginalLists[c] != null) lists[c] = new List<ObjectCatalogItem>();
+            for (int c = 0; c < lists.Length; c++)
             {
-                var list = ByCategory[c];
-                var orig = OriginalLists[c];
-                if (list == null || orig == null) continue;
-                list.Clear();
+                var orig = lists[c] == null ? null : OriginalLists[c];
+                if (orig == null) continue;
                 foreach (var item in orig)
                 {
                     if (hiddenNow.Contains(item.GUID)) continue;
                     Entry e;
-                    list.Add(Items.TryGetValue(item.GUID, out e) ? WithChanges(item, e) : item);
+                    var now = Items.TryGetValue(item.GUID, out e) ? WithChanges(item, e) : item;
+                    int to = now.Category;
+                    if (to < 0 || to >= lists.Length || lists[to] == null) { to = c; now.Category = item.Category; }
+                    lists[to].Add(now);
                 }
+            }
+            for (int c = 0; c < lists.Length; c++)
+            {
+                if (lists[c] == null) continue;
+                ByCategory[c].Clear();
+                ByCategory[c].AddRange(lists[c]);
             }
             HiddenCount = hidden;
             return true;
@@ -147,6 +163,12 @@ namespace FSO.Content.TS1
             if (!string.IsNullOrEmpty(e.Name)) item.CatalogName = e.Name;
             if (e.Desc != null) item.ReduxDescription = e.Desc;
             if (e.Price >= 0) { item.Price = (uint)e.Price; item.ReduxPriceGuessed = false; }
+            // SimsRedux 15.9: another Buy mode category / sub-category (Buy mode items only: 0-7)
+            if (item.Category >= 0 && item.Category < 8)
+            {
+                if (e.Category >= 0 && e.Category < 8) item.Category = (sbyte)e.Category;
+                if (e.Subsort >= 0 && e.Subsort < 8) item.Subsort = (byte)(1 << e.Subsort);
+            }
             return item;
         }
     }

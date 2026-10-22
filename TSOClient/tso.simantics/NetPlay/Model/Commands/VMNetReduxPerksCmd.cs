@@ -12,7 +12,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     /// </summary>
     public class VMNetReduxPerksCmd : VMNetCommandBodyAbstract
     {
-        public enum PerkAction : byte { SetTable = 0, Money = 1, Gift = 2 }
+        /// <summary>
+        /// 16.0 mail between players (Utils/ReduxMailItems.cs): TakeItem - one inventory item leaves with a letter
+        /// (Amount = the Sim's neighbour id in the low 16 bits, the item's inventory type above them); GiveItem - one
+        /// arrives (Amount = its type). The money that goes with a letter uses Money (a minus amount when it's sent).
+        /// </summary>
+        public enum PerkAction : byte { SetTable = 0, Money = 1, Gift = 2, TakeItem = 3, GiveItem = 4 }
 
         public PerkAction Action;
         /// <summary>SetTable: the whole table (replaces the lot's; the free days already used here are kept).</summary>
@@ -61,6 +66,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     var what = ReduxPerkRules.GiveObject(vm, Family, GUID);
                     Console.WriteLine("[SimsRedux] level reward: " + what);
                     return true;
+                case PerkAction.TakeItem:
+                    return ReduxMailItems.TakeItem(vm, Family, (short)(Amount & 0xFFFF), GUID, Amount >> 16);
+                case PerkAction.GiveItem:
+                    return ReduxMailItems.GiveItem(vm, Family, GUID, Amount);
             }
             return false;
         }
@@ -69,7 +78,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             if (FromNet) return false; // (only the lot itself - never a player's game)
             if (Action == PerkAction.Money && (Amount == 0 || Math.Abs((long)Amount) > 100000000)) return false;
-            return Action <= PerkAction.Gift;
+            return Action <= PerkAction.GiveItem;
         }
 
         public override void SerializeInto(BinaryWriter writer)
