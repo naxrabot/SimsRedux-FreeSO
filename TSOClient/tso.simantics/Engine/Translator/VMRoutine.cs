@@ -29,7 +29,7 @@ namespace FSO.SimAntics
         /// </summary>
         public sbyte ReduxKind = -1;
         public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
-            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6;
+            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7;
 
         public sbyte GetReduxKind()
         {
@@ -38,6 +38,7 @@ namespace FSO.SimAntics
             {
                 var label = Chunk?.ChunkLabel ?? "";
                 if (label.Equals("Exit Skill Object", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindExitSkill;
+                else if (label.Equals("Exit fun object", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindExitFun;
                 else if (label.IndexOf("happy enough", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindHappyEnough;
                 else if (label.IndexOf("due at work", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindDueAtWork;
                 else if (label.IndexOf("warnings car pool", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindCarPool;
@@ -91,6 +92,9 @@ namespace FSO.SimAntics
                         return (frame.Thread != null && frame.Thread.ReduxHookShouldWait()) ? VMPrimitiveExitCode.CONTINUE_NEXT_TICK : VMPrimitiveExitCode.GOTO_TRUE;
                 }
                 frame.Thread.ExecuteSubRoutine(frame, opcode, (VMSubRoutineOperand)instruction.Operand);
+                // SimsRedux: a Sim playing with a fun object keeps going until Fun is full (Utils/ReduxFunPlay.cs)
+                if (opcode == FSO.SimAntics.Utils.ReduxFunPlay.ExitFunObject && frame.VM != null && frame.VM.TS1 && frame.Caller is VMAvatar)
+                    FSO.SimAntics.Utils.ReduxFunPlay.KeepPlaying(frame);
                 return VMPrimitiveExitCode.CONTINUE;
             }
 

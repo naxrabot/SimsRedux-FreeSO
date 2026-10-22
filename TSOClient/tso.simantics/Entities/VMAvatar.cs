@@ -851,6 +851,18 @@ namespace FSO.SimAntics
             return MotiveChanges[(int)motive].PerHourChange != 0;
         }
 
+        /// <summary>
+        /// SimsRedux: if this motive is rising from what the Sim is doing, lift the level it stops rising at to at
+        /// least max (Utils/ReduxFunPlay.cs). False when it isn't rising. (A saved field: same on every machine.)
+        /// </summary>
+        public bool ReduxRaiseMotiveCap(VMMotive motive, short max)
+        {
+            var change = MotiveChanges[(int)motive];
+            if (change == null || change.PerHourChange <= 0) return false;
+            if (change.MaxValue < max) change.MaxValue = max;
+            return true;
+        }
+
         public virtual void ClearMotiveChanges()
         {
             for (int i = 0; i < 16; i++)
