@@ -310,6 +310,8 @@ namespace FSO.SimAntics.Primitives
 
                         // SimsRedux: the smarter brain weighs it (urgent needs first, time of day, work, nearby)
                         if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
+                        // SimsRedux 15.7: their own bed (or side) first; someone else's only when there's nowhere else
+                        if (context.VM.TS1 && score > 0) score *= FSO.SimAntics.Utils.ReduxBeds.AutonomyWeight(context.VM, caller, obj, (int)id);
 
                         if (score > minScore)
                         {
@@ -826,6 +828,7 @@ namespace FSO.SimAntics.Primitives
             if (Needs[(int)VMMotive.Bladder] < Math.Min(-40, (int)energy) || Needs[(int)VMMotive.Hunger] < Math.Min(-50, (int)energy)) return null;
 
             VMPieMenuInteraction best = null, nap = null; float bestDist = float.MaxValue, napDist = float.MaxValue;
+            int bestTier = int.MaxValue; // SimsRedux 15.7: 0 their own bed or side, 1 nobody's, 2 someone else's (ReduxBeds)
             var done = new HashSet<short>();
             foreach (var iobj in ents)
             {
@@ -849,7 +852,9 @@ namespace FSO.SimAntics.Primitives
                     var d = Tiles(Sim.Position, obj.Position);
                     var choice = new VMPieMenuInteraction { Name = name, ID = (byte)ia.TTAIndex, Entry = ia, Global = false, Callee = obj, Score = 1,
                         Param0 = avail.Count > 0 ? avail[0].Param0 : (short)0 };
-                    if (sleep && d < bestDist) { bestDist = d; best = choice; }
+                    int pref = sleep ? FSO.SimAntics.Utils.ReduxBeds.Preference(context.VM, Sim, obj, (int)ia.TTAIndex) : -1;
+                    int tier = (pref < 0) ? 1 : pref;
+                    if (sleep && (tier < bestTier || (tier == bestTier && d < bestDist))) { bestTier = tier; bestDist = d; best = choice; }
                     else if (isNap && d < napDist) { napDist = d; nap = choice; }
                 }
             }

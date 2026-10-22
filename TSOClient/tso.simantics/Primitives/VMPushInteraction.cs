@@ -24,6 +24,7 @@ namespace FSO.SimAntics.Engine.Primitives
                 case VMPushPriority.Inherited:
                     short oldPrio = 1;
                     if (context.ActionTree) oldPrio = (context.Caller as VMAvatar)?.GetPersonData(Model.VMPersonDataVariable.Priority) ?? 1;
+                    if (context.ActionTree && context.VM.TS1) oldPrio = ReduxOrderPriority(context, oldPrio); // (SimsRedux 15.7: see there)
                     priority = Math.Max((short)1, oldPrio); break;
                 case VMPushPriority.Maximum:
                     priority = (short)VMQueuePriority.Maximum; break;
@@ -77,6 +78,31 @@ namespace FSO.SimAntics.Engine.Primitives
             }
 
             return VMPrimitiveExitCode.GOTO_TRUE;
+        }
+
+        /// <summary>
+        /// SimsRedux 15.7: the priority an "inherited" push gets from a player's order that runs at once.
+        /// A Sims 1 social picked from the menu ("Talk", "Joke", "Hug"...) is a "run immediately" interaction: it
+        /// starts straight away, on top of whatever the Sim is doing, creates the conversation and pushes the two
+        /// halves - "Talk" on this Sim, "Be Talked To" on the other - at its own ("inherited") priority, then ends.
+        /// Running at once skipped the step that sets the Sim's current priority, so the halves inherited what the
+        /// Sim had been doing before: 0 (standing idle, so 1) or an autonomous action's 2 - never the player's order.
+        /// At that level the other Sim never stopped what they were doing to answer (anything they chose themselves
+        /// outranks it), the next social queued cancelled the running one, and the Sim stood waiting for an answer
+        /// that never came: no daily or lifetime relationship change and no Social gain.
+        /// Now such a push takes the player's order's priority when that is higher - the other Sim stops to answer
+        /// and queued socials wait their turn, as in the original game. Only the player's own orders (their usual
+        /// priority); the Sims' own choices and scripts' pushes are as before. Worked out from the queue alone (the
+        /// same on every machine); the priority is an existing saved field (no save change).
+        /// </summary>
+        private static short ReduxOrderPriority(VMStackFrame context, short prio)
+        {
+            var thread = context.Thread;
+            if (thread == null || thread.IsCheck || context.Caller == null || context.Caller.Thread != thread) return prio;
+            var running = thread.ActiveAction; // (the run-at-once order itself, while its own script runs)
+            if (running == null || (running.Flags & TTABFlags.RunImmediately) == 0) return prio;
+            if (running.Priority != (short)VMQueuePriority.UserDriven) return prio;
+            return Math.Max(prio, running.Priority);
         }
     }
 

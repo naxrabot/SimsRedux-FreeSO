@@ -34,7 +34,8 @@ namespace FSO.SimAntics.Utils
             new Rule(new[] { "basketball", "volleyball", "tetherball", "trampoline" }, VMPersonDataVariable.BodySkill, "Body", 0.7f, "play", "join", "shoot", "practice", "dunk", "jump", "bounce"),
             new Rule(VMPersonDataVariable.CookingSkill, "Cooking", 1f, "have a meal", "serve meal", "have lite meal", "cook", "prepare", "make breakfast", "make lunch", "make dinner", "grill", "bake", "barbecue", "flip"),
             new Rule(VMPersonDataVariable.MechanicalSkill, "Mechanical", 1f, "repair", "fix", "unclog", "tinker"),
-            new Rule(VMPersonDataVariable.CharismaSkill, "Charisma", 0.3f, "talk", "joke", "entertain", "tell ", "flirt", "compliment", "brag", "chat", "gossip"),
+            // (15.7: 0.5 - was 0.3, a first level only after ~7 game hours of talking, so it looked like nothing)
+            new Rule(VMPersonDataVariable.CharismaSkill, "Charisma", 0.5f, "talk", "joke", "entertain", "tell ", "flirt", "compliment", "brag", "chat", "gossip"),
             new Rule(VMPersonDataVariable.BodySkill, "Body", 0.7f, "swim", "dance", "jog", "basketball", "shoot hoops", "volleyball", "snowboard", "skate", "hike"),
             // (no Logic rule: the telescope already teaches Logic by itself)
         };

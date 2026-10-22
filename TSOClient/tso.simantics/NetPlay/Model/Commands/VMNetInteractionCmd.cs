@@ -24,6 +24,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (callee == null) return false;
             if (callee is VMGameObject && ((VMGameObject)callee).Disabled > 0) return false;
             if ((caller.Thread?.Queue?.Count ?? 0) >= VMThread.MAX_USER_ACTIONS) return false;
+            callee = FSO.SimAntics.Utils.ReduxBeds.UserSleepTarget(vm, caller, callee, Interaction, Global); // SimsRedux 15.7: Sleep on a double bed - their own side
             callee.PushUserInteraction(Interaction, caller, vm.Context, Global, new short[] { Param0, 0, 0, 0 });
 
             return true;

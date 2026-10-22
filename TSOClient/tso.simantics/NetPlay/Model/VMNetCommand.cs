@@ -71,6 +71,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxNovel, typeof(VMNetReduxNovelCmd) }, // SimsRedux
             { VMCommandType.ReduxScale, typeof(VMNetScaleObjectCmd) }, // SimsRedux
             { VMCommandType.ReduxPerks, typeof(VMNetReduxPerksCmd) }, // SimsRedux: Level Rewards (Utils/ReduxPerks.cs)
+            { VMCommandType.ReduxBed, typeof(VMNetReduxBedCmd) }, // SimsRedux 15.7: Assign Bed (Utils/ReduxBeds.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -198,6 +199,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxBurglar = 58,
         ReduxNovel = 59,
         ReduxScale = 64, // SimsRedux: object size (60-62 left free for other Redux commands)
-        ReduxPerks = 63 // SimsRedux: Level Rewards - the lot's perk table, money and gifts (VMNetReduxPerksCmd)
+        ReduxPerks = 63, // SimsRedux: Level Rewards - the lot's perk table, money and gifts (VMNetReduxPerksCmd)
+        ReduxBed = 60 // SimsRedux 15.7: a Sim assigns themselves a bed or side (VMNetReduxBedCmd)
     }
 }

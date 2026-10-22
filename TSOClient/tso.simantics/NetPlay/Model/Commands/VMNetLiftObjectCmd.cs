@@ -30,7 +30,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var wallFlags = obj.GetValue(VMStackObjectVariable.WallPlacementFlags);
             var flags = (VMEntityFlags)obj.GetValue(VMStackObjectVariable.Flags);
             var flags2 = (VMEntityFlags2)obj.GetValue(VMStackObjectVariable.FlagField2);
-            return (wallFlags & 15) != 0 && (flags & VMEntityFlags.HideForCutaway) != 0
+            // (SimsRedux 15.7: also a wall-mounted thing Sims can walk under - some paintings and lamps aren't marked
+            //  to hide with the walls. Only used for drawing and the placing controls, never by the simulation.)
+            bool passable = (flags & VMEntityFlags.DisallowPersonIntersection) == 0 && (flags & VMEntityFlags.AllowPersonIntersection) != 0;
+            return (wallFlags & 15) != 0 && ((flags & VMEntityFlags.HideForCutaway) != 0 || passable)
                 && (flags2 & (VMEntityFlags2.ArchitectualWindow | VMEntityFlags2.ArchitectualDoor)) == 0;
         }
 

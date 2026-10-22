@@ -256,6 +256,7 @@ namespace FSO.SimAntics
             FSO.SimAntics.Utils.ReduxComputer.Patch(this);
             FSO.SimAntics.Utils.ReduxLeftovers.Patch(this); // SimsRedux: leftovers in the fridge
             FSO.SimAntics.Utils.ReduxBugs.Patch(this); // SimsRedux: "Spray" on bugs
+            FSO.SimAntics.Utils.ReduxTV.Patch(this); // SimsRedux 15.7: every TV gets every channel
             FSO.SimAntics.Utils.ReduxBaby.Patch(this); // SimsRedux: the baby's neglect warning after 20 starving minutes, as meant
 
             this.Attributes = new List<short>(numAttributes);
@@ -290,6 +291,7 @@ namespace FSO.SimAntics
                 TreeTable = SemiGlobal.Get<TTAB>(obj.OBJ.TreeTableID); //tree not in local, try semiglobal
                 TreeTableStrings = SemiGlobal.Get<TTAs>(obj.OBJ.TreeTableID);
             }
+            FSO.SimAntics.Utils.ReduxTV.Patch(this); // SimsRedux 15.7: a TV made of several pieces gets every channel too
         }
 
         public void UseSemiGlobalTTAB(string sgFile, ushort id)

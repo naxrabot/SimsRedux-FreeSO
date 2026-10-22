@@ -84,7 +84,33 @@ namespace FSO.SimAntics.Utils
                     result.Add(new Tuple<string, string>(o.Name + ",BODY=" + o.TextureName(tsoSkin), tsoSkin));
             }
 
+            // SimsRedux 15.7: the outfit the Sim has for this now (picked in Create-a-Sim - which offers more than the
+            // game's own lists, like an everyday outfit as swimwear) is always one of the choices, last. Without it the
+            // game's "which one do they have" found nothing, and a dresser's Change Clothes could only go to the game's ones.
+            // (Made only from the Sim's own strings, so every player's game builds the same list.)
+            if (avatar != null && !avatar.IsPet && outfitType >= 0 && outfitType < OutfitTypeToInd.Length)
+            {
+                var own = OwnOutfit(avatar, outfitType);
+                if (own != null && !result.Any(x => string.Equals(x.Item1, own, StringComparison.OrdinalIgnoreCase)))
+                    result.Add(new Tuple<string, string>(own, ""));
+            }
+
             return result.ToArray();
+        }
+
+        /// <summary>SimsRedux: the Sim's own outfit of this kind ("mesh,BODY=texture"), or null when there's none.</summary>
+        private static string OwnOutfit(VMAvatar avatar, short outfitType)
+        {
+            try
+            {
+                var bodyStrings = avatar.Object.Resource.Get<FSO.Files.Formats.IFF.Chunks.STR>(avatar.Object.OBJ.BodyStringID);
+                var bsInd = OutfitTypeToInd[outfitType];
+                if (bodyStrings == null || bsInd >= bodyStrings.Length) return null;
+                var s = (bodyStrings.GetString(bsInd) ?? "").Split(';')[0].Trim();
+                if (s == "" || s == "ADDED" || s.IndexOf("BODY=", StringComparison.OrdinalIgnoreCase) < 0) return null;
+                return s;
+            }
+            catch { return null; }
         }
 
         public static short GetSuitIndex(VMAvatar avatar, short outfitType)
@@ -93,7 +119,10 @@ namespace FSO.SimAntics.Utils
             var bodyStrings = avatar.Object.Resource.Get<FSO.Files.Formats.IFF.Chunks.STR>(avatar.Object.OBJ.BodyStringID);
 
             var bsInd = OutfitTypeToInd[outfitType];
-            var prevInd = Array.IndexOf(validSuits, bodyStrings.GetString(bsInd).Split(';')[0].ToLowerInvariant());
+            // SimsRedux 15.7: compared as the outfit strings they are (it looked for a string in a list of pairs, so it never
+            // found the Sim's outfit - always "none")
+            var current = (bodyStrings.GetString(bsInd) ?? "").Split(';')[0].Trim();
+            var prevInd = Array.FindIndex(validSuits, x => string.Equals(x.Item1, current, StringComparison.OrdinalIgnoreCase));
             return (short)prevInd;
         }
 

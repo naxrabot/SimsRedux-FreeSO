@@ -101,10 +101,12 @@ namespace FSO.SimAntics.Engine
                     break;
                 case VMPersonSuits.DefaultSwimwear:
                     if (IsValid(bodyStrings.GetString(31))) goto case VMPersonSuits.TS1ExpandedSwimsuit;
+                    NoOwnOutfit(avatar, "swimwear");
                     toHandCopy = new VMOutfitReference("n" + code + "_01,BODY=" + "u" + code + skn + "_"+((male && !child)?"briefs":"undies")+"01", false);
                     break;
                 case VMPersonSuits.TS1Formal:
                     if (IsValid(bodyStrings.GetString(30))) goto case VMPersonSuits.TS1ExpandedFormal;
+                    if (!child) NoOwnOutfit(avatar, "formal wear");
                     toHandCopy = new VMOutfitReference("f" + code + "_01,BODY=" + "f" + code + skn + "_01", false);
                     break;
                 case VMPersonSuits.JobOutfit:
@@ -160,6 +162,7 @@ namespace FSO.SimAntics.Engine
                     break;
                 case VMPersonSuits.DefaultSleepwear:
                     if (IsValid(bodyStrings.GetString(32))) goto case VMPersonSuits.TS1ExpandedPajamas;
+                    NoOwnOutfit(avatar, "sleepwear");
                     var pj = (child ? "pjs" : "pajama");
                     var gen = (child ? (male ? "m" : "f")+"chd" : (code));
                     var gen2 = (male ? "m" : "f");
@@ -209,6 +212,27 @@ namespace FSO.SimAntics.Engine
                 else toHandCopy.OftData.LiteralHandgroup = avatar.DefaultSuits.Daywear.OftData?.LiteralHandgroup;
             }
             return toHandCopy;
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> NoOwnLogged = new System.Collections.Generic.HashSet<string>();
+
+        /// <summary>
+        /// SimsRedux 15.7: a Sim with no outfit of their own for this (their character file has none - Sims made before
+        /// 13.5 lost the ones picked in Create-a-Sim) wears the game's plain one. Said once per Sim and kind, so it can
+        /// be told apart from a picked outfit not being used. Pick one again with Edit Family.
+        /// </summary>
+        private static void NoOwnOutfit(VMAvatar avatar, string kind)
+        {
+            try
+            {
+                var key = (avatar?.Object?.OBJ?.GUID ?? 0) + kind;
+                lock (NoOwnLogged)
+                {
+                    if (NoOwnLogged.Count > 200 || !NoOwnLogged.Add(key)) return;
+                }
+                Console.WriteLine("[SimsRedux] " + (avatar?.Name ?? "A Sim") + " has no " + kind + " of their own - wearing the game's (pick one with Edit Family).");
+            }
+            catch { }
         }
 
         private static bool IsValid(string suitName)
