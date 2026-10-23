@@ -105,6 +105,14 @@ namespace FSO.SimAntics.Utils
             return -1;
         }
 
+        /// <summary>16.3: the skill an action practises this way (as an int VMPersonDataVariable), or -1 (ReduxBetterTogether).</summary>
+        public static int SkillOf(VMQueuedAction action)
+        {
+            if (action == null || string.IsNullOrEmpty(action.Name) || action.Callee == null) return -1;
+            int r = FindRule(action.Name, action.Callee);
+            return r < 0 ? -1 : (int)Rules[r].Skill;
+        }
+
         public static void Tick(VMAvatar ava)
         {
             try
@@ -143,6 +151,7 @@ namespace FSO.SimAntics.Utils
                 // hundredths of a skill point this minute: a level in about 2 game hours at first, ~7 at level 9
                 int gain = (int)(rule.Speed * 10000.0 / (120.0 * (1.0 + level / 4.0)));
                 gain = ReduxPerkRules.SkillGain(ava, gain); // (Level Rewards: faster with a skill perk)
+                gain = ReduxBetterTogether.Gain(ava, rule.Skill, gain); // (16.3: another player's Sim at it too - ReduxBetterTogether)
                 int carry = ReduxComputer.Get(ava, Carry) + gain;
                 int whole = carry / 100;
                 ReduxComputer.Set(ava, Carry, carry % 100);

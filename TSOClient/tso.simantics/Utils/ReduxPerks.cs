@@ -210,6 +210,7 @@ namespace FSO.SimAntics.Utils
                 var t = ava.IsPet ? null : Town(context.VM);
                 // (the family's perk, plus the town's Game Rule - which may be negative: slower)
                 int c = Sum(e, t, x => x.Skill, -100, 1000);
+                c += ReduxBetterTogether.SkillBonus(context.VM, ava, v, value); // (16.3: another player's Sim learning it too)
                 if (c == 0) return value;
                 int old = ava.GetPersonData(v);
                 if (value <= old || value > 1000 || old < 0) return value;
