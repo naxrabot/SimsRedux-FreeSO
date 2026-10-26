@@ -545,6 +545,7 @@ namespace FSO.SimAntics
                 try { FSO.SimAntics.Utils.ReduxComputer.Tick(this); } catch (Exception e) { Console.WriteLine("[SimsRedux] computer: " + e.Message); }
                 FSO.SimAntics.Utils.ReduxWeek.Tick(this); // (no car pool on a day off)
                 FSO.SimAntics.Utils.ReduxLeftovers.Tick(this); // (a serving out of the fridge)
+                try { FSO.SimAntics.Utils.ReduxCooking.Tick(this); } catch (Exception e) { Console.WriteLine("[SimsRedux] cooking: " + e.Message); } // (16.7: the chosen dish)
                 // SimsRedux: skills grow by doing (cooking raises Cooking, repairing Mechanical...)
                 FSO.SimAntics.Utils.ReduxSkillByDoing.Tick(this);
                 if (Position == LotTilePos.OUT_OF_WORLD && (PersistID > 0 || IsPet) && (Container == null || Container.Position == LotTilePos.OUT_OF_WORLD) && !Content.Content.Get().TS1)

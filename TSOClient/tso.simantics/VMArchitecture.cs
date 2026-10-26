@@ -636,6 +636,11 @@ namespace FSO.SimAntics
                     case VMArchitectureCommandType.GROUND_DOT:
                         cost += VMArchitectureTools.DotGround(this, new Point(com.x, com.y), (byte)com.pattern);
                         break;
+                    case VMArchitectureCommandType.REDUX_PUSH_PREVIEW:
+                        // SimsRedux 16.7: Push Wall's preview - only ever on the picture (the push is VMNetReduxPushWallCmd)
+                        if (!transient || RealMode) break;
+                        cost += ReduxPushWall.Preview(this, com);
+                        break;
                 }
             }
             if (lastAvatar != null && pdCount > 0)
@@ -923,6 +928,7 @@ namespace FSO.SimAntics
                 if (tileX < 0 || tileX >= Width) return true;
                 else if (tileY < 0 || tileY >= Height) return true;
                 else if (level < 1) return true;
+                else if (level > Stories) return true; // SimsRedux 16.7: above the top floor (5) - never built on (it was an out-of-range crash)
                 else
                 {
                     return !fine[tileX + tileY * Width];

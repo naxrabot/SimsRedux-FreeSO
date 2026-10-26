@@ -73,6 +73,9 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxPerks, typeof(VMNetReduxPerksCmd) }, // SimsRedux: Level Rewards (Utils/ReduxPerks.cs)
             { VMCommandType.ReduxBed, typeof(VMNetReduxBedCmd) }, // SimsRedux 15.7: Assign Bed (Utils/ReduxBeds.cs)
             { VMCommandType.ReduxPet, typeof(VMNetReduxPetCmd) }, // SimsRedux 17.0: strays, adopting, pets at home
+            { VMCommandType.ReduxPushWall, typeof(VMNetReduxPushWallCmd) }, // SimsRedux 16.7: Push Wall (Utils/ReduxPushWall.cs)
+            { VMCommandType.ReduxWooHoo, typeof(VMNetReduxWooHooCmd) }, // SimsRedux 16.7: WooHoo (Utils/ReduxWooHoo.cs)
+            { VMCommandType.ReduxCook, typeof(VMNetReduxCookCmd) }, // SimsRedux 16.7: cooking menus (Utils/ReduxCooking.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -202,6 +205,9 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxScale = 64, // SimsRedux: object size (60-62 left free for other Redux commands)
         ReduxPerks = 63, // SimsRedux: Level Rewards - the lot's perk table, money and gifts (VMNetReduxPerksCmd)
         ReduxBed = 60, // SimsRedux 15.7: a Sim assigns themselves a bed or side (VMNetReduxBedCmd)
-        ReduxPet = 70 // SimsRedux 17.0: strays, adopting a pet, pets at home (VMNetReduxPetCmd)
+        ReduxPet = 70, // SimsRedux 17.0: strays, adopting a pet, pets at home (VMNetReduxPetCmd)
+        ReduxPushWall = 71, // SimsRedux 16.7: Build mode's Push Wall (VMNetReduxPushWallCmd, Utils/ReduxPushWall.cs)
+        ReduxWooHoo = 72, // SimsRedux 16.7: WooHoo, babies, protection and pills (VMNetReduxWooHooCmd, Utils/ReduxWooHoo.cs)
+        ReduxCook = 73, // SimsRedux 16.7: cooking menus - make a chosen dish (VMNetReduxCookCmd, Utils/ReduxCooking.cs)
     }
 }

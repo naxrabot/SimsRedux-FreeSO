@@ -34,7 +34,7 @@ namespace FSO.SimAntics.Primitives
                         Param0 = context.StackObjectID
                     });
                 } else
-                    context.Thread.ActiveAction.Name = newName;
+                    context.Thread.ActiveAction.Name = FSO.SimAntics.Utils.ReduxCooking.Rename(context.Thread.ActiveAction, newName); // (SimsRedux 16.7: "Have Dinner: Lasagna")
             }
             return VMPrimitiveExitCode.GOTO_TRUE;
         }

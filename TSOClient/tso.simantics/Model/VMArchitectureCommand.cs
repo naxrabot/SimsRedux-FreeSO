@@ -67,6 +67,8 @@ namespace FSO.SimAntics.Model
 
         GRASS_DOT,
 
-        GROUND_DOT // SimsRedux: paints the ground (pattern = the kind, 0 = the lot's own grass again)
+        GROUND_DOT, // SimsRedux: paints the ground (pattern = the kind, 0 = the lot's own grass again)
+
+        REDUX_PUSH_PREVIEW // SimsRedux 16.7: the Push Wall tool's preview only (picture, never the lot) - see Utils/ReduxPushWall
     }
 }

@@ -29,7 +29,7 @@ namespace FSO.SimAntics
         /// </summary>
         public sbyte ReduxKind = -1;
         public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
-            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7;
+            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7, ReduxKindWooHoo = 8;
 
         public sbyte GetReduxKind()
         {
@@ -44,6 +44,7 @@ namespace FSO.SimAntics
                 else if (label.IndexOf("warnings car pool", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindCarPool;
                 else if (label.IndexOf("school bus schedule", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindSchoolBus;
                 else if (label.StartsWith("is this car for", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindCarForSim;
+                else if (FSO.SimAntics.Utils.ReduxWooHoo.IsHookLabel(label)) kind = ReduxKindWooHoo; // (16.7: WooHoo - the bed, the baby question)
                 else kind = ReduxKindNone;
                 ReduxKind = kind;
             }
@@ -78,6 +79,24 @@ namespace FSO.SimAntics
                         if (off != 0 && frame.Thread != null && frame.Thread.ReduxHookShouldWait()) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                         if (off < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                         if (off > 0) return VMPrimitiveExitCode.GOTO_TRUE;
+                    }
+                    // SimsRedux 16.7: WooHoo in bed, and no more "Should we have a baby?" (Utils/ReduxWooHoo.cs)
+                    else if (kind == ReduxKindWooHoo)
+                    {
+                        var woo = FSO.SimAntics.Utils.ReduxWooHoo.Hook(frame, target);
+                        if (woo > 0) return VMPrimitiveExitCode.GOTO_TRUE;
+                        if (woo < 0) return VMPrimitiveExitCode.GOTO_FALSE;
+                    }
+                }
+                else if (opcode >= 8192 && frame.VM != null && frame.VM.TS1)
+                {
+                    // SimsRedux 16.7: the social globals' own "should have baby?" (Utils/ReduxWooHoo.cs)
+                    var target = frame.ScopeResource?.SemiGlobal?.GetRoutine(opcode) as VMRoutine;
+                    if (target != null && target.GetReduxKind() == ReduxKindWooHoo)
+                    {
+                        var woo = FSO.SimAntics.Utils.ReduxWooHoo.Hook(frame, target);
+                        if (woo > 0) return VMPrimitiveExitCode.GOTO_TRUE;
+                        if (woo < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                     }
                 }
                 // (global script calls: the two hooks below are only gone into when they can apply - a cheap
