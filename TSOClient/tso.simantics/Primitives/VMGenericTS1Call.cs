@@ -289,8 +289,17 @@ namespace FSO.SimAntics.Primitives
                     return VMPrimitiveExitCode.GOTO_TRUE;
                 // 32. CreatePurchasedPetsNearOwner
                 case VMGenericTS1CallMode.CreatePurchasedPetsNearOwner:
-                    context.VM.TS1State.CurrentFamily.SelectWholeFamily();
-                    context.VM.TS1State.VerifyFamily(context.VM);
+                    // SimsRedux 17.0: only the family's pets come (by the Sim who bought them) - it used to make the whole
+                    // family active and bring everyone, so buying a pet at an Old Town pet shop brought the family members
+                    // who stayed at home onto the shop's lot too
+                    // (at the family's own home it's as it was: the whole family)
+                    if (context.VM.TS1State.CurrentFamily == null) return VMPrimitiveExitCode.GOTO_TRUE;
+                    if (context.VM.TS1State.CurrentFamily.HouseNumber > 0 && context.VM.GetGlobalValue(10) == context.VM.TS1State.CurrentFamily.HouseNumber)
+                    {
+                        context.VM.TS1State.CurrentFamily.SelectWholeFamily();
+                        context.VM.TS1State.VerifyFamily(context.VM);
+                    }
+                    else FSO.SimAntics.NetPlay.Model.Commands.VMNetReduxPetCmd.BringPets(context.VM, context.VM.TS1State.CurrentFamily, context.Caller);
                     return VMPrimitiveExitCode.GOTO_TRUE;
                 case VMGenericTS1CallMode.AddToFamilyInTemp0:
                     family = Content.Content.Get().Neighborhood.GetFamily((ushort)context.Thread.TempRegisters[0]);

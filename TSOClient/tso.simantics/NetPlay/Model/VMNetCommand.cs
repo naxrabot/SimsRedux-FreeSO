@@ -72,6 +72,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxScale, typeof(VMNetScaleObjectCmd) }, // SimsRedux
             { VMCommandType.ReduxPerks, typeof(VMNetReduxPerksCmd) }, // SimsRedux: Level Rewards (Utils/ReduxPerks.cs)
             { VMCommandType.ReduxBed, typeof(VMNetReduxBedCmd) }, // SimsRedux 15.7: Assign Bed (Utils/ReduxBeds.cs)
+            { VMCommandType.ReduxPet, typeof(VMNetReduxPetCmd) }, // SimsRedux 17.0: strays, adopting, pets at home
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -200,6 +201,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxNovel = 59,
         ReduxScale = 64, // SimsRedux: object size (60-62 left free for other Redux commands)
         ReduxPerks = 63, // SimsRedux: Level Rewards - the lot's perk table, money and gifts (VMNetReduxPerksCmd)
-        ReduxBed = 60 // SimsRedux 15.7: a Sim assigns themselves a bed or side (VMNetReduxBedCmd)
+        ReduxBed = 60, // SimsRedux 15.7: a Sim assigns themselves a bed or side (VMNetReduxBedCmd)
+        ReduxPet = 70 // SimsRedux 17.0: strays, adopting a pet, pets at home (VMNetReduxPetCmd)
     }
 }
