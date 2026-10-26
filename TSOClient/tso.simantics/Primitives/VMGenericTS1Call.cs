@@ -298,6 +298,7 @@ namespace FSO.SimAntics.Primitives
                     {
                         context.VM.TS1State.CurrentFamily.SelectWholeFamily();
                         context.VM.TS1State.VerifyFamily(context.VM);
+                        FSO.SimAntics.NetPlay.Model.Commands.VMNetReduxPetCmd.ForgetJoined(context.VM);
                     }
                     else FSO.SimAntics.NetPlay.Model.Commands.VMNetReduxPetCmd.BringPets(context.VM, context.VM.TS1State.CurrentFamily, context.Caller);
                     return VMPrimitiveExitCode.GOTO_TRUE;
@@ -405,6 +406,9 @@ namespace FSO.SimAntics.Primitives
             var guids = family.FamilyGUIDs.ToList();
             guids.Add(neigh.GUID);
             family.FamilyGUIDs = guids.ToArray();
+            // SimsRedux: remember a pet that just joined (a pet shop's "Create Purchased Pets Near Owner" brings only those)
+            if (FSO.SimAntics.NetPlay.Model.Commands.VMNetReduxPetCmd.IsPetNeighbour(neigh))
+                FSO.SimAntics.NetPlay.Model.Commands.VMNetReduxPetCmd.JustJoined(vm, neigh.GUID);
 
             //if the sim is on the lot, change their runtime person data to reflect the new family id.
             var runtime = (VMAvatar)vm.Context.ObjectQueries.Avatars.FirstOrDefault(x => ((VMAvatar)x).GetPersonData(VMPersonDataVariable.NeighborId) == neigh.NeighbourID);

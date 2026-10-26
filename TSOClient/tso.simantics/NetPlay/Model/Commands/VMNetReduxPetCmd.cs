@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FSO.Files.Formats.IFF.Chunks;
 using FSO.LotView.Model;
 using FSO.SimAntics.Model;
@@ -249,6 +250,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             ava.SetValue(VMStackObjectVariable.MovementFlags,
                 (short)(ava.GetValue(VMStackObjectVariable.MovementFlags) & ~(short)VMMovementFlags.FSOExcludeUserSave));
             ava.AvatarState.Permissions = VMTSOAvatarPermissions.Owner;
+            // (a stray already heading off: it stays now)
+            if (ava.Thread?.Queue != null)
+                foreach (var q in ava.Thread.Queue.Where(x => x.ActionRoutine?.ID == VMNetReduxTownieCmd.LeaveRoutine).ToList())
+                    ava.Thread.CancelAction(q.UID);
         }
 
         /// <summary>Makes the family member GUID on the lot, by the mailbox (or by the Sim who asked), as VerifyFamily does.</summary>
@@ -277,12 +282,37 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         /// come, by "near" (the Sim who bought them) - only the pets, never the rest of the family. Runs inside the lot's own
         /// script, so it's the same on every game.
         /// </summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VM, HashSet<uint>> Joined =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<VM, HashSet<uint>>();
+
+        /// <summary>A pet just joined the family on this lot (VMGenericTS1Call.AddToFamily - inside the lot's own script).</summary>
+        public static void JustJoined(VM vm, uint guid)
+        {
+            if (vm == null) return;
+            lock (Joined) Joined.GetOrCreateValue(vm).Add(guid);
+        }
+
+        public static void ForgetJoined(VM vm)
+        {
+            if (vm == null) return;
+            lock (Joined) { if (Joined.TryGetValue(vm, out var set)) set.Clear(); }
+        }
+
         public static void BringPets(VM vm, FAMI fam, VMEntity near)
         {
             if (vm == null || fam?.FamilyGUIDs == null) return;
+            // only the pets just bought here: the family's other pets are at home (bringing them would make a copy)
+            HashSet<uint> just;
+            lock (Joined)
+            {
+                if (!Joined.TryGetValue(vm, out var set) || set.Count == 0) return;
+                just = new HashSet<uint>(set);
+                set.Clear();
+            }
             var neigh = Content.Content.Get().Neighborhood;
             foreach (var guid in fam.FamilyGUIDs)
             {
+                if (!just.Contains(guid)) continue;
                 if (vm.Context.ObjectQueries.Avatars.Any(x => x.Object?.OBJ?.GUID == guid)) continue;
                 var n = neigh.Neighbors?.Entries?.FirstOrDefault(x => x != null && x.GUID == guid);
                 if (n == null || !IsPetNeighbour(n)) continue;

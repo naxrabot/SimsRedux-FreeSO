@@ -56,8 +56,11 @@ namespace FSO.SimAntics.Utils
                         if (lvl != null)
                         {
                             int carPool = Math.Max(0, (lvl.StartTime % 24) * 60 - 60);
-                            // (jumped past it: from an earlier day, or from earlier today)
-                            bool skipped = newMinute >= carPool && (days > 0 || oldMinute < carPool);
+                            // (jumped past it: from an earlier day, or a big jump from earlier today. A short catch-up -
+                            //  the clock lagging a minute or two behind the real time - leaves it alone: the car pool
+                            //  still comes, just a little late)
+                            bool bigJump = newMinute - oldMinute >= 60;
+                            bool skipped = newMinute >= carPool && (days > 0 || (oldMinute < carPool && bigJump));
                             if (skipped) last = today;
                         }
                     }
