@@ -81,6 +81,31 @@ namespace FSO.SimAntics.Utils
             return e;
         }
 
+        /// <summary>
+        /// SimsRedux 16.5 visiting: a visiting player's own Singleplayer+ perks, by their Sim's player id on the lot (a
+        /// guest's Sim has the host family's number, so it can't be told apart by family). Kept in the same table under
+        /// negative keys - -1 for the first guest id (100001), -2 for the next... - so nothing new is saved or sent (the
+        /// table's format is unchanged; Get never answers for them). Only the host's game puts them there (from what the
+        /// server says each guest has), with VMNetReduxPerksCmd, so every game on the lot has the same ones.
+        /// </summary>
+        public const uint FirstGuestId = 100001;
+
+        /// <summary>The table key for a visiting player's Sim (its persist id), or 0 if it isn't one.</summary>
+        public static short GuestKey(uint persistId)
+        {
+            if (persistId < FirstGuestId || persistId - FirstGuestId >= 30000) return 0;
+            return (short)-(1 + (int)(persistId - FirstGuestId));
+        }
+
+        /// <summary>A visiting player's own perks, by their Sim's persist id (null: none - their Sim goes by its family's).</summary>
+        public Entry GetGuest(uint persistId)
+        {
+            var k = GuestKey(persistId);
+            if (k == 0) return null;
+            Families.TryGetValue(k, out var e);
+            return e;
+        }
+
         public VMReduxPerks Clone()
         {
             var c = new VMReduxPerks();
@@ -160,8 +185,12 @@ namespace FSO.SimAntics.Utils
         private static VMReduxPerks.Entry Of(VM vm, VMAvatar ava)
         {
             if (vm?.ReduxPerks == null || ava == null || ava.IsPet) return null;
-            return vm.ReduxPerks.Get(ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber));
+            // (16.5: a visiting player's Sim - their own Singleplayer+ perks when the host's game put them on the lot)
+            return vm.ReduxPerks.GetGuest(ava.PersistID) ?? vm.ReduxPerks.Get(ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber));
         }
+
+        /// <summary>16.5: the perks that apply to this Sim on this lot (a visiting player's own, else its family's) - for the plumbob.</summary>
+        public static VMReduxPerks.Entry EntryFor(VM vm, VMAvatar ava) { return Of(vm, ava); }
 
         private static VMReduxPerks.Entry OfLotFamily(VM vm)
         {
