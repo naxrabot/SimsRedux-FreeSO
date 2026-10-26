@@ -72,6 +72,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxScale, typeof(VMNetScaleObjectCmd) }, // SimsRedux
             { VMCommandType.ReduxPerks, typeof(VMNetReduxPerksCmd) }, // SimsRedux: Level Rewards (Utils/ReduxPerks.cs)
             { VMCommandType.ReduxBed, typeof(VMNetReduxBedCmd) }, // SimsRedux 15.7: Assign Bed (Utils/ReduxBeds.cs)
+            { VMCommandType.ReduxPet, typeof(VMNetReduxPetCmd) }, // SimsRedux 17.0: strays, adopting, pets at home
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
