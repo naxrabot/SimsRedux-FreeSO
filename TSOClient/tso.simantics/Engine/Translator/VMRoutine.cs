@@ -84,6 +84,8 @@ namespace FSO.SimAntics
                     else if (kind == ReduxKindWooHoo)
                     {
                         var woo = FSO.SimAntics.Utils.ReduxWooHoo.Hook(frame, target);
+                        // (the bed's sleep loop asking again and again in one tick waits for the next tick)
+                        if (woo != 0 && frame.Thread != null && frame.Thread.ReduxHookShouldWait()) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                         if (woo > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                         if (woo < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                     }
@@ -95,6 +97,8 @@ namespace FSO.SimAntics
                     if (target != null && target.GetReduxKind() == ReduxKindWooHoo)
                     {
                         var woo = FSO.SimAntics.Utils.ReduxWooHoo.Hook(frame, target);
+                        // (the bed's sleep loop asking again and again in one tick waits for the next tick)
+                        if (woo != 0 && frame.Thread != null && frame.Thread.ReduxHookShouldWait()) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                         if (woo > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                         if (woo < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                     }

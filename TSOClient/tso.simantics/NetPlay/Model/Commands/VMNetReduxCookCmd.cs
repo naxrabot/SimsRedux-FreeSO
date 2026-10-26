@@ -39,6 +39,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             if (!Check(vm, caller)) return false;
             if (!FromNet) return true;
+            // a guest spends the host's money: no dearer than the game's own meal
+            var gk = ReduxCooking.KindOf(vm.GetObjectById(CalleeID), Interaction);
+            var gd = ReduxCooking.Find(Dish);
+            if (gk == null || gd == null || ReduxCooking.Price(gd, gk.Value) > ReduxCooking.GuestMax(gk.Value)) return false;
             // (as a plain interaction: the fridge's menu for this Sim must offer it)
             var fridge = vm.GetObjectById(CalleeID);
             var oldInUse = fridge.GetFlag(VMEntityFlags.Occupied);

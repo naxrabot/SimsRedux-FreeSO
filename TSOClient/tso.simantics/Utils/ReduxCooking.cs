@@ -136,6 +136,8 @@ namespace FSO.SimAntics.Utils
         }
 
         public static int Price(Dish d, Kind kind) { return kind == Kind.Group ? d.Cost * 2 : d.Cost; }
+        /// <summary>On a visit a guest cooks with the host's money: up to the game's own meal price (§10, §20 for a group).</summary>
+        public static int GuestMax(Kind kind) { return kind == Kind.Group ? 20 : 10; }
 
         public static int SkillLevel(VMAvatar ava) { return Math.Max(0, Math.Min(10, ava.GetPersonData(VMPersonDataVariable.CookingSkill) / 100)); }
 
@@ -271,6 +273,7 @@ namespace FSO.SimAntics.Utils
             int was = stage;
 
             // the counter and the stove: the dish's own time (and the stove's fire roll), once each
+            if (dish.Quick && (stage & PrepDone) == 0) stage |= PrepDone; // (a quick meal has no counter step)
             if ((stage & (PrepDone | CookDone)) != (PrepDone | CookDone))
             {
                 var stack = ava.Thread.Stack;
