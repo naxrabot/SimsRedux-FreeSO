@@ -76,6 +76,8 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxPushWall, typeof(VMNetReduxPushWallCmd) }, // SimsRedux 16.7: Push Wall (Utils/ReduxPushWall.cs)
             { VMCommandType.ReduxWooHoo, typeof(VMNetReduxWooHooCmd) }, // SimsRedux 16.7: WooHoo (Utils/ReduxWooHoo.cs)
             { VMCommandType.ReduxCook, typeof(VMNetReduxCookCmd) }, // SimsRedux 16.7: cooking menus (Utils/ReduxCooking.cs)
+            { VMCommandType.ReduxTraits, typeof(VMNetReduxTraitsCmd) }, // SimsRedux 16.9: traits (Utils/ReduxTraits.cs)
+            { VMCommandType.ReduxAttraction, typeof(VMNetReduxAttractionCmd) }, // SimsRedux 16.9: attraction, relationship types (Utils/ReduxAttraction.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -209,5 +211,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxPushWall = 71, // SimsRedux 16.7: Build mode's Push Wall (VMNetReduxPushWallCmd, Utils/ReduxPushWall.cs)
         ReduxWooHoo = 72, // SimsRedux 16.7: WooHoo, babies, protection and pills (VMNetReduxWooHooCmd, Utils/ReduxWooHoo.cs)
         ReduxCook = 73, // SimsRedux 16.7: cooking menus - make a chosen dish (VMNetReduxCookCmd, Utils/ReduxCooking.cs)
+        ReduxTraits = 74, // SimsRedux 16.9: traits on the lot, trait-only choices (VMNetReduxTraitsCmd, Utils/ReduxTraits.cs)
+        ReduxAttraction = 75, // SimsRedux 16.9: attraction, relationship types, jealousy rule (VMNetReduxAttractionCmd, Utils/ReduxAttraction.cs)
     }
 }

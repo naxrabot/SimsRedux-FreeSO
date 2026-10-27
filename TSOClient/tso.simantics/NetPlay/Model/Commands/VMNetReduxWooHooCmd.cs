@@ -112,6 +112,9 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (!ReduxWooHoo.Grownup(a) || !ReduxWooHoo.Grownup(b)) return Refuse(vm, "WooHoo is for grown-ups only.");
             if (ReduxWooHoo.Busy(a) || ReduxWooHoo.Busy(b)) return Refuse(vm, "One of them is busy with that already.");
             if (!ReduxWooHoo.InLove(a, b)) return Refuse(vm, "They need to be in love first.");
+            // (16.9: attraction - each has to be attracted to the other and interested in WooHoo; Utils/ReduxAttraction.cs)
+            if (!ReduxAttraction.WantsWooHoo(a, b)) return Refuse(vm, (a.Name ?? "They") + " isn't interested in WooHoo with " + (b.Name ?? "them") + ".");
+            if (!ReduxAttraction.WantsWooHoo(b, a)) return Refuse(vm, (b.Name ?? "They") + " politely says no - they'd rather not WooHoo, but they're happy just being close.");
             if (kind == ReduxWooHoo.Place.None || ReduxWooHoo.KindOf(spot) != kind) return Refuse(vm, "That spot can't be used.");
             var base0 = spot.MultitileGroup?.BaseObject ?? spot;
             // (one WooHoo per spot)

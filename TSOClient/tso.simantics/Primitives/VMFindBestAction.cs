@@ -312,6 +312,9 @@ namespace FSO.SimAntics.Primitives
                         if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
                         // SimsRedux 15.7: their own bed (or side) first; someone else's only when there's nowhere else
                         if (context.VM.TS1 && score > 0) score *= FSO.SimAntics.Utils.ReduxBeds.AutonomyWeight(context.VM, caller, obj, (int)id);
+                        // SimsRedux 16.9: traits (Neat Freaks clean, Bookworms read, Loners keep to themselves...)
+                        float traitWeight = context.VM.TS1 ? FSO.SimAntics.Utils.VMReduxTraits.AutonomyWeight(context.VM, caller, obj, first.Name) : 1f;
+                        if (score > 0) score *= traitWeight;
 
                         if (score > minScore)
                         {
@@ -328,6 +331,7 @@ namespace FSO.SimAntics.Primitives
                             // (same manners as everything else: not near a fire, not next to sleepers...)
                             float idle = idleAppeal / 1000f / (1 + 0.1f * distance);
                             idle *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
+                            idle *= traitWeight;
                             if (idle > minScore)
                             {
                                 first.Score = idle;

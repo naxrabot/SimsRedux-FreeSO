@@ -321,7 +321,7 @@ namespace FSO.SimAntics.Utils
             if ((stage & Applied) == 0 && state >= Cooked && !Cooking(ava))
             {
                 stage |= Applied;
-                ApplyDish(callee, dish, SkillLevel(ava));
+                ApplyDish(callee, dish, SkillLevel(ava) + VMReduxTraits.CookBonus(ava)); // (16.9: a Foodie's dishes come out better)
             }
 
             if (stage != was) callee.SetAttribute(StageAttr, (short)stage);
