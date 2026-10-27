@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using FSO.SimAntics.Utils;
 
@@ -144,13 +145,40 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             r[2] = (short)Math.Max(-100, Math.Min(100, r[2] + life));
         }
 
+        /// <summary>
+        /// 16.9: a visiting player's asks, on the lot's game only (Verify runs there, before a command goes into the lot's
+        /// ticks - so dropping one here keeps every game in step): one open ask per asking Sim (until it's answered, or
+        /// AskOpenFor), and at most one every AskEvery from each player. Extras are dropped.
+        /// </summary>
+        private static readonly Dictionary<uint, DateTime> LastAsk = new Dictionary<uint, DateTime>();
+        private static readonly Dictionary<short, DateTime> OpenAsk = new Dictionary<short, DateTime>();
+        private static readonly TimeSpan AskEvery = TimeSpan.FromSeconds(10), AskOpenFor = TimeSpan.FromMinutes(2);
+
+        private bool AskAllowed(VMAvatar caller)
+        {
+            var now = DateTime.UtcNow;
+            lock (OpenAsk)
+            {
+                DateTime t;
+                if (OpenAsk.TryGetValue(A, out t) && now - t < AskOpenFor) return false;
+                if (LastAsk.TryGetValue(caller.PersistID, out t) && now - t < AskEvery) return false;
+                if (LastAsk.Count > 200) LastAsk.Clear();
+                if (OpenAsk.Count > 200) OpenAsk.Clear();
+                LastAsk[caller.PersistID] = now;
+                OpenAsk[A] = now;
+                return true;
+            }
+        }
+
         public override bool Verify(VM vm, VMAvatar caller)
         {
+            // (an answer, from anyone: the asking Sim's ask isn't open any more)
+            if (Mode == AttrMode.Answer) lock (OpenAsk) OpenAsk.Remove(A);
             if (!FromNet) return true; // (this game runs the lot)
             // a visiting player: only their own Sim
             if (caller == null || caller.IsPet) return false;
             if (Mode == AttrMode.SetOverride) return A == caller.ObjectID;
-            if (Mode == AttrMode.Ask) return A == caller.ObjectID;
+            if (Mode == AttrMode.Ask) return A == caller.ObjectID && A != B && AskAllowed(caller);
             if (Mode == AttrMode.Answer) return B == caller.ObjectID;
             return false;
         }

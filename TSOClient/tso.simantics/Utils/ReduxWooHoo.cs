@@ -48,8 +48,14 @@ namespace FSO.SimAntics.Utils
 
         // ------------------------------------------------------------------ the switch (lot-wide, from the lot's game)
 
-        /// <summary>What a game uses before its lot's game has said (the Feature Switch "woohoo" - Simitone sets it).</summary>
+        /// <summary>
+        /// The Feature Switch "woohoo" (Simitone sets it) - only for asking with no lot (vm null). 16.9: a lot that hasn't
+        /// been told yet (a guest who just joined, before the host's SetSwitch arrives) uses UntoldOn - the same on every
+        /// game - never this game's own switch, so every game on a visit does the same.
+        /// </summary>
         public static bool DefaultOn = true;
+        /// <summary>Until the lot's game has said: off (the Sims 1 baby question, as the game had it).</summary>
+        public const bool UntoldOn = false;
         private static readonly ConditionalWeakTable<VM, StrongBox<bool>> Switch = new ConditionalWeakTable<VM, StrongBox<bool>>();
 
         public static bool On(VM vm)
@@ -57,13 +63,13 @@ namespace FSO.SimAntics.Utils
             if (vm == null) return DefaultOn;
             StrongBox<bool> b;
             lock (Switch) { if (Switch.TryGetValue(vm, out b)) return b.Value; }
-            return DefaultOn;
+            return UntoldOn;
         }
 
         /// <summary>Has this lot been told yet (VMNetReduxWooHooCmd SetSwitch)?</summary>
         public static bool Told(VM vm, out bool on)
         {
-            on = DefaultOn;
+            on = UntoldOn;
             if (vm == null) return false;
             StrongBox<bool> b;
             lock (Switch) { if (!Switch.TryGetValue(vm, out b)) return false; }

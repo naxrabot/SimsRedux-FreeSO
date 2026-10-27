@@ -58,7 +58,18 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (!FromNet) return true; // (this game runs the lot)
             // a visiting player: only their own Sim
             if (caller == null || caller.IsPet) return false;
-            return Sim == caller.ObjectID && (Mode == TraitMode.Set || Mode == TraitMode.Act);
+            if (Sim != caller.ObjectID) return false;
+            if (Mode == TraitMode.Act)
+            {
+                // (16.9: not with a full queue, on something gone or switched off, or again before the Sim's cooldown is over -
+                //  Execute checks the same, this just keeps extras out of the lot's ticks)
+                if (caller.Thread == null || caller.Thread.Queue.Count >= FSO.SimAntics.Engine.VMThread.MAX_USER_ACTIONS) return false;
+                var target = vm.GetObjectById(Target);
+                if (target == null || target.Dead) return false;
+                if (target is VMGameObject && ((VMGameObject)target).Disabled > 0) return false;
+                return VMReduxTraits.ActWait(vm, caller) == 0;
+            }
+            return Mode == TraitMode.Set;
         }
 
         public override void SerializeInto(BinaryWriter writer)

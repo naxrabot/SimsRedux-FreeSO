@@ -13,7 +13,9 @@ namespace FSO.SimAntics.Utils
     /// (VM command 74) whenever a Sim is on the lot without them (or with old ones).
     ///
     /// On the lot they're kept on the Sim themselves, as person-object attributes 80-83 (80-82: up to three traits, 83:
-    /// the orientation; 0 = none) - the Sims 1 person scripts don't use attributes that high (ReduxWooHoo uses 70-77).
+    /// the orientation; 0 = none) - the Sims 1 person scripts don't use attributes that high (ReduxWooHoo uses 70-77,
+    /// ReduxAttraction 78; 84 is when the Sim last did a trait-only choice - ActAttr). Children never get the grown-up
+    /// traits or an orientation (GrownUpOnly - Set drops them).
     /// Attributes are saved with the lot and sent to every player joining, so every game on a visit has the same traits at
     /// the same moment, and nothing new goes into the save format. Everything here reads only those attributes, the lot's
     /// clock and the Sims, so every game (and the town's lot workers) makes the same choices.
@@ -152,21 +154,48 @@ namespace FSO.SimAntics.Utils
             return a.GetAttribute(OrientAttr) == orient;
         }
 
-        /// <summary>Puts traits on the Sim (only VMNetReduxTraitsCmd calls this): unknown codes, repeats and conflicts dropped.</summary>
-        public static void Set(VMAvatar a, byte[] codes, byte orient)
+        /// <summary>Traits only grown-ups can have (a child never gets these, nor an orientation).</summary>
+        public static readonly T[] GrownUpOnly =
         {
-            if (a == null || a.IsPet) return;
+            T.Romantic, T.Flirty, T.FamilyOriented, T.Jealous, T.HatesChildren, T.Shameless, T.Daring, T.Polyamorous, T.FreeSpirit,
+        };
+
+        public static bool ChildOk(int code)
+        {
+            foreach (var t in GrownUpOnly) if ((int)t == code) return false;
+            return !IsOrientation(code);
+        }
+
+        /// <summary>
+        /// The traits as they'd be put on this Sim: unknown codes, repeats, conflicts and (for a child) grown-up-only traits
+        /// and the orientation dropped. Simitone checks against this so it doesn't send the same traits again and again.
+        /// </summary>
+        public static byte[] Cleaned(VMAvatar a, byte[] codes, ref byte orient)
+        {
+            bool child = a != null && a.IsChild;
             var keep = new List<int>();
             if (codes != null)
                 foreach (var c in codes)
                 {
                     if (!IsNormal(c) || keep.Contains(c) || keep.Count >= Slots) continue;
+                    if (child && !ChildOk(c)) continue;
                     bool bad = false;
                     foreach (var k in keep) if (Conflict(k, c)) bad = true;
                     if (!bad) keep.Add(c);
                 }
-            for (int i = 0; i < Slots; i++) a.SetAttribute(FirstAttr + i, (short)(i < keep.Count ? keep[i] : 0));
-            a.SetAttribute(OrientAttr, (short)(IsOrientation(orient) ? orient : 0));
+            var r = new byte[Slots];
+            for (int i = 0; i < Slots; i++) r[i] = (byte)(i < keep.Count ? keep[i] : 0);
+            if (child || !IsOrientation(orient)) orient = 0;
+            return r;
+        }
+
+        /// <summary>Puts traits on the Sim (only VMNetReduxTraitsCmd calls this): unknown codes, repeats and conflicts dropped; children get no grown-up traits or orientation.</summary>
+        public static void Set(VMAvatar a, byte[] codes, byte orient)
+        {
+            if (a == null || a.IsPet) return;
+            var keep = Cleaned(a, codes, ref orient);
+            for (int i = 0; i < Slots; i++) a.SetAttribute(FirstAttr + i, (short)keep[i]);
+            a.SetAttribute(OrientAttr, (short)orient);
         }
 
         // ------------------------------------------------------------------ (who a Sim is attracted to: ReduxAttraction, from the orientation)
@@ -386,11 +415,40 @@ namespace FSO.SimAntics.Utils
             r[0] = (short)Math.Max(-100, Math.Min(100, r[0] + add));
         }
 
+        /// <summary>
+        /// 16.9: when the Sim last did a trait-only choice - person attribute 84 (after the traits' 80-83; WooHoo uses 70-77,
+        /// attraction 78): the lot's clock in game minutes (ActClock) + 1, 0 = never. One every ActCooldown game minutes.
+        /// </summary>
+        public const int ActAttr = 84, ActCooldown = 60, ActWrap = 30000;
+
+        /// <summary>The lot's clock in game minutes, wrapped to fit an attribute (about 20 game days before it wraps).</summary>
+        private static int ActClock(VM vm)
+        {
+            var c = vm.Context.Clock;
+            long m = ((((long)c.Year * 12 + c.Month) * 31 + c.DayOfMonth) * 24 + c.Hours) * 60 + c.Minutes;
+            return (int)(((m % ActWrap) + ActWrap) % ActWrap);
+        }
+
+        /// <summary>Game minutes until this Sim can do another trait-only choice (0: now).</summary>
+        public static int ActWait(VM vm, VMAvatar me)
+        {
+            if (vm == null || me == null) return 0;
+            int last = me.GetAttribute(ActAttr);
+            if (last <= 0 || last > ActWrap) return 0;
+            int since = ((ActClock(vm) - (last - 1)) % ActWrap + ActWrap) % ActWrap;
+            return since >= ActCooldown ? 0 : ActCooldown - since;
+        }
+
         /// <summary>Does the choice (the Sim goes and does the game's own action for it, then the trait's bonus). Null: done; else why not.</summary>
         public static string Act(VM vm, VMAvatar me, VMEntity obj, Choice c)
         {
-            if (vm == null || me == null || obj == null || me.Dead) return "";
+            if (vm == null || me == null || obj == null || me.Dead || obj.Dead) return "";
+            if (obj is VMGameObject && ((VMGameObject)obj).Disabled > 0) return "";
+            if (me.Thread == null || me.Thread.Queue.Count >= VMThread.MAX_USER_ACTIONS) return "";
             if (!ChoicesFor(me, obj).Contains(c)) return "";
+            int wait = ActWait(vm, me);
+            if (wait > 0) return "They did that not long ago - try again in about " + Math.Max(1, wait) + " game minutes.";
+            me.SetAttribute(ActAttr, (short)(ActClock(vm) + 1));
             var other = obj as VMAvatar;
             TTABInteraction ia;
             var piece = FindFor(obj, c, out ia);

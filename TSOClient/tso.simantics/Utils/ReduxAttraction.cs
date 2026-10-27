@@ -39,9 +39,17 @@ namespace FSO.SimAntics.Utils
 
         // ------------------------------------------------------------------ the lot's rules (VMNetReduxAttractionCmd SetRules)
 
-        /// <summary>What a game uses before its lot's game has said (the Feature Switch "attraction" - Simitone sets it).</summary>
+        /// <summary>
+        /// No longer used by the lot (kept so older callers still build). 16.9: a lot that hasn't been told the rules yet
+        /// (a guest who just joined, before the host's SetRules arrives) behaves as plain Sims 1 - UntoldOn / UntoldJealousy,
+        /// the same on every game - never from this game's own switches, so every game on a visit does the same.
+        /// </summary>
         public static bool DefaultOn = true;
         public static Jealousy DefaultJealousy = Jealousy.OnlyMonogamous;
+
+        /// <summary>What every game uses until the lot's game has said (SetRules): off - plain Sims 1, jealousy as the game had it.</summary>
+        public const bool UntoldOn = false;
+        public const Jealousy UntoldJealousy = Jealousy.On;
 
         private class LotRules { public bool On; public Jealousy Jealousy; }
         private static readonly ConditionalWeakTable<VM, LotRules> Rules = new ConditionalWeakTable<VM, LotRules>();
@@ -51,20 +59,20 @@ namespace FSO.SimAntics.Utils
             if (vm == null || !vm.TS1) return false;
             LotRules r;
             lock (Rules) { if (Rules.TryGetValue(vm, out r)) return r.On; }
-            return DefaultOn;
+            return UntoldOn;
         }
 
         public static Jealousy JealousyRule(VM vm)
         {
             LotRules r;
             if (vm != null) lock (Rules) { if (Rules.TryGetValue(vm, out r)) return r.Jealousy; }
-            return DefaultJealousy;
+            return UntoldJealousy;
         }
 
         /// <summary>Has this lot been told (and what)?</summary>
         public static bool Told(VM vm, out bool on, out Jealousy jealousy)
         {
-            on = DefaultOn; jealousy = DefaultJealousy;
+            on = UntoldOn; jealousy = UntoldJealousy;
             if (vm == null) return false;
             LotRules r;
             lock (Rules) { if (!Rules.TryGetValue(vm, out r)) return false; }
@@ -165,7 +173,7 @@ namespace FSO.SimAntics.Utils
         // ------------------------------------------------------------------ the choices (VMThread.CheckTS1Action)
 
         /// <summary>What a choice's test script is to us (worked out once per script, VMRoutine.ReduxAttractionKind).</summary>
-        public const sbyte KindNone = 0, KindRomance = 1, KindPropose = 2;
+        public const sbyte KindNone = 0, KindRomance = 1, KindPropose = 2, KindJealousy = 3;
 
         /// <summary>The romantic choices on a Sim (their test scripts in PersonGlobals: "Interaction - X TEST").</summary>
         private static readonly HashSet<string> RomanceTests = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -190,6 +198,7 @@ namespace FSO.SimAntics.Utils
                 if (mid.Equals("Proposition Propose", StringComparison.OrdinalIgnoreCase)) kind = KindPropose;
                 else if (RomanceTests.Contains(mid)) kind = KindRomance;
             }
+            else if (label.Equals("start jealousy", StringComparison.OrdinalIgnoreCase)) kind = KindJealousy; // (SkipJealousy)
             check.ReduxAttractionKind = kind;
             return kind;
         }
@@ -204,10 +213,11 @@ namespace FSO.SimAntics.Utils
             gender = 0;
             try
             {
+                // (the cached kind first - most tests aren't a proposal - then who, then the lot's rule)
+                if (action?.CheckRoutine == null || CheckKind(action.CheckRoutine) != KindPropose) return null;
                 var me = caller as VMAvatar;
-                var other = action?.Callee as VMAvatar;
+                var other = action.Callee as VMAvatar;
                 if (!Person(me) || !Person(other) || me == other || !On(VMOf(me))) return null;
-                if (CheckKind(action.CheckRoutine) != KindPropose) return null;
                 gender = other.GetPersonData(VMPersonDataVariable.Gender);
                 if ((gender & 1) != (me.GetPersonData(VMPersonDataVariable.Gender) & 1)) return null;
                 other.SetPersonData(VMPersonDataVariable.Gender, (short)(gender ^ 1));
@@ -228,7 +238,7 @@ namespace FSO.SimAntics.Utils
             {
                 if (action?.CheckRoutine == null) return true;
                 var kind = CheckKind(action.CheckRoutine);
-                if (kind == KindNone) return true;
+                if (kind != KindRomance && kind != KindPropose) return true;
                 var me = caller as VMAvatar;
                 var other = action.Callee as VMAvatar;
                 if (!Person(me) || !Person(other) || me == other) return true;
@@ -299,10 +309,10 @@ namespace FSO.SimAntics.Utils
         {
             try
             {
-                var vm = context?.VM;
+                // (what the script is first - worked out once per script, a field read after that - then the lot's rule)
+                if (context?.Routine == null || CheckKind(context.Routine) != KindJealousy) return false;
+                var vm = context.VM;
                 if (vm == null || !vm.TS1 || !On(vm)) return false;
-                var label = context.Routine?.Chunk?.ChunkLabel;
-                if (label == null || !label.Trim().Equals("start jealousy", StringComparison.OrdinalIgnoreCase)) return false;
                 var who = context.StackObject as VMAvatar;
                 if (!Person(who)) return false;
                 return !CanBeJealous(who);
