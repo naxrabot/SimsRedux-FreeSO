@@ -147,8 +147,9 @@ namespace FSO.SimAntics.Utils
             if (keep != (todo & ChoreMask)) Set(a, TodoAttr, keep == 0 ? 0 : (todo & ~ChoreMask) | keep);
         }
 
-        /// <summary>Starts a list of chores now (on top of any still to do).</summary>
-        public static bool Start(VM vm, VMAvatar a, int mask)
+        /// <summary>Starts a list of chores now (on top of any still to do). scheduled: from the Sim's own chore time (Tick), not
+        /// "Do Chores Now" - Scheduled fires too.</summary>
+        public static bool Start(VM vm, VMAvatar a, int mask, bool scheduled = false)
         {
             if (a == null || a.IsPet || !Here(vm, a)) return false;
             if (a.IsChild) mask &= KidChores;
@@ -163,6 +164,7 @@ namespace FSO.SimAntics.Utils
                 Set(a, TargetAttr, 0);
             }
             Fire(Started, vm, a, mask);
+            if (scheduled) Fire(Scheduled, vm, a, mask);
             return true;
         }
 
@@ -191,6 +193,8 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>A Sim's chores started (the chores).</summary>
         public static event Action<VM, VMAvatar, int> Started;
+        /// <summary>17.1 review: a Sim's chores started at their set time on the board (not "Do Chores Now") - the chores.</summary>
+        public static event Action<VM, VMAvatar, int> Scheduled;
         /// <summary>A Sim finished one chore (the chore, the pocket money they got).</summary>
         public static event Action<VM, VMAvatar, Chore, int> ChoreDone;
         /// <summary>A Sim's chore list is over (how many they did; 0: nothing needed doing or they couldn't).</summary>
@@ -228,7 +232,7 @@ namespace FSO.SimAntics.Utils
                 if (since < 0 || since >= StartWindow) continue;
                 st = (st & ~(0x1F << shift)) | (day << shift);
                 Set(a, StateAttr, st);
-                Start(vm, a, mask);
+                Start(vm, a, mask, true);
                 st = U(a, StateAttr);
             }
 
@@ -252,12 +256,15 @@ namespace FSO.SimAntics.Utils
             VMEntity piece = null; TTABInteraction ia = null;
             bool gaveUp = tries >= MaxTries;
             var target = gaveUp ? null : Find(vm, a, c, out piece, out ia);
-            // (sent there last time and it still needs doing: they couldn't, or the player stopped them - leave this chore)
-            if (target != null && last != 0 && piece.ObjectID == last) { target = null; gaveUp = true; }
+            // (sent there last time and it's offered again: an object whose menu entry is always there (a plant's Water, the
+            // mailbox...) or one they couldn't reach - leave this chore, and count it done since they went over once (17.1 review:
+            // so pocket money and "done" work for always-available objects))
+            bool again = false;
+            if (target != null && last != 0 && piece.ObjectID == last) { target = null; gaveUp = true; again = true; }
             if (target == null)
             {
                 // nothing more of it left: done if they did some (given up: if an earlier one went through)
-                bool did = gaveUp ? tries > 1 : tries > 0;
+                bool did = again ? tries >= 1 : gaveUp ? tries > 1 : tries > 0;
                 Finish(vm, a, c, did, todo & ~(int)c);
                 return;
             }
