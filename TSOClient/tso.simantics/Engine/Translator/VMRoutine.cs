@@ -30,7 +30,7 @@ namespace FSO.SimAntics
         public sbyte ReduxKind = -1;
         public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
             ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7, ReduxKindWooHoo = 8,
-            ReduxKindAttraction = 9, ReduxKindRelationships = 17;
+            ReduxKindAttraction = 9, ReduxKindRelationships = 17, ReduxKindMail = 18;
         /// <summary>SimsRedux 16.9: what this script is as a choice's test to Utils/ReduxAttraction.cs (-1 = not yet).</summary>
         public sbyte ReduxAttractionKind = -1;
 
@@ -50,6 +50,7 @@ namespace FSO.SimAntics
                 else if (FSO.SimAntics.Utils.ReduxWooHoo.IsHookLabel(label)) kind = ReduxKindWooHoo; // (16.7: WooHoo - the bed, the baby question)
                 else if (FSO.SimAntics.Utils.ReduxAttraction.IsHookLabel(label)) kind = ReduxKindAttraction; // (16.9: a romantic social's answer)
                 else if (FSO.SimAntics.Utils.VMReduxRelationships.IsHookLabel(label)) kind = ReduxKindRelationships; // (17.0: the game's own wedding)
+                else if (FSO.SimAntics.Utils.VMReduxPhone.IsHookLabel(label)) kind = ReduxKindMail; // (17.2: the mail carrier delivered - packages)
                 else kind = ReduxKindNone;
                 ReduxKind = kind;
             }
@@ -101,6 +102,8 @@ namespace FSO.SimAntics
                     }
                     // SimsRedux 17.0: the game's own Propose ended in a wedding - the couple is Married (Utils/ReduxRelationships.cs)
                     else if (kind == ReduxKindRelationships && frame.VM != null && frame.VM.TS1) FSO.SimAntics.Utils.VMReduxRelationships.Hook(frame);
+                    // SimsRedux 17.2: the mail carrier put the mail in the mailbox - packages come out (Utils/ReduxPhone.cs; only tells)
+                    else if (kind == ReduxKindMail && frame.VM != null && frame.VM.TS1) FSO.SimAntics.Utils.VMReduxPhone.Hook(frame);
                 }
                 else if (opcode >= 8192 && frame.VM != null && frame.VM.TS1)
                 {

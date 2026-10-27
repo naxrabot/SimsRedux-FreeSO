@@ -83,6 +83,8 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxRomance, typeof(VMNetReduxRomanceCmd) }, // SimsRedux 17.0: romance and closeness (Utils/ReduxRomance.cs)
             { VMCommandType.ReduxPhone, typeof(VMNetReduxPhoneCmd) }, // SimsRedux 17.1: the cellphone out / put away (Utils/ReduxPhone.cs)
             { VMCommandType.ReduxChores, typeof(VMNetReduxChoresCmd) }, // SimsRedux 17.1: the chore board (Utils/ReduxChores.cs)
+            { VMCommandType.ReduxMultitask, typeof(VMNetReduxMultitaskCmd) }, // SimsRedux 17.2: multitasking (Utils/ReduxMultitask.cs)
+            { VMCommandType.ReduxStory, typeof(VMNetReduxStoryCmd) }, // SimsRedux 17.2: story progression's changes reaching a family's lot (Simitone's ReduxStory.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -223,5 +225,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxRomance = 79, // SimsRedux 17.0: romance and closeness - romantic choices, privacy, Romance skill (VMNetReduxRomanceCmd, Utils/ReduxRomance.cs)
         ReduxPhone = 83, // SimsRedux 17.1: the cellphone out / put away, a phone over the Sim's head (VMNetReduxPhoneCmd, Utils/ReduxPhone.cs)
         ReduxChores = 80, // SimsRedux 17.1: the chore board - chores at set times, pocket money (VMNetReduxChoresCmd, Utils/ReduxChores.cs)
+        ReduxMultitask = 84, // SimsRedux 17.2: multitasking - the lot's switch (VMNetReduxMultitaskCmd, Utils/ReduxMultitask.cs)
+        ReduxStory = 85, // SimsRedux 17.2: story progression - skills and jobs from while the family was away (VMNetReduxStoryCmd, Simitone's Utils/ReduxStory.cs)
     }
 }
