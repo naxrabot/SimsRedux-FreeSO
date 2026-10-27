@@ -34,7 +34,23 @@ namespace FSO.SimAntics.Utils
         public const int StateAttr = 70, PartnerAttr = 71, PlaceAttr = 72, KindAttr = 73, StartAttr = 74, InAttr = 75, ChanceAttr = 76, FlagsAttr = 77;
         public const short StateNone = 0, StateOn = 1;
 
-        public enum Place : byte { None = 0, Bed = 1, HotTub = 2, Shower = 3 }
+        public enum Place : byte
+        {
+            None = 0, Bed = 1, HotTub = 2, Shower = 3,
+            // 17.0 (romance and closeness - only while the lot's romance switch is on, VMReduxRomance.On): both Sims go up
+            // to it and a privacy cloud with hearts covers them (Simitone's UIReduxWooHoo) - nothing is shown.
+            Closet = 4, PhotoBooth = 5, Elevator = 6, Tent = 7, Couch = 8, KitchenTable = 9,
+            /// <summary>Kept for when cars arrive (nothing is a car spot yet).</summary>
+            Car = 10,
+            /// <summary>A rocket ship, if one is ever added (any object called a rocket).</summary>
+            RocketShip = 11,
+        }
+
+        /// <summary>17.0: FlagsAttr bits - 1 protected, 2 others were asked to leave, 4 someone came in, 8 someone nearly did.</summary>
+        public const int ProtectedFlag = 1, PrivacyFlag = 2, CaughtFlag = 4, NearFlag = 8;
+
+        /// <summary>17.0: is this one of the new spots (a privacy cloud - both Sims just go up to it)?</summary>
+        public static bool CloudSpot(Place k) { return k >= Place.Closet; }
 
         /// <summary>What the Sims' pushed actions are called in their queue (and how they're found again).</summary>
         public const string ActionName = "WooHoo";
@@ -170,6 +186,9 @@ namespace FSO.SimAntics.Utils
             try
             {
                 if (obj == null || obj is VMAvatar || obj.Dead) return Place.None;
+                // 17.0: the new spots, while the lot's romance switch is on (a tent first - it has "Sleep" too)
+                bool more = VMReduxRomance.On(obj.Thread?.Context?.VM);
+                if (more && LabelWord(obj, "tent", "tents")) return Place.Tent;
                 if (ReduxBeds.IsBed(obj)) return ReduxBeds.IsDouble(obj) ? Place.Bed : Place.None;
                 TTABInteraction ia;
                 if (FindInteraction(obj, "Join Me in Hot Tub", out ia) != null || FindInteraction(obj, "Join", out ia) != null)
@@ -177,9 +196,45 @@ namespace FSO.SimAntics.Utils
                     if (FindInteraction(obj, "Get In", out ia) != null) return Place.HotTub;
                 }
                 if (FindInteraction(obj, "Take a Shower", out ia) != null || FindInteraction(obj, "Take Shower", out ia) != null) return Place.Shower;
+                if (more)
+                {
+                    var label = Label(obj);
+                    if (label.Contains("photo booth") || label.Contains("photobooth") || label.Contains("photo-booth")) return Place.PhotoBooth;
+                    if (label.Contains("elevator")) return Place.Elevator;
+                    if (label.Contains("rocket")) return Place.RocketShip;
+                    if (label.Contains("dresser") || label.Contains("armoire") || label.Contains("wardrobe") || label.Contains("closet")
+                        || label.Contains("clothing booth") || label.Contains("changing booth")) return Place.Closet;
+                    if (IsCouch(obj)) return Place.Couch;
+                    if (label.Contains("dining table") || label.Contains("kitchen table") || label.Contains("picnic table")) return Place.KitchenTable;
+                }
             }
             catch { }
             return Place.None;
+        }
+
+        /// <summary>The object's names (its group's base piece and its own), lower case.</summary>
+        public static string Label(VMEntity obj)
+        {
+            var b = obj?.MultitileGroup?.BaseObject ?? obj;
+            return (((b?.MasterDefinition ?? b?.Object?.OBJ)?.ChunkLabel ?? "") + " " + (b?.Object?.OBJ?.ChunkLabel ?? "") + " " + (obj?.Object?.OBJ?.ChunkLabel ?? "")).ToLowerInvariant();
+        }
+
+        /// <summary>Is one of these a whole word of the object's names?</summary>
+        public static bool LabelWord(VMEntity obj, params string[] words)
+        {
+            var parts = Label(obj).Split(new[] { ' ', '-', '_', '(', ')', ',', '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var p in parts) foreach (var w in words) if (p == w) return true;
+            return false;
+        }
+
+        /// <summary>17.0: a sofa or loveseat (something called one, with "Sit").</summary>
+        public static bool IsCouch(VMEntity obj)
+        {
+            if (obj == null || obj is VMAvatar) return false;
+            var label = Label(obj);
+            if (!(label.Contains("sofa") || label.Contains("couch") || label.Contains("loveseat") || label.Contains("love seat"))) return false;
+            TTABInteraction ia;
+            return FindInteraction(obj, "Sit", out ia) != null;
         }
 
         /// <summary>Is the Sim at their spot (on it, or right next to it) doing their WooHoo action?</summary>
@@ -363,8 +418,14 @@ namespace FSO.SimAntics.Utils
 
         public static void CancelActions(VMAvatar sim)
         {
+            CancelNamed(sim, ActionName);
+        }
+
+        /// <summary>Cancels the Sim's actions with this name in their queue.</summary>
+        public static void CancelNamed(VMAvatar sim, string name)
+        {
             if (sim?.Thread?.Queue == null) return;
-            foreach (var q in sim.Thread.Queue.Where(x => x.Name == ActionName).ToList())
+            foreach (var q in sim.Thread.Queue.Where(x => x.Name == name).ToList())
                 sim.Thread.CancelAction(q.UID);
         }
 

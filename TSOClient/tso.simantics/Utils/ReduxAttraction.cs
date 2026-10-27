@@ -274,7 +274,9 @@ namespace FSO.SimAntics.Utils
             try
             {
                 var vm = frame?.VM;
-                if (vm == null || !vm.TS1 || !On(vm) || frame.Thread == null) return 0;
+                if (vm == null || !vm.TS1 || frame.Thread == null) return 0;
+                bool on = On(vm);
+                if (!on && !VMReduxRomance.On(vm)) return 0; // (17.0: romance and closeness uses this answer too)
                 var me = frame.Caller as VMAvatar;
                 if (!Person(me)) return 0;
                 // the other Sim: the stack object when it's a Sim (a proposal), else the social's two people (attributes 0 and 6)
@@ -287,8 +289,12 @@ namespace FSO.SimAntics.Utils
                     other = (p0 != null && p0 != me) ? p0 : ((p6 != null && p6 != me) ? p6 : null);
                 }
                 if (!Person(other) || other == me) return 0;
-                if (Attracted(other, me)) return 0;
                 bool propose = (target?.Chunk?.ChunkLabel ?? "").Trim().Equals("choose propose result", StringComparison.OrdinalIgnoreCase);
+                // (attracted - or attraction off: 17.0's "not in the mood" and a beginner's awkward flirt, Utils/ReduxRomance.cs)
+                if (!on || Attracted(other, me))
+                {
+                    if (!VMReduxRomance.Decide(frame, me, other, propose)) return 0;
+                }
                 frame.Thread.TempRegisters[0] = (short)(propose ? 3 : 1);
                 return -1;
             }

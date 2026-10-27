@@ -30,7 +30,7 @@ namespace FSO.SimAntics
         public sbyte ReduxKind = -1;
         public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
             ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7, ReduxKindWooHoo = 8,
-            ReduxKindAttraction = 9;
+            ReduxKindAttraction = 9, ReduxKindRelationships = 17;
         /// <summary>SimsRedux 16.9: what this script is as a choice's test to Utils/ReduxAttraction.cs (-1 = not yet).</summary>
         public sbyte ReduxAttractionKind = -1;
 
@@ -49,6 +49,7 @@ namespace FSO.SimAntics
                 else if (label.StartsWith("is this car for", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindCarForSim;
                 else if (FSO.SimAntics.Utils.ReduxWooHoo.IsHookLabel(label)) kind = ReduxKindWooHoo; // (16.7: WooHoo - the bed, the baby question)
                 else if (FSO.SimAntics.Utils.ReduxAttraction.IsHookLabel(label)) kind = ReduxKindAttraction; // (16.9: a romantic social's answer)
+                else if (FSO.SimAntics.Utils.VMReduxRelationships.IsHookLabel(label)) kind = ReduxKindRelationships; // (17.0: the game's own wedding)
                 else kind = ReduxKindNone;
                 ReduxKind = kind;
             }
@@ -98,6 +99,8 @@ namespace FSO.SimAntics
                     {
                         if (FSO.SimAntics.Utils.ReduxAttraction.Hook(frame, target) < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                     }
+                    // SimsRedux 17.0: the game's own Propose ended in a wedding - the couple is Married (Utils/ReduxRelationships.cs)
+                    else if (kind == ReduxKindRelationships && frame.VM != null && frame.VM.TS1) FSO.SimAntics.Utils.VMReduxRelationships.Hook(frame);
                 }
                 else if (opcode >= 8192 && frame.VM != null && frame.VM.TS1)
                 {

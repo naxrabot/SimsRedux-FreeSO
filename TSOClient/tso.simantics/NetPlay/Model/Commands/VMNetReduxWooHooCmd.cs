@@ -16,10 +16,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     ///              is asked (Asked). Sent by the asker's game - a guest only for their own Sim (A).
     ///   Answer   - that player's Accept / Decline: changes nothing (Answered). A guest only for their own Sim (B).
     ///   Start    - the two Sims (A, B) go to the spot (Place, Kind); Chance (0-100) is the chance of a baby, worked
-    ///              out by the lot's game (0: none possible), Protected says protection was used.
+    ///              out by the lot's game (0: none possible), Protected says protection was used. 17.0: Yes = B's
+    ///              player already accepted (no "not in the mood" check); others in the room are asked to leave.
     ///   Finish   - it's over (Yes: it happened, so needs, relationship and the baby chance count; no: called off).
     ///   Birth    - at home: the baby arrives, in the game's own bassinet, by the mother (A); B the father if he's here.
-    ///   Buy      - a family Sim (A) buys protection (Item 0) or a pack of pills (Item 1) at the store display, the
+    ///   Buy      - a family Sim (A) buys protection (Item 0), a pack of pills (Item 1) or pregnancy tests (Item 2, 17.0) at the store display, the
     ///              medicine cabinet or the computer (Source 0/1/2, Place the object): the money comes off the family.
     ///   SetSwitch- the lot's game says whether WooHoo is on (On) - while it is, the game's own "Should we have a
     ///              baby?" question is off.
@@ -38,7 +39,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             SetSwitch = 6,
         }
 
-        public enum ItemKind : byte { Protection = 0, Pills = 1 }
+        public enum ItemKind : byte { Protection = 0, Pills = 1, PregnancyTest = 2 }
 
         /// <summary>The chance of a baby with protection, or after the pill (near zero).</summary>
         public const int ProtectedChance = 1;
@@ -115,6 +116,18 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             // (16.9: attraction - each has to be attracted to the other and interested in WooHoo; Utils/ReduxAttraction.cs)
             if (!ReduxAttraction.WantsWooHoo(a, b)) return Refuse(vm, (a.Name ?? "They") + " isn't interested in WooHoo with " + (b.Name ?? "them") + ".");
             if (!ReduxAttraction.WantsWooHoo(b, a)) return Refuse(vm, (b.Name ?? "They") + " politely says no - they'd rather not WooHoo, but they're happy just being close.");
+            // (17.0 R1: romantic boundaries - B won't WooHoo with someone who has a partner, unless B's player said yes; Utils/ReduxRelationships.cs)
+            if (!Yes && VMReduxRelationships.RefusesTaken(b, a)) return Refuse(vm, (b.Name ?? "They") + " says no - " + (a.Name ?? "they") + " already has a partner.");
+            // (17.0: "not in the mood" - tired, hungry, upset or sad - unless B's player already said yes; Yes on a Start)
+            if (!Yes)
+            {
+                var mood = VMReduxRomance.NotInTheMood(b, a, true);
+                if (mood != VMReduxRomance.Mood.Fine)
+                {
+                    VMReduxRomance.FireRefused(vm, b, a, mood);
+                    return Refuse(vm, "");
+                }
+            }
             if (kind == ReduxWooHoo.Place.None || ReduxWooHoo.KindOf(spot) != kind) return Refuse(vm, "That spot can't be used.");
             var base0 = spot.MultitileGroup?.BaseObject ?? spot;
             // (one WooHoo per spot)
@@ -147,7 +160,15 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                             && ReduxWooHoo.PushWait(vm, b, piece, perMinute * 90, ReduxWooHoo.ActionName);
                         break;
                     }
-                default: ok = false; break;
+                default:
+                    {
+                        // 17.0: the new spots (closet, photo booth, elevator, tent, couch, kitchen table...): both go up to
+                        // it and stay by it - the screen covers them with a privacy cloud and hearts
+                        int perMinute = Math.Max(1, vm.Context.Clock.TicksPerMinute);
+                        ok = ReduxWooHoo.CloudSpot(kind) && ReduxWooHoo.PushWait(vm, a, base0, perMinute * 90, ReduxWooHoo.ActionName)
+                            && ReduxWooHoo.PushWait(vm, b, base0, perMinute * 90, ReduxWooHoo.ActionName);
+                        break;
+                    }
             }
             if (!ok)
             {
@@ -156,6 +177,9 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 return Refuse(vm, "They couldn't get to it.");
             }
             short start = (short)(ReduxWooHoo.MinuteOfDay(vm) + 1);
+            // 17.0: privacy - everyone else in the room is asked to leave (not by Shameless Sims, never outdoors)
+            short flags = (short)(Protected ? ReduxWooHoo.ProtectedFlag : 0);
+            if (VMReduxRomance.AskForPrivacy(vm, a, b, base0) > 0) flags |= ReduxWooHoo.PrivacyFlag;
             foreach (var pair in new[] { new[] { a, b }, new[] { b, a } })
             {
                 var s = pair[0];
@@ -166,7 +190,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 s.SetAttribute(ReduxWooHoo.StartAttr, start);
                 s.SetAttribute(ReduxWooHoo.InAttr, 0);
                 s.SetAttribute(ReduxWooHoo.ChanceAttr, (short)(Math.Min((int)Chance, 100) + 1));
-                s.SetAttribute(ReduxWooHoo.FlagsAttr, (short)(Protected ? 1 : 0));
+                s.SetAttribute(ReduxWooHoo.FlagsAttr, flags);
             }
             try { Started?.Invoke(vm, this, null); } catch { }
             return true;
@@ -283,7 +307,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var who = vm.GetObjectById(A) as VMAvatar;
             var fam = vm.TS1State?.CurrentFamily;
             var at = vm.GetObjectById(Place);
-            if (who == null || fam == null || at == null || Item > 1 || Count < 1 || Price < 0) return NotBought(vm, "");
+            if (who == null || fam == null || at == null || Item > 2 || Count < 1 || Price < 0) return NotBought(vm, ""); // (17.0: 2 = pregnancy tests)
             if (!(fam.FamilyGUIDs ?? new uint[0]).Contains(who.Object.OBJ.GUID) || !ReduxWooHoo.Grownup(who)) return NotBought(vm, "");
             if (fam.Budget < Price) return NotBought(vm, "Your family doesn't have §" + Price.ToString("N0") + ".");
             fam.Budget -= Price;

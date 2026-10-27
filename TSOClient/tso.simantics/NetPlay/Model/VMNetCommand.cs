@@ -78,6 +78,9 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxCook, typeof(VMNetReduxCookCmd) }, // SimsRedux 16.7: cooking menus (Utils/ReduxCooking.cs)
             { VMCommandType.ReduxTraits, typeof(VMNetReduxTraitsCmd) }, // SimsRedux 16.9: traits (Utils/ReduxTraits.cs)
             { VMCommandType.ReduxAttraction, typeof(VMNetReduxAttractionCmd) }, // SimsRedux 16.9: attraction, relationship types (Utils/ReduxAttraction.cs)
+            { VMCommandType.ReduxRelationships, typeof(VMNetReduxRelationshipsCmd) }, // SimsRedux 17.0: relationship stages, breakups, weddings (Utils/ReduxRelationships.cs)
+            { VMCommandType.ReduxMatch, typeof(VMNetReduxMatchCmd) }, // SimsRedux 17.0: family and matchmaking (Utils/ReduxMatch.cs)
+            { VMCommandType.ReduxRomance, typeof(VMNetReduxRomanceCmd) }, // SimsRedux 17.0: romance and closeness (Utils/ReduxRomance.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -213,5 +216,8 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxCook = 73, // SimsRedux 16.7: cooking menus - make a chosen dish (VMNetReduxCookCmd, Utils/ReduxCooking.cs)
         ReduxTraits = 74, // SimsRedux 16.9: traits on the lot, trait-only choices (VMNetReduxTraitsCmd, Utils/ReduxTraits.cs)
         ReduxAttraction = 75, // SimsRedux 16.9: attraction, relationship types, jealousy rule (VMNetReduxAttractionCmd, Utils/ReduxAttraction.cs)
+        ReduxRelationships = 77, // SimsRedux 17.0: relationship stages, boundaries, breakups, weddings, anniversaries (VMNetReduxRelationshipsCmd, Utils/ReduxRelationships.cs)
+        ReduxMatch = 78, // SimsRedux 17.0: turn-ons, closeness, life partners, dates, adoption, moving in (VMNetReduxMatchCmd, Utils/ReduxMatch.cs)
+        ReduxRomance = 79, // SimsRedux 17.0: romance and closeness - romantic choices, privacy, Romance skill (VMNetReduxRomanceCmd, Utils/ReduxRomance.cs)
     }
 }
