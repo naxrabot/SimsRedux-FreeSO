@@ -1244,18 +1244,29 @@ namespace FSO.SimAntics.Engine
             {
                 var args = new short[4];
                 if (auto) args[0] = 1;
-                if (EvaluateCheck(Context, Entity, new VMStackFrame()
+                // SimsRedux 16.9: same-gender proposals (Utils/ReduxAttraction.cs)
+                short reduxGender;
+                var reduxFlipped = FSO.SimAntics.Utils.ReduxAttraction.BeginCheck(Entity, action, out reduxGender);
+                VMPrimitiveExitCode checkResult;
+                try
                 {
-                    Caller = Entity,
-                    Callee = action.Callee,
-                    CodeOwner = action.CodeOwner,
-                    StackObject = action.StackObject,
-                    Routine = action.CheckRoutine,
-                    Args = args
-                }, null, result) != VMPrimitiveExitCode.RETURN_TRUE)
+                    checkResult = EvaluateCheck(Context, Entity, new VMStackFrame()
+                    {
+                        Caller = Entity,
+                        Callee = action.Callee,
+                        CodeOwner = action.CodeOwner,
+                        StackObject = action.StackObject,
+                        Routine = action.CheckRoutine,
+                        Args = args
+                    }, null, result);
+                }
+                finally { FSO.SimAntics.Utils.ReduxAttraction.EndCheck(reduxFlipped, reduxGender); }
+                if (checkResult != VMPrimitiveExitCode.RETURN_TRUE)
                 {
                     return null;
                 }
+                // SimsRedux 16.9: romantic choices only toward Sims they're attracted to (Utils/ReduxAttraction.cs)
+                if (!FSO.SimAntics.Utils.ReduxAttraction.AllowCheck(Entity, action)) return null;
             }
             return result;
         }

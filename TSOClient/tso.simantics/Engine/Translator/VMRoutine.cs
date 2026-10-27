@@ -29,7 +29,10 @@ namespace FSO.SimAntics
         /// </summary>
         public sbyte ReduxKind = -1;
         public const sbyte ReduxKindNone = 0, ReduxKindHappyEnough = 1, ReduxKindDueAtWork = 2, ReduxKindCarPool = 3,
-            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7, ReduxKindWooHoo = 8;
+            ReduxKindSchoolBus = 4, ReduxKindExitSkill = 5, ReduxKindCarForSim = 6, ReduxKindExitFun = 7, ReduxKindWooHoo = 8,
+            ReduxKindAttraction = 9;
+        /// <summary>SimsRedux 16.9: what this script is as a choice's test to Utils/ReduxAttraction.cs (-1 = not yet).</summary>
+        public sbyte ReduxAttractionKind = -1;
 
         public sbyte GetReduxKind()
         {
@@ -45,6 +48,7 @@ namespace FSO.SimAntics
                 else if (label.IndexOf("school bus schedule", System.StringComparison.OrdinalIgnoreCase) >= 0) kind = ReduxKindSchoolBus;
                 else if (label.StartsWith("is this car for", System.StringComparison.OrdinalIgnoreCase)) kind = ReduxKindCarForSim;
                 else if (FSO.SimAntics.Utils.ReduxWooHoo.IsHookLabel(label)) kind = ReduxKindWooHoo; // (16.7: WooHoo - the bed, the baby question)
+                else if (FSO.SimAntics.Utils.ReduxAttraction.IsHookLabel(label)) kind = ReduxKindAttraction; // (16.9: a romantic social's answer)
                 else kind = ReduxKindNone;
                 ReduxKind = kind;
             }
@@ -88,6 +92,11 @@ namespace FSO.SimAntics
                         if (woo != 0 && frame.Thread != null && frame.Thread.ReduxHookShouldWait()) return VMPrimitiveExitCode.CONTINUE_NEXT_TICK;
                         if (woo > 0) return VMPrimitiveExitCode.GOTO_TRUE;
                         if (woo < 0) return VMPrimitiveExitCode.GOTO_FALSE;
+                    }
+                    // SimsRedux 16.9: a Sim who isn't attracted turns a romantic social down (Utils/ReduxAttraction.cs)
+                    else if (kind == ReduxKindAttraction)
+                    {
+                        if (FSO.SimAntics.Utils.ReduxAttraction.Hook(frame, target) < 0) return VMPrimitiveExitCode.GOTO_FALSE;
                     }
                 }
                 else if (opcode >= 8192 && frame.VM != null && frame.VM.TS1)

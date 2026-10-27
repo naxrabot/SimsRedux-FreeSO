@@ -44,6 +44,8 @@ namespace FSO.SimAntics.Engine.Primitives
             // entertainer left while "Watch stripper" pushes "watch" on the guests. Push nothing (false), as for a
             // missing interaction, instead of a SimAntics error.
             if (interactionSource == null || context.StackObject == null) return VMPrimitiveExitCode.GOTO_FALSE;
+            // SimsRedux 16.9: no jealous reaction from a Sim the Game Rule "Jealousy" leaves out (Utils/ReduxAttraction.cs)
+            if (context.VM.TS1 && FSO.SimAntics.Utils.ReduxAttraction.SkipJealousy(context)) return VMPrimitiveExitCode.GOTO_FALSE;
             var action = interactionSource.GetAction(operand.Interaction, context.StackObject, context.VM.Context, false);
             if (action == null) return VMPrimitiveExitCode.GOTO_FALSE;
             if (operand.UseCustomIcon) action.IconOwner = context.VM.GetObjectById((short)context.Locals[operand.IconLocation]);
