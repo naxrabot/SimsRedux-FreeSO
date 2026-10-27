@@ -85,6 +85,7 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxChores, typeof(VMNetReduxChoresCmd) }, // SimsRedux 17.1: the chore board (Utils/ReduxChores.cs)
             { VMCommandType.ReduxMultitask, typeof(VMNetReduxMultitaskCmd) }, // SimsRedux 17.2: multitasking (Utils/ReduxMultitask.cs)
             { VMCommandType.ReduxStory, typeof(VMNetReduxStoryCmd) }, // SimsRedux 17.2: story progression's changes reaching a family's lot (Simitone's ReduxStory.cs)
+            { VMCommandType.ReduxBrain, typeof(VMNetReduxBrainCmd) }, // SimsRedux 17.4: Adaptive Sims - each Sim's brain and free will (Utils/ReduxBrain.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -227,5 +228,6 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxChores = 80, // SimsRedux 17.1: the chore board - chores at set times, pocket money (VMNetReduxChoresCmd, Utils/ReduxChores.cs)
         ReduxMultitask = 84, // SimsRedux 17.2: multitasking - the lot's switch (VMNetReduxMultitaskCmd, Utils/ReduxMultitask.cs)
         ReduxStory = 85, // SimsRedux 17.2: story progression - skills and jobs from while the family was away (VMNetReduxStoryCmd, Simitone's Utils/ReduxStory.cs)
+        ReduxBrain = 86, // SimsRedux 17.4: Adaptive Sims - a Sim's brain and free will on the lot (VMNetReduxBrainCmd, Utils/ReduxBrain.cs)
     }
 }

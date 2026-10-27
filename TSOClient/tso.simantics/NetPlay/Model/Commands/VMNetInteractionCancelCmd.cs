@@ -9,6 +9,14 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             if (caller == null) return false;
 
+            // SimsRedux 17.4: the owning game learns from the player cancelling one of the Sim's own choices (before it goes)
+            if (vm.TS1)
+            {
+                var q = caller.Thread?.Queue;
+                if (q != null)
+                    foreach (var a in q)
+                        if (a.UID == ActionUID) { FSO.SimAntics.Utils.VMReduxBrain.Heard(vm, this, caller, a.Callee, a.InteractionNumber, a); break; }
+            }
             caller.Thread.CancelAction(ActionUID);
 
             return true;

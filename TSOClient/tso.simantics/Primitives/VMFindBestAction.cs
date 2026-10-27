@@ -48,9 +48,11 @@ namespace FSO.SimAntics.Primitives
         /// <summary>
         /// SimsRedux: how smart Sims are on their own (single player; online lots always use Smartest so
         /// every player's game - and the server - makes the same choices).
-        ///   0 = the original Sims 1 brain, 1 = Smarter, 2 = Smartest (Sims 3/4-style)
+        ///   0 = the original Sims 1 brain, 1 = Smarter, 2 = Smartest (Sims 3/4-style),
+        ///   3 = Adaptive (17.4: Smartest plus each Sim's own learned brain - Utils/ReduxBrain.cs; the default; online-style
+        ///   lots always use it), -1 = Off (the family does nothing on their own)
         /// </summary>
-        public static int ReduxLevel = 2;
+        public static int ReduxLevel = 3;
 
         public static VMPersonDataVariable[] VaryByTypes = new VMPersonDataVariable[]
         {
@@ -148,7 +150,8 @@ namespace FSO.SimAntics.Primitives
             float baseHappy = happyParts.Sum();
 
             // === SIMSREDUX: SMARTER BRAIN - what matters right now ===
-            int level = context.VM.ReduxNoPause ? 2 : ReduxLevel;
+            // (17.4: an online-style lot - a visit - is always Adaptive: each Sim's brain is on the lot itself, sent by its owner)
+            int level = context.VM.ReduxNoPause ? 3 : ReduxLevel;
             // (a Sim of the family living here - not a visitor, NPC or pet)
             // (a guest player's Sim carries the lot family's number but isn't the household - IsHouseholdSim)
             bool familySim = context.VM.TS1 && !caller.IsPet && !visitor && FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(context.VM, caller);
@@ -157,11 +160,22 @@ namespace FSO.SimAntics.Primitives
                 return VMPrimitiveExitCode.GOTO_FALSE;
             var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
 
+            // SimsRedux 17.4: free will per Sim (attribute 120, VMReduxBrain) - how OFTEN a family Sim acts on their own; Sim
+            // Smarts decides how WELL. Off: only for a need in the red or a fire. Needs only: only what a need asks for.
+            var freeWill = familySim ? FSO.SimAntics.Utils.VMReduxBrain.FreeWillOf(caller) : FSO.SimAntics.Utils.VMReduxBrain.FreeWill.Normal;
+            bool fwOff = freeWill == FSO.SimAntics.Utils.VMReduxBrain.FreeWill.Off;
+            bool fwRestrict = fwOff || freeWill == FSO.SimAntics.Utils.VMReduxBrain.FreeWill.NeedsOnly;
+            if (fwOff && !FSO.SimAntics.Utils.VMReduxBrain.InRed(caller) && !(brain != null && brain.FireOnLot))
+                return VMPrimitiveExitCode.GOTO_FALSE;
+            // SimsRedux 17.4: Adaptive - the Sim's own learned brain weighs every choice too (whole numbers, from the lot only)
+            bool adaptive = level >= 3 && context.VM.TS1 && !caller.IsPet;
+            var brainCtx = adaptive ? new FSO.SimAntics.Utils.VMReduxBrainContext() : null;
+
             // SimsRedux: something to do when nothing is *needed*. Sims 1 only scores a choice by how much it
             // raises a need, so with every need in the flat top part of its curve (most of the day, with the
             // slower motives built in) nothing scores at all and the Sim just stands there. These are the
             // fun / social / tidying / skill choices to fall back on then (family Sims only).
-            List<VMPieMenuInteraction> idleChoices = (brain != null && familySim) ? new List<VMPieMenuInteraction>() : null;
+            List<VMPieMenuInteraction> idleChoices = (brain != null && familySim && !fwRestrict) ? new List<VMPieMenuInteraction>() : null;
 
             List<VMPieMenuInteraction> validActions = new List<VMPieMenuInteraction>();
             foreach (var iobj in ents)
@@ -229,6 +243,7 @@ namespace FSO.SimAntics.Primitives
                         }
                     }
                     var first = pie.FirstOrDefault();
+                    if (first != null && fwRestrict && !FSO.SimAntics.Utils.VMReduxBrain.Allowed(freeWill, caller, entry, first)) first = null; // (17.4 free will)
                     if (first != null)
                     {
                         // calculate score for this tree.
@@ -315,6 +330,9 @@ namespace FSO.SimAntics.Primitives
                         // SimsRedux 16.9: traits (Neat Freaks clean, Bookworms read, Loners keep to themselves...)
                         float traitWeight = context.VM.TS1 ? FSO.SimAntics.Utils.VMReduxTraits.AutonomyWeight(context.VM, caller, obj, first.Name) : 1f;
                         if (score > 0) score *= traitWeight;
+                        // SimsRedux 17.4: Adaptive - the Sim's brain (per mille, 1000 = no change)
+                        int brainWeight = adaptive ? FSO.SimAntics.Utils.VMReduxBrain.Weight(context.VM, caller, obj, first.Name, entry, first, distance, level, brainCtx) : 1000;
+                        if (score > 0 && brainWeight != 1000) score *= brainWeight / 1000f;
 
                         if (score > minScore)
                         {
@@ -332,6 +350,7 @@ namespace FSO.SimAntics.Primitives
                             float idle = idleAppeal / 1000f / (1 + 0.1f * distance);
                             idle *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
                             idle *= traitWeight;
+                            if (brainWeight != 1000) idle *= brainWeight / 1000f;
                             if (idle > minScore)
                             {
                                 first.Score = idle;
@@ -352,9 +371,11 @@ namespace FSO.SimAntics.Primitives
             List<VMPieMenuInteraction> sorted = validActions.OrderByDescending(x => x.Score).ToList();
             sorted = TakeTopActions(sorted, 4);
             var selection = sorted.FirstOrDefault();
+            bool fromIdle = false; // (17.4: for "Why I'm doing this")
             // SimsRedux: nothing is needed - do something anyway (fun, a chat, tidying up, a skill)
             if (selection == null && idleChoices != null && idleChoices.Count > 0)
             {
+                fromIdle = true;
                 sorted = TakeTopActions(idleChoices.OrderByDescending(x => x.Score).ToList(), 4);
                 selection = sorted.FirstOrDefault();
             }
@@ -369,17 +390,18 @@ namespace FSO.SimAntics.Primitives
             // (with the Mechanical skill for it), the Sims 4 way. (Looked at even when nothing else scored:
             // a Sim with every need fine is exactly the one who should be paying the bills or calling
             // the fire department.)
-            bool chore = false;
+            bool chore = false, isBed = false;
             // SimsRedux: bedtime - a tired family Sim at night (or anyone exhausted) goes to bed, instead of
             // the bed losing out to one more round of fun
             if (brain != null && level >= 1 && familySim)
             {
-                var bed = brain.FindBed(context, ents);
-                if (bed != null) { selection = bed; chore = true; }
+                var bed = (fwOff && caller.GetMotiveData(VMMotive.Energy) >= FSO.SimAntics.Utils.VMReduxBrain.RedBelow) ? null : brain.FindBed(context, ents);
+                if (bed != null) { selection = bed; chore = true; isBed = true; }
             }
             if (!chore && brain != null && level >= 2 && !visitor)
             {
                 var c = brain.FindChore(context, ents);
+                if (c != null && fwRestrict && brain.ChoreCode != 101) { c = null; brain.ChoreCode = 0; } // (17.4 free will: only the fire)
                 if (c != null) { selection = c; chore = true; }
             }
             if (selection == null) return VMPrimitiveExitCode.GOTO_FALSE;
@@ -410,6 +432,23 @@ namespace FSO.SimAntics.Primitives
                 context.Caller.Thread.EnqueueAction(qaction);
                 brain?.Remember(selection);
                 if (brain != null && brain.ChoreCode != 0) brain.MarkCall(brain.ChoreCode);
+                // SimsRedux 17.4: "Why I'm doing this" (display only - nothing on the lot reads it)
+                if (context.VM.TS1 && !caller.IsPet)
+                {
+                    try
+                    {
+                        string note = null;
+                        if (adaptive && !chore && FSO.SimAntics.Utils.VMReduxBrain.FactorIds().Length > 0)
+                        {
+                            var wctx = new FSO.SimAntics.Utils.VMReduxBrainContext();
+                            FSO.SimAntics.Utils.VMReduxBrain.Weight(context.VM, caller, selection.Callee, selection.Name, selection.Entry, selection, 0, level, wctx);
+                            note = wctx.Why;
+                        }
+                        FSO.SimAntics.Utils.VMReduxBrain.SetWhy(caller, selection.Callee, selection.ID,
+                            FSO.SimAntics.Utils.VMReduxBrain.Explain(context.VM, caller, selection, brain?.ChoreCode ?? 0, isBed, chore, fromIdle, note));
+                    }
+                    catch { }
+                }
                 context.StackObject = selection.Callee;
                 return VMPrimitiveExitCode.GOTO_TRUE;
             } else
@@ -444,7 +483,7 @@ namespace FSO.SimAntics.Primitives
             if (vm == null || !vm.TS1 || sim.Dead || sim.IsPet) return;
             var mem = sim.BrainMemory;
             if (mem == null || mem.Length < 18) return;
-            int level = vm.ReduxNoPause ? 2 : ReduxLevel;
+            int level = vm.ReduxNoPause ? 3 : ReduxLevel;
             var family = vm.TS1State?.CurrentFamily;
 
             bool idle = level >= 0 && family != null
@@ -463,6 +502,7 @@ namespace FSO.SimAntics.Primitives
             if (mem[17] == 0) { mem[16] = now; mem[17] = 1; return; } // just became idle: start counting
             var ago = now - mem[16]; if (ago < 0) ago += 30 * 1440;
             int wait = vm.ReduxNoPause ? IdleMinutesOnline : ((vm.GetGlobalValue(3) == sim.ObjectID) ? IdleMinutesSelected : IdleMinutes);
+            wait = FSO.SimAntics.Utils.VMReduxBrain.IdleWait(sim, wait); // (17.4: free will High, and the play style the brain learned)
             if (ago < wait) return;
 
             mem[16] = now; // (if nothing comes of it, try again a few minutes later)
@@ -569,6 +609,8 @@ namespace FSO.SimAntics.Primitives
         private readonly short[] Needs = new short[16];
         /// <summary>A physical need is close to red: the Sim does the best thing for it, no dawdling.</summary>
         public bool Urgent;
+        /// <summary>17.4: a fire on the lot (free will Off still reacts to it).</summary>
+        public bool FireOnLot { get { return Fires.Count > 0; } }
         private readonly bool Night, LateNight, Daytime, BeforeWork;
 
         // (shared, so scoring - which runs for every choice of every Sim - doesn't allocate them each time)
