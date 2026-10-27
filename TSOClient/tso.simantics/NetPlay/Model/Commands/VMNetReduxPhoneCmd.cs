@@ -77,6 +77,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             {
                 // (at home only - the family's own lot)
                 if (fam.HouseNumber <= 0 || vm.GetGlobalValue(10) != fam.HouseNumber) return Tell(vm, who, "Sell the cellphone from your own home.");
+                // 17.2: the lot can't tell who owns a phone (that's the player's own game's side file), so a Sim can sell
+                // at most once per game hour on the lot - person attribute 106 (VMReduxPhone.SoldAttr), the same on every game.
+                short stamp = VMReduxPhone.HourStamp(vm);
+                if (who.GetAttribute(VMReduxPhone.SoldAttr) == stamp) return Tell(vm, who, "");
+                who.SetAttribute(VMReduxPhone.SoldAttr, stamp);
                 fam.Budget += VMReduxPhone.SellPrice;
             }
             Tell(vm, who, null);

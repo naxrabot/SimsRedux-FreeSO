@@ -140,6 +140,10 @@ namespace FSO.SimAntics.Utils
                 AddedByPatch = true,
             };
             newFams.InsertString(0, new STRItem() { Comment = "", Value = name });
+            // SimsRedux 17.2: a family removed without its name (older versions) left its FAMs behind - it goes now, so the
+            // number starts clean (adding a second FAMs with the same number would fail)
+            var stale = neigh.MainResource.Get<FAMs>(newID);
+            if (stale != null) neigh.MainResource.FullRemoveChunk(stale);
             neigh.MainResource.AddChunk(newFams);
 
             return newFam;

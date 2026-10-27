@@ -348,15 +348,24 @@ namespace FSO.SimAntics.Utils
             return Extra.None;
         }
 
+        /// <summary>17.2: (the lot, its tick, the answer) - the bookcase check runs once per lot tick, not once per Sim in bed.</summary>
+        private static Tuple<WeakReference, uint, bool> BookcaseCache; // (weak: a lot that was left isn't kept in memory)
+
         private static bool HasBookcase(VM vm)
         {
+            // (per tick, not longer: a player joining a visit mid-minute works it out fresh, so every game agrees)
+            uint tick = vm.Scheduler.CurrentTickID;
+            var c = BookcaseCache;
+            if (c != null && c.Item2 == tick && ReferenceEquals(c.Item1.Target, vm)) return c.Item3;
+            bool has = false;
             foreach (var e in vm.Entities)
             {
                 if (!(e is VMGameObject) || e.Dead || e.Position == LotTilePos.OUT_OF_WORLD) continue;
                 var label = (e.Object?.OBJ?.ChunkLabel ?? "").ToLowerInvariant();
-                if (label.Contains("bookcase") || label.Contains("bookshelf") || label.Contains("book shelf")) return true;
+                if (label.Contains("bookcase") || label.Contains("bookshelf") || label.Contains("book shelf")) { has = true; break; }
             }
-            return false;
+            BookcaseCache = Tuple.Create(new WeakReference(vm), tick, has);
+            return has;
         }
     }
 }

@@ -10,7 +10,7 @@ namespace FSO.SimAntics.Utils
     /// when it came out, +1; 0 = put away). Attributes are already saved with the lot and sent to every player joining,
     /// so nothing in the save format changes. Set only through VMNetReduxPhoneCmd (cmd 83), so every game agrees. Who owns
     /// a phone is the player's own game's business (Simitone's ReduxCellphone side file) - the lot never needs it.
-    /// Attributes 106-109 are kept free for the cellphone.
+    /// Attributes 106-109 are kept free for the cellphone (17.2: 106 = SoldAttr).
     /// </summary>
     public static class VMReduxPhone
     {
@@ -22,6 +22,15 @@ namespace FSO.SimAntics.Utils
         public const int ShowTicks = 1800;
         /// <summary>A new cellphone (the home computer's Shop Online, a Pharmacy Shelf), and what selling one back gives.</summary>
         public const int BuyPrice = 100, SellPrice = 20;
+        /// <summary>17.2: person attribute - the game hour (HourStamp) the Sim last sold a cellphone on this lot (0 = never).</summary>
+        public const int SoldAttr = 106;
+
+        /// <summary>17.2: this game hour on the lot, as a short (day of month * 24 + hour + 1) - the same on every game.</summary>
+        public static short HourStamp(VM vm)
+        {
+            var c = vm.Context.Clock;
+            return (short)(System.Math.Max(1, System.Math.Min(31, c.DayOfMonth)) * 24 + System.Math.Max(0, System.Math.Min(23, c.Hours)) + 1);
+        }
 
         // ---------------------------------------------------------------- 17.2: packages by the mailbox
 

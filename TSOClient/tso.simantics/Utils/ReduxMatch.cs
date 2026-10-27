@@ -728,7 +728,11 @@ namespace FSO.SimAntics.Utils
                     if (left.Length == 0)
                     {
                         fam.Budget += Math.Max(0, old.Budget); // (savings only - never the house's value)
-                        old.ChunkParent.FullRemoveChunk(old);
+                        // (17.2: its name goes too, so a new family given this number starts clean)
+                        var res = old.ChunkParent;
+                        var oldName = res?.Get<FAMs>(old.ChunkID);
+                        res?.FullRemoveChunk(old);
+                        if (oldName != null) res.FullRemoveChunk(oldName);
                     }
                 }
                 n.PersonData[(int)VMPersonDataVariable.TS1FamilyNumber] = (short)fam.ChunkID;

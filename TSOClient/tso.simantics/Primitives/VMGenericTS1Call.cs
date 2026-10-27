@@ -383,7 +383,11 @@ namespace FSO.SimAntics.Primitives
             //delete the family if there's no people in it
             if (family.FamilyGUIDs.Length == 0)
             {
-                family.ChunkParent.FullRemoveChunk(family);
+                // SimsRedux 17.2: its name (FAMs) goes with it, so a new family given this number starts clean
+                var res = family.ChunkParent;
+                var name = res?.Get<FSO.Files.Formats.IFF.Chunks.FAMs>(family.ChunkID);
+                res?.FullRemoveChunk(family);
+                if (name != null) res.FullRemoveChunk(name);
             }
         }
 
