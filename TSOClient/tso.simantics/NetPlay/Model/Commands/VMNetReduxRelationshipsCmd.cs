@@ -114,6 +114,14 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             var sim = Sim(vm, A);
             if (sim == null) return false;
+            if (sim.IsChild)
+            {
+                // (17.0: a child never has a partner, a stage, romantic boundaries or a broken heart - only the "on" bit)
+                sim.SetAttribute(Rels.PartnerAttr, 0);
+                sim.SetAttribute(Rels.StateAttr, (short)(Value & Rels.OnBit));
+                sim.SetAttribute(Rels.HeartAttr, 0);
+                return true;
+            }
             sim.SetAttribute(Rels.PartnerAttr, (short)Math.Max(0, (int)B));
             sim.SetAttribute(Rels.StateAttr, (short)(Value & Rels.OwnerBits));
             sim.SetAttribute(Rels.HeartAttr, (short)Math.Max(0, (int)C));
@@ -174,6 +182,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 case Acts.BreakUp:
                 case Acts.Divorce:
                     {
+                        // (17.0: only a couple can break up - partners on the lot, or in love both ways)
+                        if (together == Stage.None && !ReduxWooHoo.InLove(a, b)) return Tell(vm, a, b, "");
                         // (no asking - it's over. The one left behind takes it harder.)
                         ReduxWooHoo.PushWait(vm, a, b, perMinute * 3, Act == Acts.Divorce ? "Ask for a Divorce" : "Break Up");
                         Rels.Unlink(a, b);
@@ -293,6 +303,13 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (a == null || b == null || a == b || (stage != Stage.Married && stage != Stage.Committed && stage != Stage.LifePartners)) return Tell(vm, a, b, "");
             if (!ReduxWooHoo.Grownup(a) || !ReduxWooHoo.Grownup(b)) return Tell(vm, a, b, "");
             if (stage != Stage.LifePartners && !ReduxAttraction.Mutual(a, b)) return Tell(vm, a, b, "They aren't attracted to each other.");
+            // (17.0: only a couple - engaged, partners or in love for a wedding or commitment ceremony; life partners for theirs)
+            var now = Rels.Together(a, b);
+            if (stage == Stage.LifePartners)
+            {
+                if (now != Stage.LifePartners && !VMReduxMatch.AroAce(a) && !VMReduxMatch.AroAce(b)) return Tell(vm, a, b, "They need to be life partners first.");
+            }
+            else if ((now == Stage.None || now == Stage.LifePartners) && !ReduxWooHoo.InLove(a, b)) return Tell(vm, a, b, "They need to be a couple (engaged, or in love) first.");
             var fam = Rels.Family(vm);
             int cost = Math.Max(0, Math.Min(100000, Cost));
             if (cost > 0)
@@ -422,17 +439,48 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
         }
 
+        /// <summary>17.0: a visiting player's answers, at most one every AnswerEvery.</summary>
+        private static readonly Dictionary<uint, DateTime> LastAnswer = new Dictionary<uint, DateTime>();
+        private static readonly TimeSpan AnswerEvery = TimeSpan.FromSeconds(2);
+
+        private bool AnswerAllowed(VMAvatar caller)
+        {
+            var now = DateTime.UtcNow;
+            lock (LastAnswer)
+            {
+                DateTime t;
+                if (LastAnswer.TryGetValue(caller.PersistID, out t) && now - t < AnswerEvery) return false;
+                if (LastAnswer.Count > 200) LastAnswer.Clear();
+                LastAnswer[caller.PersistID] = now;
+                return true;
+            }
+        }
+
         public override bool Verify(VM vm, VMAvatar caller)
         {
-            if (Mode == RelMode.Answer) lock (OpenAsk) OpenAsk.Remove(A);
-            if (!FromNet) return true; // (this game runs the lot)
+            if (!FromNet)
+            {
+                if (Mode == RelMode.Answer) lock (OpenAsk) OpenAsk.Remove(A);
+                return true; // (this game runs the lot)
+            }
             // a visiting player: only their own Sim
             if (caller == null || caller.IsPet) return false;
             switch (Mode)
             {
                 case RelMode.SetState: return A == caller.ObjectID && StateAllowed(caller);
-                case RelMode.Ask: return A == caller.ObjectID && A != B && Act > Acts.None && Act <= Acts.Limits && AskAllowed(caller);
-                case RelMode.Answer: return B == caller.ObjectID;
+                case RelMode.Ask:
+                    {
+                        if (A != caller.ObjectID || A == B || Act <= Acts.None || Act > Acts.Limits) return false;
+                        // (17.0: both grown-ups - no ask ever reaches a child)
+                        if (!ReduxWooHoo.Grownup(caller) || !ReduxWooHoo.Grownup(Sim(vm, B))) return false;
+                        return AskAllowed(caller);
+                    }
+                case RelMode.Answer:
+                    {
+                        if (B != caller.ObjectID || !AnswerAllowed(caller)) return false;
+                        lock (OpenAsk) OpenAsk.Remove(A);
+                        return true;
+                    }
             }
             return false;
         }

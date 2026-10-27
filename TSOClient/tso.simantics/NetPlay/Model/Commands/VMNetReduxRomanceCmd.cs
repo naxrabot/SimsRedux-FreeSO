@@ -153,18 +153,53 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
         }
 
+        /// <summary>17.0: a visiting player's answers, skill and perk updates - at most one of each every couple of seconds.</summary>
+        private static readonly Dictionary<uint, DateTime> LastAnswer = new Dictionary<uint, DateTime>(), LastSkill = new Dictionary<uint, DateTime>(), LastPerks = new Dictionary<uint, DateTime>();
+        private static readonly TimeSpan OwnEvery = TimeSpan.FromSeconds(2);
+
+        private static bool Every(Dictionary<uint, DateTime> last, VMAvatar caller)
+        {
+            var now = DateTime.UtcNow;
+            lock (last)
+            {
+                DateTime t;
+                if (last.TryGetValue(caller.PersistID, out t) && now - t < OwnEvery) return false;
+                if (last.Count > 200) last.Clear();
+                last[caller.PersistID] = now;
+                return true;
+            }
+        }
+
         public override bool Verify(VM vm, VMAvatar caller)
         {
-            if (Mode == RomMode.Answer) lock (LastSent) OpenAsk.Remove(A);
-            if (!FromNet) return true; // (this game runs the lot)
+            if (!FromNet)
+            {
+                if (Mode == RomMode.Answer) lock (LastSent) OpenAsk.Remove(A);
+                return true; // (this game runs the lot)
+            }
             if (caller == null || caller.IsPet) return false;
             switch (Mode)
             {
                 case RomMode.SetSkill:
+                    // (0-10 levels only, never for a child - and not too often)
+                    if (A != caller.ObjectID || caller.IsChild || Value < 0 || Value > VMReduxRomance.MaxSkill) return false;
+                    return Every(LastSkill, caller);
                 case RomMode.SetPerks:
-                    return A == caller.ObjectID;
-                case RomMode.Ask: return A == caller.ObjectID && A != B && Allowed(caller, true);
-                case RomMode.Answer: return B == caller.ObjectID;
+                    if (A != caller.ObjectID || caller.IsChild || (Value & ~7) != 0) return false;
+                    return Every(LastPerks, caller);
+                case RomMode.Ask:
+                    {
+                        if (A != caller.ObjectID || A == B) return false;
+                        // (17.0: both grown-ups - no romance ask ever reaches a child)
+                        if (!ReduxWooHoo.Grownup(caller) || !ReduxWooHoo.Grownup(vm.GetObjectById(B) as VMAvatar)) return false;
+                        return Allowed(caller, true);
+                    }
+                case RomMode.Answer:
+                    {
+                        if (B != caller.ObjectID || !Every(LastAnswer, caller)) return false;
+                        lock (LastSent) OpenAsk.Remove(A);
+                        return true;
+                    }
                 case RomMode.Act:
                     return A == caller.ObjectID && Choice == (byte)VMReduxRomance.Choice.PracticeRomance && !Yes && Allowed(caller, false);
             }

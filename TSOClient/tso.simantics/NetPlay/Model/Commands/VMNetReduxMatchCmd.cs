@@ -101,7 +101,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         }
                     case MatchMode.MoveIn:
                         {
-                            var why = VMReduxMatch.MoveIn(vm, a);
+                            var why = VMReduxMatch.MoveIn(vm, a, b);
                             try { MovedIn?.Invoke(vm, this, why); } catch (Exception e) { Console.WriteLine("[SimsRedux] match: " + e.Message); }
                             return why == null;
                         }
@@ -154,15 +154,35 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             }
         }
 
+        /// <summary>17.0: a visiting player's answers and turn-on updates, at most one every few seconds each.</summary>
+        private static readonly Dictionary<uint, DateTime> LastAnswer = new Dictionary<uint, DateTime>(), LastTurnOns = new Dictionary<uint, DateTime>();
+        private static readonly TimeSpan AnswerEvery = TimeSpan.FromSeconds(2), TurnOnsEvery = TimeSpan.FromSeconds(2);
+
+        private static bool Every(Dictionary<uint, DateTime> last, VMAvatar caller, TimeSpan every)
+        {
+            var now = DateTime.UtcNow;
+            lock (last)
+            {
+                DateTime t;
+                if (last.TryGetValue(caller.PersistID, out t) && now - t < every) return false;
+                if (last.Count > 200) last.Clear();
+                last[caller.PersistID] = now;
+                return true;
+            }
+        }
+
         public override bool Verify(VM vm, VMAvatar caller)
         {
-            if (Mode == MatchMode.Answer) lock (OpenAsk) OpenAsk.Remove(A);
-            if (!FromNet) return true; // (this game runs the lot)
+            if (!FromNet)
+            {
+                if (Mode == MatchMode.Answer) lock (OpenAsk) OpenAsk.Remove(A);
+                return true; // (this game runs the lot)
+            }
             // a visiting player: only their own Sim, and never the lot's family, money or visitors
             if (caller == null || caller.IsPet) return false;
             switch (Mode)
             {
-                case MatchMode.SetTurnOns: return A == caller.ObjectID;
+                case MatchMode.SetTurnOns: return A == caller.ObjectID && Every(LastTurnOns, caller, TurnOnsEvery);
                 case MatchMode.Close:
                     {
                         if (A != caller.ObjectID || A == B) return false;
@@ -171,8 +191,20 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         if (b == null || b.Dead) return false;
                         return VMReduxMatch.CloseWait(vm, caller) == 0;
                     }
-                case MatchMode.Ask: return A == caller.ObjectID && A != B && AskAllowed(caller);
-                case MatchMode.Answer: return B == caller.ObjectID;
+                case MatchMode.Ask:
+                    {
+                        // (17.0: both grown-ups - no ask dialog ever reaches a child)
+                        if (A != caller.ObjectID || A == B) return false;
+                        var b = vm.GetObjectById(B) as VMAvatar;
+                        if (!ReduxWooHoo.Grownup(caller) || !ReduxWooHoo.Grownup(b)) return false;
+                        return AskAllowed(caller);
+                    }
+                case MatchMode.Answer:
+                    {
+                        if (B != caller.ObjectID || !Every(LastAnswer, caller, AnswerEvery)) return false;
+                        lock (OpenAsk) OpenAsk.Remove(A);
+                        return true;
+                    }
             }
             return false;
         }

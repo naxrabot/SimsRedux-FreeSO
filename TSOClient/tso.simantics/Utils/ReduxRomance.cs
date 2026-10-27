@@ -32,6 +32,8 @@ namespace FSO.SimAntics.Utils
         public const short PerkIrresistible = 1, PerkSmoothTalker = 2, PerkFaithfulHeart = 4;
         /// <summary>Game minutes between romantic choices (Practice Romance: PracticeCooldown), and between great dates.</summary>
         public const int ActCooldown = 30, PracticeCooldown = 60, DateCooldown = 360, Wrap = 30000;
+        /// <summary>17.0: game minutes before a child can have the birds and the bees talk again (a week - under Wrap).</summary>
+        public const int BirdsBeesCooldown = 7 * 24 * 60;
 
         // ------------------------------------------------------------------ the switch (lot-wide, from the lot's game)
 
@@ -71,6 +73,13 @@ namespace FSO.SimAntics.Utils
         public static int Skill(VMAvatar a) { return Person(a) ? Math.Max(0, Math.Min(MaxSkill, (int)a.GetAttribute(SkillAttr))) : 0; }
         public static int Level(VMAvatar a) { return Skill(a) / 100; }
         public static bool Perk(VMAvatar a, short perk) { return Person(a) && (a.GetAttribute(PerkAttr) & perk) != 0; }
+
+        /// <summary>
+        /// 17.0: a visiting player's Sim (their perks come from their own game - the lot can't check them) with one of the
+        /// lot's own Sims: perks only give a small bonus (GuestPerkCap) there.
+        /// </summary>
+        public static bool GuestOnHost(VMAvatar visitor, VMAvatar lotSim) { return Visitor(visitor) && lotSim != null && !Visitor(lotSim); }
+        public const int GuestPerkCap = 8;
 
         /// <summary>Raises the Romance skill (Smooth Talker: half as much again). Only from the lot's own scripts and commands.</summary>
         public static void Gain(VMAvatar a, int points)
@@ -122,8 +131,10 @@ namespace FSO.SimAntics.Utils
             if (VMReduxTraits.Has(who, VMReduxTraits.T.Romantic) || VMReduxTraits.Has(who, VMReduxTraits.T.Flirty)) slack += 15;
             if (VMReduxTraits.Has(who, VMReduxTraits.T.Shy) || VMReduxTraits.Has(who, VMReduxTraits.T.Loner)) slack -= 12;
             if (VMReduxTraits.Has(who, VMReduxTraits.T.Gloomy)) slack -= 5;
-            if (Perk(asker, PerkIrresistible)) slack += 20;
-            if (Perk(asker, PerkFaithfulHeart) && ReduxWooHoo.InLove(who, asker)) slack += 25;
+            int perks = 0;
+            if (Perk(asker, PerkIrresistible)) perks += 20;
+            if (Perk(asker, PerkFaithfulHeart) && ReduxWooHoo.InLove(who, asker)) perks += 25;
+            slack += GuestOnHost(asker, who) ? Math.Min(perks, GuestPerkCap) : perks;
             if (woohoo) slack -= 5;
             if (who.GetMotiveData(VMMotive.Energy) < -55 - slack) return Mood.Tired;
             if (who.GetMotiveData(VMMotive.Hunger) < -65 - slack || who.GetMotiveData(VMMotive.Bladder) < -65 - slack) return Mood.Hungry;
@@ -160,7 +171,7 @@ namespace FSO.SimAntics.Utils
                     FireRefused(vm, other, me, mood);
                     return true;
                 }
-                if (propose || Perk(me, PerkIrresistible)) return false;
+                if (propose || (Perk(me, PerkIrresistible) && !GuestOnHost(me, other))) return false;
                 int awkward = Math.Max(0, 12 - Level(me) * 4);
                 if (awkward > 0 && (int)vm.Context.NextRandom(100) < awkward)
                 {
@@ -419,6 +430,10 @@ namespace FSO.SimAntics.Utils
 
             if (c == Choice.BirdsBees)
             {
+                // (17.0: once is plenty - the child remembers it for BirdsBeesCooldown game minutes, on the child's ActAttr,
+                //  which children don't otherwise use)
+                if (Since(vm, b, ActAttr) < BirdsBeesCooldown) return (b.Name ?? "They") + " has already had that talk - once is plenty!";
+                Stamp(vm, b, ActAttr);
                 ReduxWooHoo.PushWait(vm, a, b, ticks, name);
                 ReduxWooHoo.PushWait(vm, b, a, ticks, name);
                 Motive(a, VMMotive.Social, 10);
@@ -447,7 +462,7 @@ namespace FSO.SimAntics.Utils
             int chance = 65 + Level(a) * 4;
             if (VMReduxTraits.Has(a, VMReduxTraits.T.Romantic) || VMReduxTraits.Has(a, VMReduxTraits.T.Flirty)) chance += 10;
             if (VMReduxTraits.Has(a, VMReduxTraits.T.Shy)) chance -= 5;
-            if (Perk(a, PerkIrresistible)) chance += 15;
+            if (Perk(a, PerkIrresistible)) chance += GuestOnHost(a, b) ? 5 : 15;
             if (c == Choice.HoldHands || c == Choice.GiveRose) chance += 10;
             if (agreed) chance += 20;
             chance = Math.Max(30, Math.Min(98, chance));
@@ -505,8 +520,12 @@ namespace FSO.SimAntics.Utils
                 case Choice.GiveRose: daily = 7; life = 2; Motive(b, VMMotive.Social, 8); Motive(b, VMMotive.Room, 5); break;
                 default: daily = 5; life = 1; break;
             }
-            if (Perk(a, PerkSmoothTalker)) daily += daily / 2;
-            if (Perk(a, PerkFaithfulHeart) && ReduxWooHoo.InLove(a, b)) { daily += daily / 2; life += 1; }
+            int bonus = 0, lifeBonus = 0;
+            if (Perk(a, PerkSmoothTalker)) bonus += daily / 2;
+            if (Perk(a, PerkFaithfulHeart) && ReduxWooHoo.InLove(a, b)) { bonus += daily / 2; lifeBonus = 1; }
+            if (GuestOnHost(a, b)) { bonus = Math.Min(bonus, 2); lifeBonus = 0; } // (a visitor's perks: a small bonus at most)
+            daily += bonus;
+            life += lifeBonus;
             Closer(a, b, daily, life);
             Closer(b, a, daily, life);
             Gain(a, 15);
@@ -622,8 +641,31 @@ namespace FSO.SimAntics.Utils
             foreach (var e in vm.Context.ObjectQueries.Avatars)
             {
                 var x = e as VMAvatar;
-                if (x == null || x == a || x == b || x.Dead || x.IsPet || x.Position == LotTilePos.OUT_OF_WORLD) continue;
+                if (x == null || x == a || x == b || x.Dead || x.IsPet || x.IsChild || x.Position == LotTilePos.OUT_OF_WORLD) continue;
                 if (x.Position.Level == spot.Position.Level && vm.Context.GetRoomAt(x.Position) == room) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 17.0 (family-friendly): is a child in the spot's room (indoors) or close by (outdoors, within 5 tiles)? Such a
+        /// spot isn't offered for WooHoo (Simitone's WooHoo menu).
+        /// </summary>
+        public static bool ChildNearby(VM vm, VMEntity spot)
+        {
+            if (vm?.Context?.RoomInfo == null || spot == null || spot.Position == LotTilePos.OUT_OF_WORLD) return false;
+            var room = vm.Context.GetObjectRoom(spot);
+            bool outdoor = room == 0 || room >= vm.Context.RoomInfo.Length || vm.Context.RoomInfo[room].Room.IsOutside;
+            foreach (var e in vm.Context.ObjectQueries.Avatars)
+            {
+                var x = e as VMAvatar;
+                if (x == null || !x.IsChild || x.Dead || x.IsPet || x.Position == LotTilePos.OUT_OF_WORLD || x.Position.Level != spot.Position.Level) continue;
+                if (outdoor)
+                {
+                    float dx = (x.Position.x - spot.Position.x) / 16f, dy = (x.Position.y - spot.Position.y) / 16f;
+                    if (dx * dx + dy * dy <= 25) return true;
+                }
+                else if (vm.Context.GetRoomAt(x.Position) == room) return true;
             }
             return false;
         }

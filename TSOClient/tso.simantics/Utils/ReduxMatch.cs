@@ -303,6 +303,19 @@ namespace FSO.SimAntics.Utils
             return "No spark";
         }
 
+        /// <summary>
+        /// Chemistry in friendship-only words - for grown-ups who are family (no romance words between relatives). Pairs
+        /// with a child never show chemistry at all (Simitone's ReduxMatch.ChemistryWord).
+        /// </summary>
+        public static string FriendWord(int chem)
+        {
+            if (chem >= 80) return "Get along great!";
+            if (chem >= 62) return "Get along well";
+            if (chem >= 45) return "Get along fine";
+            if (chem >= 30) return "A little awkward";
+            return "Don't really click";
+        }
+
         /// <summary>1 to 5 (the meter's hearts or stars).</summary>
         public static int Level(int chem) { return Math.Max(1, Math.Min(5, 1 + chem / 20)); }
 
@@ -684,13 +697,17 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>
         /// who (on the lot, from another family or a townie) moves into the lot's family, as the game's own "Move In" does:
-        /// out of their old family (their family's money comes too when they were the last one in it), into this one, and
-        /// saved with the lot from now on. null: done; else why not.
+        /// out of their old family (their family's savings come too when they were the last one in it - never the value of a
+        /// house: the last one in a family with a home of its own can't move out of it), into this one, and saved with the
+        /// lot from now on. with: the family's Sim they're moving in with (a grown-up), or null. null: done; else why not.
+        /// Never a visiting player's Sim or a child.
         /// </summary>
-        public static string MoveIn(VM vm, VMAvatar who)
+        public static string MoveIn(VM vm, VMAvatar who, VMAvatar with = null)
         {
             var fam = vm?.TS1State?.CurrentFamily;
             if (fam == null || !ReduxWooHoo.Grownup(who)) return "";
+            if (who.PersistID >= VMReduxPerks.FirstGuestId) return ""; // (another player's Sim - never)
+            if (with != null && (with == who || !ReduxWooHoo.Grownup(with))) return "";
             var guid = who.Object.OBJ.GUID;
             if ((fam.FamilyGUIDs ?? new uint[0]).Contains(guid)) return "";
             if ((fam.FamilyGUIDs?.Length ?? 0) >= ReduxWooHoo.MaxFamily) return "Your family is full - a family can have 8 Sims and pets at most.";
@@ -703,10 +720,14 @@ namespace FSO.SimAntics.Utils
                 var old = famID > 0 ? neigh.GetFamily((ushort)famID) : null;
                 if (old != null && old.ChunkID != fam.ChunkID && old.ChunkID != 0)
                 {
-                    old.FamilyGUIDs = (old.FamilyGUIDs ?? new uint[0]).Where(x => x != guid).ToArray();
-                    if (old.FamilyGUIDs.Length == 0)
+                    var left = (old.FamilyGUIDs ?? new uint[0]).Where(x => x != guid).ToArray();
+                    // (the last one in a family with a home: they stay - a house never empties into this family's money)
+                    if (left.Length == 0 && old.HouseNumber > 0)
+                        return (who.Name ?? "They") + " is the last one in their family and has a home of their own - they can't leave it empty to move in.";
+                    old.FamilyGUIDs = left;
+                    if (left.Length == 0)
                     {
-                        fam.Budget += Math.Max(0, old.Budget) + Math.Max(0, old.ValueInArch);
+                        fam.Budget += Math.Max(0, old.Budget); // (savings only - never the house's value)
                         old.ChunkParent.FullRemoveChunk(old);
                     }
                 }
