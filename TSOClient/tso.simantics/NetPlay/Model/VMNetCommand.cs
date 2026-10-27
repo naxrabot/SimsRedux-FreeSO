@@ -81,6 +81,8 @@ namespace FSO.SimAntics.NetPlay.Model
             { VMCommandType.ReduxRelationships, typeof(VMNetReduxRelationshipsCmd) }, // SimsRedux 17.0: relationship stages, breakups, weddings (Utils/ReduxRelationships.cs)
             { VMCommandType.ReduxMatch, typeof(VMNetReduxMatchCmd) }, // SimsRedux 17.0: family and matchmaking (Utils/ReduxMatch.cs)
             { VMCommandType.ReduxRomance, typeof(VMNetReduxRomanceCmd) }, // SimsRedux 17.0: romance and closeness (Utils/ReduxRomance.cs)
+            { VMCommandType.ReduxPhone, typeof(VMNetReduxPhoneCmd) }, // SimsRedux 17.1: the cellphone out / put away (Utils/ReduxPhone.cs)
+            { VMCommandType.ReduxChores, typeof(VMNetReduxChoresCmd) }, // SimsRedux 17.1: the chore board (Utils/ReduxChores.cs)
         };
         public static Dictionary<Type, VMCommandType> ReverseMap = CmdMap.ToDictionary(x => x.Value, x => x.Key);
 
@@ -219,5 +221,7 @@ namespace FSO.SimAntics.NetPlay.Model
         ReduxRelationships = 77, // SimsRedux 17.0: relationship stages, boundaries, breakups, weddings, anniversaries (VMNetReduxRelationshipsCmd, Utils/ReduxRelationships.cs)
         ReduxMatch = 78, // SimsRedux 17.0: turn-ons, closeness, life partners, dates, adoption, moving in (VMNetReduxMatchCmd, Utils/ReduxMatch.cs)
         ReduxRomance = 79, // SimsRedux 17.0: romance and closeness - romantic choices, privacy, Romance skill (VMNetReduxRomanceCmd, Utils/ReduxRomance.cs)
+        ReduxPhone = 83, // SimsRedux 17.1: the cellphone out / put away, a phone over the Sim's head (VMNetReduxPhoneCmd, Utils/ReduxPhone.cs)
+        ReduxChores = 80, // SimsRedux 17.1: the chore board - chores at set times, pocket money (VMNetReduxChoresCmd, Utils/ReduxChores.cs)
     }
 }
