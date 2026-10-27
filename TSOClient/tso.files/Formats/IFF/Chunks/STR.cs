@@ -41,6 +41,26 @@ namespace FSO.Files.Formats.IFF.Chunks
         public STRLanguageSet[] LanguageSets = new STRLanguageSet[20];
         public static STRLangCode DefaultLangCode = STRLangCode.EnglishUS;
 
+        /// <summary>
+        /// SimsRedux 17.4: the format code the chunk was read in (0 when made in code or never read). Only -3 and -4 tag every
+        /// string with its language; the older formats (0, -1, -2) hold one untagged set in slot 0 - whatever language the
+        /// install is in. Not saved (the file keeps its own format).
+        /// </summary>
+        public short ReduxFormat;
+
+        /// <summary>
+        /// SimsRedux 17.4: the English US string at index, ONLY when the strings are tagged with their language (format -3 or -4),
+        /// else null. It never depends on the language the player's game is set to, so the lot can use it to tell what a choice
+        /// is and every game on a visit gets the same answer. (Untagged strings could be in any language - not used.)
+        /// </summary>
+        public string TaggedEnglish(int index)
+        {
+            if (ReduxFormat != -3 && ReduxFormat != -4) return null;
+            var set = (LanguageSets != null && LanguageSets.Length > 0) ? LanguageSets[0] : null;
+            if (set?.Strings == null || index < 0 || index >= set.Strings.Length) return null;
+            return set.Strings[index]?.Value;
+        }
+
         public STR()
         {
             for (int i = 0; i < 20; i++) LanguageSets[i] = new STRLanguageSet { Strings = new STRItem[0] };
@@ -275,6 +295,7 @@ namespace FSO.Files.Formats.IFF.Chunks
             using (var io = IoBuffer.FromStream(stream, ByteOrder.LITTLE_ENDIAN))
             {
                 var formatCode = io.ReadInt16();
+                ReduxFormat = formatCode; // (SimsRedux 17.4: TaggedEnglish)
                 LanguageSets = new STRLanguageSet[20];
                 if (!io.HasMore){
                     for (int i = 0; i < 20; i++) LanguageSets[i] = new STRLanguageSet { Strings = new STRItem[0] };

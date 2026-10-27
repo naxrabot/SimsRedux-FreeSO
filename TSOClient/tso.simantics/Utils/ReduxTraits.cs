@@ -211,14 +211,54 @@ namespace FSO.SimAntics.Utils
             Food = 256, Joke = 512, Mean = 1024, Romance = 2048, TV = 4096, Swim = 8192,
         }
 
+        // LOCKSTEP (17.4): what kind of choice it is decides a weight on the lot, so it's worked out from the choice's ENGLISH
+        // name (VMReduxBrain.EnglishName: the object's own strings read as English US, only when the file tags its strings with
+        // their language) - never the pie menu's name, which is in the player's language and would split a visit between
+        // players in different languages. No English name: no trait weighting for that choice (the same on every game).
         private static readonly Dictionary<string, K> KindCache = new Dictionary<string, K>();
+        private sealed class KBox { public K Kind; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TTABInteraction, KBox> EntryKinds
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<TTABInteraction, KBox>();
 
-        private static bool Has(string n, params string[] words)
+        // (word lists as shared arrays - no params array per check)
+        private static readonly string[] RestWords = { "relax", "lounge", "lie down" };
+        private static readonly string[] TVWords = { "watch tv", " tv" };
+        private static readonly string[] EatWords = { " eat", "/eat" };
+        private static readonly string[] CleanWords = { "clean", "mop", "empty trash", "take out trash", "tidy", "wash dish", "scrub" };
+        private static readonly string[] ExerciseWords = { "work out", "workout", "exercise", "jog", "lift weight", "basketball", "aerobic", "dance", "jump" };
+        private static readonly string[] SwimWords = { "swim", "dive" };
+        private static readonly string[] ReadWords = { "/read", "study", "book" };
+        private static readonly string[] GameWords = { "game", "pinball", "arcade", "chess", "video", "joystick" };
+        private static readonly string[] CreateWords = { "paint", "piano", "guitar", "sculpt", "draw", "drum", " sing", "/sing", "write", "compose", "violin", "instrument" };
+        private static readonly string[] GardenWords = { "garden", "weed", "prune", "harvest" };
+        private static readonly string[] FoodWords = { "cook", "meal", "snack", "grill", "serve", "breakfast", "lunch", "dinner", "dessert" };
+        private static readonly string[] JokeWords = { "joke", "tickle", "entertain", "puppet", "juggle", "funny", "goof", "silly" };
+        private static readonly string[] MeanWords = { "insult", "slap", "tease", "annoy", "shove", "fight", "attack", "taunt", "scold", "/nag", "poke", "raspberry" };
+        private static readonly string[] RomanceWords = { "kiss", "flirt", "intimate", "romantic", "back rub", "dance.../slow", "proposition", "serenade", "cuddle", "woohoo" };
+
+        private static bool Has(string n, string[] words)
         {
-            foreach (var w in words) if (n.IndexOf(w, StringComparison.Ordinal) >= 0) return true;
+            for (int i = 0; i < words.Length; i++) if (n.IndexOf(words[i], StringComparison.Ordinal) >= 0) return true;
             return false;
         }
 
+        /// <summary>The kind of a choice from its TTAB entry (its English name; worked out once per entry and kept, "none" too).</summary>
+        private static K KindOf(VMEntity obj, TTABInteraction entry)
+        {
+            if (entry == null) return K.None;
+            KBox box;
+            if (EntryKinds.TryGetValue(entry, out box)) return box.Kind;
+            return NewKBox(obj, entry).Kind;
+        }
+
+        private static KBox NewKBox(VMEntity obj, TTABInteraction entry)
+        {
+            var k = KindOf(VMReduxBrain.EnglishName(obj, entry));
+            try { return EntryKinds.GetValue(entry, _ => new KBox { Kind = k }); }
+            catch { return new KBox { Kind = k }; }
+        }
+
+        /// <summary>The kind of a choice from its ENGLISH name (see the LOCKSTEP note above).</summary>
         private static K KindOf(string name)
         {
             if (string.IsNullOrEmpty(name)) return K.None;
@@ -230,20 +270,20 @@ namespace FSO.SimAntics.Utils
             var n = name.Trim().ToLowerInvariant();
             k = K.None;
             if (n == "sleep" || n.StartsWith("sleep")) k |= K.Sleep;
-            if (n.StartsWith("nap") || n.StartsWith("sit") || n.StartsWith("rest") || Has(n, "relax", "lounge", "lie down")) k |= K.Rest;
-            if (n.StartsWith("watch") || Has(n, "watch tv", " tv")) k |= K.TV | K.Rest;
-            bool eat = n.StartsWith("eat") || Has(n, " eat", "/eat");
-            if (!eat && Has(n, "clean", "mop", "empty trash", "take out trash", "tidy", "wash dish", "scrub") || n == "empty") k |= K.Clean;
-            if (Has(n, "work out", "workout", "exercise", "jog", "lift weight", "basketball", "aerobic", "dance", "jump")) k |= K.Exercise;
-            if (Has(n, "swim", "dive")) k |= K.Swim | K.Exercise;
-            if (n.StartsWith("read") || Has(n, "/read", "study", "book")) k |= K.Read;
-            if (Has(n, "game", "pinball", "arcade", "chess", "video", "joystick")) k |= K.Game;
-            if (n.StartsWith("sing") || Has(n, "paint", "piano", "guitar", "sculpt", "draw", "drum", " sing", "/sing", "write", "compose", "violin", "instrument")) k |= K.Create;
-            if (n == "water" || n.StartsWith("water ") || n.StartsWith("tend") || Has(n, "garden", "weed", "prune", "harvest")) k |= K.Garden;
-            if (eat || Has(n, "cook", "meal", "snack", "grill", "serve", "breakfast", "lunch", "dinner", "dessert")) k |= K.Food;
-            if (Has(n, "joke", "tickle", "entertain", "puppet", "juggle", "funny", "goof", "silly")) k |= K.Joke;
-            if (Has(n, "insult", "slap", "tease", "annoy", "shove", "fight", "attack", "taunt", "scold", "/nag", "poke", "raspberry") || n.StartsWith("nag")) k |= K.Mean;
-            if (Has(n, "kiss", "flirt", "intimate", "romantic", "back rub", "dance.../slow", "proposition", "serenade", "cuddle", "woohoo")) k |= K.Romance;
+            if (n.StartsWith("nap") || n.StartsWith("sit") || n.StartsWith("rest") || Has(n, RestWords)) k |= K.Rest;
+            if (n.StartsWith("watch") || Has(n, TVWords)) k |= K.TV | K.Rest;
+            bool eat = n.StartsWith("eat") || Has(n, EatWords);
+            if (!eat && Has(n, CleanWords) || n == "empty") k |= K.Clean;
+            if (Has(n, ExerciseWords)) k |= K.Exercise;
+            if (Has(n, SwimWords)) k |= K.Swim | K.Exercise;
+            if (n.StartsWith("read") || Has(n, ReadWords)) k |= K.Read;
+            if (Has(n, GameWords)) k |= K.Game;
+            if (n.StartsWith("sing") || Has(n, CreateWords)) k |= K.Create;
+            if (n == "water" || n.StartsWith("water ") || n.StartsWith("tend") || Has(n, GardenWords)) k |= K.Garden;
+            if (eat || Has(n, FoodWords)) k |= K.Food;
+            if (Has(n, JokeWords)) k |= K.Joke;
+            if (Has(n, MeanWords) || n.StartsWith("nag")) k |= K.Mean;
+            if (Has(n, RomanceWords)) k |= K.Romance;
             lock (KindCache)
             {
                 if (KindCache.Count > 6000) KindCache.Clear();
@@ -258,12 +298,24 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>
         /// How much the Sim's traits make them want this choice (1 = no change; a multiplier on Sims 1's own score). Only
-        /// the Sim's traits on the lot, the choice's name, who it's done to and the lot's clock - the same on every game.
+        /// the Sim's traits on the lot, the choice's English name (from its TTAB entry - see LOCKSTEP above), who it's done to
+        /// and the lot's clock - the same on every game, whatever its language.
         /// </summary>
-        public static float AutonomyWeight(VM vm, VMAvatar me, VMEntity obj, string name)
+        public static float AutonomyWeight(VM vm, VMAvatar me, VMEntity obj, TTABInteraction entry)
         {
             if (vm == null || !vm.TS1 || me == null || me.IsPet || !Any(me)) return 1f;
-            var k = KindOf(name);
+            return Weigh(vm, me, obj, KindOf(obj, entry));
+        }
+
+        /// <summary>The same from a name, which MUST be the English name (VMReduxBrain.EnglishName) - never the pie menu's.</summary>
+        public static float AutonomyWeight(VM vm, VMAvatar me, VMEntity obj, string englishName)
+        {
+            if (vm == null || !vm.TS1 || me == null || me.IsPet || !Any(me)) return 1f;
+            return Weigh(vm, me, obj, KindOf(englishName));
+        }
+
+        private static float Weigh(VM vm, VMAvatar me, VMEntity obj, K k)
+        {
             var other = obj as VMAvatar;
             bool social = other != null && other != me && !other.IsPet;
             bool pet = other != null && other.IsPet;
@@ -370,7 +422,10 @@ namespace FSO.SimAntics.Utils
             return false;
         }
 
-        /// <summary>The piece of the object with the game's own menu entry for this choice, and the entry (null: none).</summary>
+        /// <summary>
+        /// The piece of the object with the game's own menu entry for this choice, and the entry (null: none). By the entry's
+        /// English name (STR.TaggedEnglish), since Act runs on the lot (command 74) and must find the same entry on every game.
+        /// </summary>
         public static VMEntity FindFor(VMEntity obj, Choice c, out TTABInteraction found)
         {
             found = null;
@@ -379,7 +434,7 @@ namespace FSO.SimAntics.Utils
             {
                 if (o?.TreeTable == null || o.TreeTableStrings == null) continue;
                 foreach (var ia in o.TreeTable.Interactions)
-                    if (Matches(c, o.TreeTableStrings.GetString((int)ia.TTAIndex))) { found = ia; return o; }
+                    if (Matches(c, o.TreeTableStrings.TaggedEnglish((int)ia.TTAIndex))) { found = ia; return o; } // (17.4: English - Act runs on the lot)
             }
             return null;
         }

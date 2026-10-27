@@ -160,16 +160,21 @@ namespace FSO.SimAntics.Primitives
                 return VMPrimitiveExitCode.GOTO_FALSE;
             var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
 
-            // SimsRedux 17.4: free will per Sim (attribute 120, VMReduxBrain) - how OFTEN a family Sim acts on their own; Sim
-            // Smarts decides how WELL. Off: only for a need in the red or a fire. Needs only: only what a need asks for.
-            var freeWill = familySim ? FSO.SimAntics.Utils.VMReduxBrain.FreeWillOf(caller) : FSO.SimAntics.Utils.VMReduxBrain.FreeWill.Normal;
+            // SimsRedux 17.4: free will per Sim (attribute 120, VMReduxBrain) - how OFTEN a Sim acts on their own; Sim Smarts
+            // decides how WELL. For the household's Sims and a visiting player's own Sim (EffectiveFreeWill - only the Sim's own
+            // game sets it, with command 86, so it's the same on every game). Off: only for a need in the red, plus the
+            // essentials (a fire, paying the bills, calling the repairman - FindChore). Needs only: what a need asks for, plus
+            // the same essentials.
+            var freeWill = FSO.SimAntics.Utils.VMReduxBrain.EffectiveFreeWill(context.VM, caller);
             bool fwOff = freeWill == FSO.SimAntics.Utils.VMReduxBrain.FreeWill.Off;
             bool fwRestrict = fwOff || freeWill == FSO.SimAntics.Utils.VMReduxBrain.FreeWill.NeedsOnly;
-            if (fwOff && !FSO.SimAntics.Utils.VMReduxBrain.InRed(caller) && !(brain != null && brain.FireOnLot))
+            bool fwEssentialsOnly = fwOff && !FSO.SimAntics.Utils.VMReduxBrain.InRed(caller); // (no choices of their own - only FindChore's essentials)
+            if (fwEssentialsOnly && !(brain != null && familySim && level >= 2 && !visitor))
                 return VMPrimitiveExitCode.GOTO_FALSE;
             // SimsRedux 17.4: Adaptive - the Sim's own learned brain weighs every choice too (whole numbers, from the lot only)
             bool adaptive = level >= 3 && context.VM.TS1 && !caller.IsPet;
-            var brainCtx = adaptive ? new FSO.SimAntics.Utils.VMReduxBrainContext() : null;
+            // (a context for the brain's factors only when there are any - VMReduxBrain.Weight makes none otherwise)
+            var brainCtx = (adaptive && FSO.SimAntics.Utils.VMReduxBrain.FactorCount > 0) ? new FSO.SimAntics.Utils.VMReduxBrainContext() : null;
 
             // SimsRedux: something to do when nothing is *needed*. Sims 1 only scores a choice by how much it
             // raises a need, so with every need in the flat top part of its curve (most of the day, with the
@@ -180,6 +185,7 @@ namespace FSO.SimAntics.Primitives
             List<VMPieMenuInteraction> validActions = new List<VMPieMenuInteraction>();
             foreach (var iobj in ents)
             {
+                if (fwEssentialsOnly) break; // (17.4 free will Off: nothing scored - only the essentials below)
                 if (iobj.Position == LotTilePos.OUT_OF_WORLD) continue;
                 var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
                 if (processed.Contains(obj.ObjectID) || (obj is VMGameObject && ((VMGameObject)obj).Disabled > 0)) continue;
@@ -327,11 +333,16 @@ namespace FSO.SimAntics.Primitives
                         if (brain != null && score > 0) score *= brain.Weigh(entry, first, advertisements, distance, obj, (int)id);
                         // SimsRedux 15.7: their own bed (or side) first; someone else's only when there's nowhere else
                         if (context.VM.TS1 && score > 0) score *= FSO.SimAntics.Utils.ReduxBeds.AutonomyWeight(context.VM, caller, obj, (int)id);
+                        // (17.4 perf: the trait and brain weights are only worked out when they can matter - a choice that
+                        //  scores, or one kept as something to do when nothing is needed)
+                        bool idleCandidate = idleChoices != null && !needsAd && idleAppeal > 0;
+                        bool weighs = score > 0 || idleCandidate;
                         // SimsRedux 16.9: traits (Neat Freaks clean, Bookworms read, Loners keep to themselves...)
-                        float traitWeight = context.VM.TS1 ? FSO.SimAntics.Utils.VMReduxTraits.AutonomyWeight(context.VM, caller, obj, first.Name) : 1f;
+                        // (17.4: by the entry's English name - never first.Name, which is in the player's language)
+                        float traitWeight = (context.VM.TS1 && weighs) ? FSO.SimAntics.Utils.VMReduxTraits.AutonomyWeight(context.VM, caller, obj, entry) : 1f;
                         if (score > 0) score *= traitWeight;
-                        // SimsRedux 17.4: Adaptive - the Sim's brain (per mille, 1000 = no change)
-                        int brainWeight = adaptive ? FSO.SimAntics.Utils.VMReduxBrain.Weight(context.VM, caller, obj, first.Name, entry, first, distance, level, brainCtx) : 1000;
+                        // SimsRedux 17.4: Adaptive - the Sim's brain (per mille, 1000 = no change; language-independent)
+                        int brainWeight = (adaptive && weighs) ? FSO.SimAntics.Utils.VMReduxBrain.Weight(context.VM, caller, obj, entry, first, distance, level, brainCtx) : 1000;
                         if (score > 0 && brainWeight != 1000) score *= brainWeight / 1000f;
 
                         if (score > minScore)
@@ -343,7 +354,7 @@ namespace FSO.SimAntics.Primitives
                                 validActions.Add(first);
                             }
                         }
-                        else if (idleChoices != null && !needsAd && idleAppeal > 0)
+                        else if (idleCandidate)
                         {
                             // SimsRedux: not needed right now - keep it as something to do if nothing else is
                             // (same manners as everything else: not near a fire, not next to sleepers...)
@@ -400,8 +411,7 @@ namespace FSO.SimAntics.Primitives
             }
             if (!chore && brain != null && level >= 2 && !visitor)
             {
-                var c = brain.FindChore(context, ents);
-                if (c != null && fwRestrict && brain.ChoreCode != 101) { c = null; brain.ChoreCode = 0; } // (17.4 free will: only the fire)
+                var c = brain.FindChore(context, ents, fwRestrict); // (17.4 free will Off / Needs only: only the essentials - a fire, the bills, the repairman)
                 if (c != null) { selection = c; chore = true; }
             }
             if (selection == null) return VMPrimitiveExitCode.GOTO_FALSE;
@@ -438,10 +448,10 @@ namespace FSO.SimAntics.Primitives
                     try
                     {
                         string note = null;
-                        if (adaptive && !chore && FSO.SimAntics.Utils.VMReduxBrain.FactorIds().Length > 0)
+                        if (adaptive && !chore && FSO.SimAntics.Utils.VMReduxBrain.FactorCount > 0)
                         {
-                            var wctx = new FSO.SimAntics.Utils.VMReduxBrainContext();
-                            FSO.SimAntics.Utils.VMReduxBrain.Weight(context.VM, caller, selection.Callee, selection.Name, selection.Entry, selection, 0, level, wctx);
+                            var wctx = brainCtx ?? new FSO.SimAntics.Utils.VMReduxBrainContext();
+                            FSO.SimAntics.Utils.VMReduxBrain.Weight(context.VM, caller, selection.Callee, selection.Entry, selection, 0, level, wctx);
                             note = wctx.Why;
                         }
                         FSO.SimAntics.Utils.VMReduxBrain.SetWhy(caller, selection.Callee, selection.ID,
@@ -546,6 +556,15 @@ namespace FSO.SimAntics.Primitives
 
         private static readonly string[] ReduxCookNames = { "have a meal", "serve meal", "have lite meal" };
 
+        /// <summary>
+        /// (17.4 lockstep: by each choice's ENGLISH name - VMReduxBrain.EnglishName, the object's own strings read as English US -
+        /// never a.Name, which is in the player's language; no English name = not recognised, the same on every game.)
+        /// </summary>
+        private static string ReduxEnglish(VMPieMenuInteraction a)
+        {
+            return FSO.SimAntics.Utils.VMReduxBrain.EnglishName(a.Callee, a.Entry) ?? "";
+        }
+
         private static void ReduxPreferReadyFood(List<VMPieMenuInteraction> actions)
         {
             try
@@ -553,7 +572,7 @@ namespace FSO.SimAntics.Primitives
                 bool ready = false;
                 foreach (var a in actions)
                 {
-                    var name = a.Name ?? "";
+                    var name = ReduxEnglish(a);
                     if (name.StartsWith("have leftovers", StringComparison.OrdinalIgnoreCase)) { ready = true; break; }
                     var label = a.Callee?.Object?.OBJ?.ChunkLabel ?? "";
                     if (label.StartsWith("Food -", StringComparison.OrdinalIgnoreCase)
@@ -568,7 +587,7 @@ namespace FSO.SimAntics.Primitives
 
         private static bool IsCookChoice(VMPieMenuInteraction a)
         {
-            var n = a.Name ?? "";
+            var n = ReduxEnglish(a);
             foreach (var c in ReduxCookNames) if (n.StartsWith(c, StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
@@ -911,8 +930,12 @@ namespace FSO.SimAntics.Primitives
             return best;
         }
 
-        /// <summary>A chore worth doing now (bills to pay, something broken it can fix), or null.</summary>
-        public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents)
+        /// <summary>
+        /// A chore worth doing now (bills to pay, something broken it can fix), or null. essentialsOnly (17.4: free will Off or
+        /// Needs only): only the essentials - calling the fire department, paying the bills, calling the repairman - no
+        /// housework and no fixing things themselves.
+        /// </summary>
+        public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents, bool essentialsOnly = false)
         {
             var family = context.VM.TS1State?.CurrentFamily;
             if (family == null || !FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(context.VM, Sim)) return null; // (not a guest player's Sim)
@@ -942,8 +965,8 @@ namespace FSO.SimAntics.Primitives
                 {
                     var kind = TtaKindOf(ttas, ia.TTAIndex);
                     bool bills = (kind & TtaKind.Bills) != 0;
-                    bool repair = handy && (kind & TtaKind.Repair) != 0;
-                    bool housework = messy && IsHousework(obj, kind);
+                    bool repair = handy && !essentialsOnly && (kind & TtaKind.Repair) != 0;
+                    bool housework = messy && !essentialsOnly && IsHousework(obj, kind);
                     if (!bills && !repair && !housework) continue;
                     var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
                     if (housework && (IsPlate(obj) && SomeoneElsesPlate(context.VM, obj))) continue; // (someone's still eating)
@@ -1204,7 +1227,7 @@ namespace FSO.SimAntics.Primitives
             // stage 2 - safety: with very low Cooking skill, a snack beats cooking a full meal (fires)
             if (Level >= 2 && Sim.GetPersonData(VMPersonDataVariable.CookingSkill) < 200 && Needs[(int)VMMotive.Hunger] > -60)
             {
-                var n = first.Name ?? "";
+                var n = FSO.SimAntics.Utils.VMReduxBrain.EnglishName(target, entry) ?? ""; // (17.4: English - never the shown name, lockstep)
                 if (n.IndexOf("Breakfast", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Lunch", StringComparison.OrdinalIgnoreCase) >= 0
                     || n.IndexOf("Dinner", StringComparison.OrdinalIgnoreCase) >= 0 || n.StartsWith("Cook", StringComparison.OrdinalIgnoreCase)) w *= 0.5f;
             }

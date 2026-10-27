@@ -36,7 +36,9 @@ namespace FSO.SimAntics.Utils
     /// VM, the Sim, the choice, its kind, needs, clock, distance), never this game's settings, disk or screen; never change
     /// anything; be quick (it runs for every choice of every Sim). The result is clamped to x0.05-x4 and a factor that throws
     /// counts as x1. ctx.Note("...") gives the "Why I'm doing this" reason when it's the strongest one. Register once at start
-    /// up (the same in every game of the same build); RemoveFactor("id") takes one away.
+    /// up, unconditionally (the same in every game of the same build) - see FACTOR DETERMINISM below: the set locks once a lot
+    /// is played, factors combine in id order, and their hash is checked when a visitor joins. ctx.Name is the English name
+    /// (never the player's language); KindOf is language-independent.
     /// </summary>
     public static class VMReduxBrain
     {
@@ -183,46 +185,119 @@ namespace FSO.SimAntics.Utils
             a.SetAttribute(FreeWillAttr, Settings(fw, StyleOf(a)));
         }
 
-        // ------------------------------------------------------------------ what kind of choice it is
+        // ------------------------------------------------------------------ what kind of choice it is (language-independent)
+        //
+        // LOCKSTEP: the kind decides the weight, so it must come out the same on every game on a visit, whatever language each
+        // player's game is in. So it NEVER uses the name the pie menu shows (first.Name - the player's language). Only:
+        //   1. the choice's ENGLISH name, read from the object's own strings as English US and only when the file tags its
+        //      strings with their language (STR.TaggedEnglish - formats -3/-4; null for untagged files, whose one set of strings
+        //      could be in any language, so those are never used);
+        //   2. the skill the choice builds (the TTAB entry's personality modifiers - numbers in the object file);
+        //   3. the need it advertises most (TTAB motive ads plus the check tree's changes - the lot's own numbers), with the
+        //      object's Buy-mode category (OBJD FunctionFlags: Electronics) telling TV/stereo/computer fun from other fun.
+        // 1 and 2 belong to the TTAB entry itself and are worked out once per entry and kept - including "no keyword".
 
-        private static readonly Dictionary<string, Kind> KindCache = new Dictionary<string, Kind>();
+        /// <summary>"No kind yet" in the per-entry cache.</summary>
+        private const Kind NoKind = (Kind)255;
+        private sealed class KindBox { public Kind K; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TTABInteraction, KindBox> EntryKinds
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<TTABInteraction, KindBox>();
 
-        private static bool Has(string n, params string[] words)
+        // (word lists as shared arrays - no params array per check)
+        private static readonly string[] FoodWords = { "cook", "meal", "snack", "breakfast", "lunch", "dinner", "serve", "grill", "leftover", "drink", "coffee", "espresso" };
+        private static readonly string[] ChoreWords = { "clean", "mop", "empty trash", "take out trash", "pay bills", "repair", "water", "tidy", "scrub", "wash dish", "unclog", "make bed" };
+        private static readonly string[] ExerciseWords = { "work out", "workout", "exercise", "jog", "swim", "dive", "aerobic", "lift weight", "basketball", "jump", "dance" };
+        private static readonly string[] SkillWords = { "study", "read", "practice", "practise", "paint", "sculpt", "write", "piano", "guitar", "chess", "telescope", "stargaze", "research" };
+        private static readonly string[] ScreenWords = { "watch", "tv", "television", "radio", "stereo", "listen", "turn on" };
+        private static readonly string[] PlayWords = { "play", "game", "pinball", "arcade", "toy", "joystick", "puzzle", "train set", "doll" };
+        private static readonly string[] BathroomWords = { "use toilet", "toilet", "shower", "bath", "wash hands", "brush", "sponge", "pee" };
+        private static readonly string[] RestWords = { "relax", "lounge", "recline" };
+
+        private static bool Has(string n, string[] words)
         {
-            foreach (var w in words) if (n.IndexOf(w, StringComparison.Ordinal) >= 0) return true;
+            for (int i = 0; i < words.Length; i++) if (n.IndexOf(words[i], StringComparison.Ordinal) >= 0) return true;
             return false;
         }
 
         /// <summary>
-        /// The kind of a choice: from its name first (TV, games, skills, exercise, chores...), else from the need it gives most.
-        /// Only the name, who it's done to and the choice's own advertisements - the same on every game.
+        /// The choice's English name from the object's own strings - the same on every game whatever its language - or null
+        /// (the object's strings aren't tagged with their language). Use this, never the pie menu's name, for anything the lot does.
         /// </summary>
+        public static string EnglishName(VMEntity target, TTABInteraction entry)
+        {
+            if (target == null || entry == null) return null;
+            try { return target.TreeTableStrings?.TaggedEnglish((int)entry.TTAIndex); } catch { return null; }
+        }
+
+        /// <summary>
+        /// The kind of a choice - see the notes above: who it's done to, its English name, the skill it builds, else the need it
+        /// gives most. Language-independent: the same on every game on a visit.
+        /// </summary>
+        public static Kind KindOf(VMEntity target, TTABInteraction entry, VMPieMenuInteraction first)
+        {
+            if (target is VMAvatar ta) return ta.IsPet ? Kind.Play : Kind.Social;
+            if (entry != null)
+            {
+                KindBox box;
+                if (!EntryKinds.TryGetValue(entry, out box)) box = NewKindBox(target, entry);
+                if (box.K != NoKind) return box.K;
+            }
+            return ByAds(target, entry, first);
+        }
+
+        /// <summary>(Kept for older callers: the name is ignored - see KindOf(target, entry, first).)</summary>
         public static Kind KindOf(VMEntity target, string name, TTABInteraction entry, VMPieMenuInteraction first)
         {
-            if (target is VMAvatar ta && !ta.IsPet) return Kind.Social;
-            if (target is VMAvatar) return Kind.Play; // (a pet)
-            Kind k;
-            // (by the name as it is - no new strings on every choice of every decision; the work is done once per name)
-            if (!string.IsNullOrEmpty(name)) lock (KindCache) { if (KindCache.TryGetValue(name, out k)) return k; }
-            var n = (name ?? "").Trim().ToLowerInvariant();
+            return KindOf(target, entry, first);
+        }
+
+        private static KindBox NewKindBox(VMEntity target, TTABInteraction entry)
+        {
+            var k = FixedKind(EnglishName(target, entry), entry);
+            try { return EntryKinds.GetValue(entry, _ => new KindBox { K = k }); }
+            catch { return new KindBox { K = k }; }
+        }
+
+        /// <summary>What the entry itself says (its English name, else the skill it builds), or NoKind.</summary>
+        private static Kind FixedKind(string english, TTABInteraction entry)
+        {
+            var n = (english ?? "").Trim().ToLowerInvariant();
             if (n.Length > 0)
             {
-                k = (Kind)255;
-                if (n.StartsWith("eat") || Has(n, "cook", "meal", "snack", "breakfast", "lunch", "dinner", "serve", "grill", "leftover", "drink", "coffee", "espresso")) k = Kind.Food;
-                else if (Has(n, "clean", "mop", "empty trash", "take out trash", "pay bills", "repair", "water", "tidy", "scrub", "wash dish", "unclog", "make bed")) k = Kind.Chores;
-                else if (Has(n, "work out", "workout", "exercise", "jog", "swim", "dive", "aerobic", "lift weight", "basketball", "jump", "dance")) k = Kind.Exercise;
-                else if (Has(n, "study", "read", "practice", "practise", "paint", "sculpt", "write", "piano", "guitar", "chess", "telescope", "stargaze", "research")) k = Kind.Skill;
-                else if (Has(n, "watch", "tv", "television", "radio", "stereo", "listen", "turn on")) k = Kind.Screen;
-                else if (Has(n, "play", "game", "pinball", "arcade", "toy", "joystick", "puzzle", "train set", "doll")) k = Kind.Play;
-                else if (Has(n, "use toilet", "toilet", "shower", "bath", "wash hands", "brush", "sponge", "pee")) k = Kind.Bathroom;
-                else if (n == "sleep" || n.StartsWith("sleep") || n.StartsWith("nap") || n.StartsWith("sit") || n.StartsWith("lie") || n.StartsWith("rest") || Has(n, "relax", "lounge", "recline")) k = Kind.Rest;
-                if (k != (Kind)255)
-                {
-                    lock (KindCache) { if (KindCache.Count > 6000) KindCache.Clear(); KindCache[name] = k; }
-                    return k;
-                }
+                if (n.StartsWith("eat") || Has(n, FoodWords)) return Kind.Food;
+                if (Has(n, ChoreWords)) return Kind.Chores;
+                if (Has(n, ExerciseWords)) return Kind.Exercise;
+                if (Has(n, SkillWords)) return Kind.Skill;
+                if (Has(n, ScreenWords)) return Kind.Screen;
+                if (Has(n, PlayWords)) return Kind.Play;
+                if (Has(n, BathroomWords)) return Kind.Bathroom;
+                if (n == "sleep" || n.StartsWith("sleep") || n.StartsWith("nap") || n.StartsWith("sit") || n.StartsWith("lie") || n.StartsWith("rest") || Has(n, RestWords)) return Kind.Rest;
             }
-            // (from the need it gives most - not cached: the same name can mean different things on different objects)
+            // the skill it builds (VMFindBestAction.VaryByTypes 13-22) - unless it's for a physical need (eating builds no skill)
+            var mes = entry?.MotiveEntries;
+            if (mes == null) return NoKind;
+            int skill = -1;
+            for (int i = 0; i < mes.Length; i++)
+            {
+                var e = mes[i];
+                int ad = e.EffectRangeMinimum + e.EffectRangeDelta;
+                if (ad <= 0) continue;
+                if (i == (int)VMMotive.Hunger || i == (int)VMMotive.Bladder || i == (int)VMMotive.Energy || i == (int)VMMotive.Hygiene) return NoKind;
+                if (e.PersonalityModifier >= 13 && e.PersonalityModifier <= 22 && skill < 0) skill = e.PersonalityModifier;
+            }
+            switch (skill)
+            {
+                case -1: return NoKind;
+                case 13: case 17: return Kind.Chores;   // cleaning, gardening
+                case 14: return Kind.Food;              // cooking
+                case 21: return Kind.Exercise;          // body
+                default: return Kind.Skill;             // charisma, mechanical, music, creativity, literacy, logic
+            }
+        }
+
+        /// <summary>From the need the choice gives most (with its check tree's changes) and the object's Buy-mode category.</summary>
+        private static Kind ByAds(VMEntity target, TTABInteraction entry, VMPieMenuInteraction first)
+        {
             int best = -1, bestAd = 0;
             for (int i = 0; i < Needs.Length; i++)
             {
@@ -234,7 +309,10 @@ namespace FSO.SimAntics.Utils
                 case 0: return Kind.Food;
                 case 1: case 4: return Kind.Rest;
                 case 2: case 3: return Kind.Bathroom;
-                case 5: return Kind.Play;
+                case 5:
+                    // fun from Electronics (TV, stereo, computer) is screen time (OBJD FunctionFlags bit 3 - from the object file)
+                    var objd = target?.Object?.OBJ;
+                    return (objd != null && (objd.FunctionFlags & (1 << 3)) != 0) ? Kind.Screen : Kind.Play;
                 case 6: return Kind.Social;
                 case 7: return Kind.Chores;
             }
@@ -258,12 +336,44 @@ namespace FSO.SimAntics.Utils
 
         // ------------------------------------------------------------------ the weight (VMFindBestAction)
 
+        // FACTOR DETERMINISM (lockstep):
+        //  - Register factors UNCONDITIONALLY at start-up (a static constructor or the game's start-up code), never depending on
+        //    settings, the platform, a file, the language or anything else that can differ between two games of the same build.
+        //  - The set is LOCKED the first time it's used on a lot (Weight) or its hash is read (a visit's join): AddFactor and
+        //    RemoveFactor after that are refused (and say so in the log), so it can't change while games play together.
+        //  - They're COMBINED IN ID ORDER (ordinal), whatever order they were registered in, so the whole-number rounding of
+        //    w * m / 1000 is the same everywhere.
+        //  - FactorsHash (the ids, in that order) goes with a visitor's join (ReduxOnline): a host and guest with different
+        //    factor sets - mismatched builds - can't play the same lot.
+
         /// <summary>One factor (B2's behaviour extras): an id and a multiplier in per mille.</summary>
         private sealed class Factor { public string Id; public Func<VMReduxBrainContext, int> PerMille; }
         private static Factor[] Factors = new Factor[0];
         private static readonly object FactorLock = new object();
+        private static volatile bool FactorsLocked;
+        private static int FactorHashValue = HashIds(new Factor[0]);
 
-        /// <summary>Adds a factor: a multiplier on every choice (1 = no change). See the class notes for the rules.</summary>
+        /// <summary>How many factors are registered (no array made - use this on hot paths).</summary>
+        public static int FactorCount { get { return Factors.Length; } }
+
+        /// <summary>A hash of the registered factor ids in combining order (FNV-1a over the ids' characters) - the same in every game of the same build. Locks the set.</summary>
+        public static int FactorsHash { get { FactorsLocked = true; return FactorHashValue; } }
+
+        private static int HashIds(Factor[] fs)
+        {
+            unchecked
+            {
+                uint h = 2166136261;
+                foreach (var f in fs)
+                {
+                    foreach (var c in f.Id) { h ^= c; h *= 16777619; }
+                    h ^= 0x0A; h *= 16777619; // (a separator, so "ab"+"c" isn't "a"+"bc")
+                }
+                return (int)h;
+            }
+        }
+
+        /// <summary>Adds a factor: a multiplier on every choice (1 = no change). See the class notes and FACTOR DETERMINISM for the rules.</summary>
         public static void AddFactor(string id, Func<VMReduxBrainContext, float> multiplier)
         {
             if (multiplier == null) return;
@@ -281,10 +391,14 @@ namespace FSO.SimAntics.Utils
             if (string.IsNullOrEmpty(id) || perMille == null) return;
             lock (FactorLock)
             {
+                if (FactorsLocked) { Console.WriteLine("[SimsRedux] brain: factor \"" + id + "\" refused - factors must be added at start-up, before any lot is played"); return; }
                 var l = new List<Factor>();
                 foreach (var f in Factors) if (f.Id != id) l.Add(f);
                 l.Add(new Factor { Id = id, PerMille = perMille });
-                Factors = l.ToArray(); // (a new array: scoring reads it without a lock)
+                l.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id)); // (combined in id order, whatever order they came in)
+                var arr = l.ToArray();
+                FactorHashValue = HashIds(arr);
+                Factors = arr; // (a new array: scoring reads it without a lock)
             }
         }
 
@@ -292,12 +406,16 @@ namespace FSO.SimAntics.Utils
         {
             lock (FactorLock)
             {
+                if (FactorsLocked) { Console.WriteLine("[SimsRedux] brain: removing factor \"" + id + "\" refused - the factors are fixed once a lot is played"); return; }
                 var l = new List<Factor>();
                 foreach (var f in Factors) if (f.Id != id) l.Add(f);
-                Factors = l.ToArray();
+                var arr = l.ToArray();
+                FactorHashValue = HashIds(arr);
+                Factors = arr;
             }
         }
 
+        /// <summary>The factor ids in combining order (makes an array - not for hot paths: FactorCount).</summary>
         public static string[] FactorIds()
         {
             var f = Factors;
@@ -311,14 +429,15 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>
         /// How much the brain likes this choice, per mille (1000 = no change). Only lot state: the Sim's attributes and needs, the
-        /// lot's clock, the choice's name and advertisements, and the factors. ctx can be null (made here when factors need it).
+        /// lot's clock, the choice's kind and advertisements (language-independent - KindOf), and the factors. ctx can be null
+        /// (made here only when there are factors).
         /// </summary>
-        public static int Weight(VM vm, VMAvatar sim, VMEntity target, string name, TTABInteraction entry, VMPieMenuInteraction first, float distance, int level, VMReduxBrainContext ctx = null)
+        public static int Weight(VM vm, VMAvatar sim, VMEntity target, TTABInteraction entry, VMPieMenuInteraction first, float distance, int level, VMReduxBrainContext ctx = null)
         {
             if (vm == null || sim == null || sim.IsPet || target == null) return 1000;
             int hour = vm.Context.Clock.Hours;
             bool night = Night(hour);
-            var kind = KindOf(target, name, entry, first);
+            var kind = KindOf(target, entry, first);
             long w = Mul[Cell(sim, KindCell((int)kind, night)) + 8];
 
             long sum = 0, wsum = 0;
@@ -332,11 +451,12 @@ namespace FSO.SimAntics.Utils
             }
             if (wsum > 0) w = w * (sum / wsum) / 1000;
 
+            if (!FactorsLocked) FactorsLocked = true; // (the factor set is fixed from the first choice weighed on a lot)
             var fs = Factors;
             if (fs.Length > 0)
             {
                 if (ctx == null) ctx = new VMReduxBrainContext();
-                ctx.Fill(vm, sim, target, name, entry, first, kind, distance, level);
+                ctx.Fill(vm, sim, target, EnglishName(target, entry), entry, first, kind, distance, level);
                 int strongest = 0;
                 foreach (var f in fs)
                 {
@@ -358,6 +478,33 @@ namespace FSO.SimAntics.Utils
         /// <summary>Red: a physical need this low is an emergency even with free will Off.</summary>
         public const int RedBelow = -40;
         private static readonly VMMotive[] Physical = { VMMotive.Hunger, VMMotive.Bladder, VMMotive.Energy, VMMotive.Hygiene };
+
+        /// <summary>
+        /// A visiting player's Sim on this lot (or a Sim brought over from another house): given the lot family's number so the
+        /// game lets them in, but marked FSOExcludeUserSave - not the household (ReduxComputer.IsHouseholdSim).
+        /// </summary>
+        public static bool VisitingSim(VM vm, VMAvatar sim)
+        {
+            var fam = vm?.TS1State?.CurrentFamily;
+            return fam != null && sim != null && !sim.IsPet && sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) == fam.ChunkID
+                && (sim.GetValue(VMStackObjectVariable.MovementFlags) & (short)VMMovementFlags.FSOExcludeUserSave) != 0;
+        }
+
+        /// <summary>
+        /// The free will that really applies to this Sim on this lot (VMFindBestAction uses it; the badge and the Sim panel show
+        /// it): the household's Sims and a visiting player's own Sim (attribute 120 - only their own game sets it, with command
+        /// 86) - Off and Needs only work everywhere; High (Sims act sooner when idle) only at home, since a visitor's idle time
+        /// is the original game's. Everyone else: Normal.
+        /// </summary>
+        public static FreeWill EffectiveFreeWill(VM vm, VMAvatar sim)
+        {
+            if (vm == null || !vm.TS1 || sim == null || sim.IsPet) return FreeWill.Normal;
+            var fw = FreeWillOf(sim);
+            if (fw == FreeWill.Normal) return fw;
+            if (ReduxComputer.IsHouseholdSim(vm, sim)) return fw;
+            if (VisitingSim(vm, sim)) return fw == FreeWill.High ? FreeWill.Normal : fw;
+            return FreeWill.Normal;
+        }
 
         /// <summary>A physical need in the red.</summary>
         public static bool InRed(VMAvatar sim)
@@ -473,7 +620,7 @@ namespace FSO.SimAntics.Utils
             if (factorNote != null) why = factorNote;
             else if (!bed && !chore && choreCode == 0 && HasBrain(sim))
             {
-                var kind = KindOf(chosen.Callee, chosen.Name, chosen.Entry, chosen);
+                var kind = KindOf(chosen.Callee, chosen.Entry, chosen);
                 int c = Cell(sim, KindCell((int)kind, Night(vm.Context.Clock.Hours)));
                 if (c >= 2) why += " (and likes this)";
             }
@@ -508,7 +655,11 @@ namespace FSO.SimAntics.Utils
         public VMAvatar Sim;
         /// <summary>The object (or Sim) the choice is on.</summary>
         public VMEntity Target;
-        /// <summary>The choice's name as the pie menu shows it ("Have Snack", "Watch TV/Romance").</summary>
+        /// <summary>
+        /// The choice's ENGLISH name from the object's own strings ("Have Snack", "Watch TV/Romance") - the same in every game
+        /// whatever its language - or null when the object's strings aren't tagged with their language (VMReduxBrain.EnglishName).
+        /// Never the pie menu's name (that's in the player's language and would split a visit). Prefer Kind / Ad() where you can.
+        /// </summary>
         public string Name;
         public TTABInteraction Entry;
         public VMPieMenuInteraction Pie;
