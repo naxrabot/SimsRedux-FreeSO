@@ -42,6 +42,10 @@ namespace FSO.SimAntics.Utils
     /// </summary>
     public static class VMReduxBrain
     {
+        /// <summary>18.5 (B5a): the behaviour factors register here, once, before anything reads the factor set - the same in every
+        /// game of the same build (see FACTOR DETERMINISM).</summary>
+        static VMReduxBrain() { VMReduxBrainFactors.RegisterAll(); }
+
         public const int FreeWillAttr = 120, FirstWeightAttr = 121, WeightAttrs = 9, Cells = 36;
         public const int KindCount = 10, NeedCount = 8, NeedCellsStart = 20;
         /// <summary>A need under this counts as "low" for the need cells.</summary>
