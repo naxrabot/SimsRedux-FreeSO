@@ -158,6 +158,9 @@ namespace FSO.SimAntics.Utils
         {
             if (ctx.Sim == null || ctx.Target is VMAvatar || ctx.Kind != VMReduxBrain.Kind.Chores) return 1000; // (not a bar's "Have a Drink")
             if (ctx.Ad(VMMotive.Room) <= 0 || ctx.Ad(VMMotive.Fun) > 0 || ctx.Ad(VMMotive.Social) > 0 || ctx.Ad(VMMotive.Hunger) > 0) return 1000;
+            // (18.5 review: never ahead of a body need going low - with the Neat Freak trait and the chores factors on top, a Sim
+            //  could keep tidying at hunger or bladder -30)
+            if (ctx.Need(VMMotive.Hunger) < 0 || ctx.Need(VMMotive.Bladder) < 0 || ctx.Need(VMMotive.Energy) < 0 || ctx.Need(VMMotive.Hygiene) < 0) return 1000;
             int room = ctx.Need(VMMotive.Room);
             int m = room < -40 ? 2000 : room < 0 ? 1700 : room < 30 ? 1400 : room < 60 ? 1150 : 1000;
             if (m == 1000) return 1000;

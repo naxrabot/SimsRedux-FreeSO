@@ -441,8 +441,16 @@ namespace FSO.SimAntics.Utils
             var baby = BabyOf(ctx.Target);
             if (baby == null || ctx.Sim == null || ctx.Sim.IsChild || !CanHelp(ctx)) return 1000;
             if (baby.GetAttribute(BabyTakenAttr) == 1) return 1000;
-            bool needsSomeone = baby.GetAttribute(BabyFullAttr) <= 1 || baby.GetAttribute(BabyAttentionAttr) <= 0;
-            if (!needsSomeone) return 1000;
+            // (18.5 review: only the choice that answers what the baby needs - Feed when it's hungry; Play, Sing or Rock when its
+            //  other need (attribute 3 - the baby's own "View Stats" calls it energy) is low - not every baby choice at once)
+            bool hungry = baby.GetAttribute(BabyFullAttr) <= 1, low = baby.GetAttribute(BabyAttentionAttr) <= 0;
+            if (!hungry && !low) return 1000;
+            var n = ctx.Name;
+            if (n == null) return 1000; // (can't tell which choice it is - leave it be)
+            bool feed = n.IndexOf("Feed", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool soothe = n.IndexOf("Play", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Sing", StringComparison.OrdinalIgnoreCase) >= 0
+                || n.IndexOf("Rock", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Hold", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!((hungry && feed) || (low && soothe))) return 1000;
             int gap;
             if (LeastBusy(ctx.VM, ctx.Sim, true, out gap)) { ctx.Note("The baby needs someone - I'll go"); return 1800; }
             return 900;

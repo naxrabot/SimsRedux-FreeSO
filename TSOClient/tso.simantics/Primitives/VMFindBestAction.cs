@@ -406,7 +406,9 @@ namespace FSO.SimAntics.Primitives
             // the bed losing out to one more round of fun
             if (brain != null && level >= 1 && familySim)
             {
-                var bed = (fwOff && caller.GetMotiveData(VMMotive.Energy) >= FSO.SimAntics.Utils.VMReduxBrain.RedBelow) ? null : brain.FindBed(context, ents);
+                // (18.5 review: never off to bed with the house on fire - grown-ups deal with it first, below)
+                var bed = ((fwOff && caller.GetMotiveData(VMMotive.Energy) >= FSO.SimAntics.Utils.VMReduxBrain.RedBelow) || (brain.FireOnLot && !caller.IsChild))
+                    ? null : brain.FindBed(context, ents);
                 if (bed != null) { selection = bed; chore = true; isBed = true; }
             }
             if (!chore && brain != null && level >= 2 && !visitor)
@@ -668,7 +670,7 @@ namespace FSO.SimAntics.Primitives
                     if (e.Position == LotTilePos.OUT_OF_WORLD) continue;
                     var kind = KindOf(e);
                     if ((kind & ObjKind.Door) != 0) Doors.Add(e.Position);
-                    if ((kind & ObjKind.Fire) != 0) Fires.Add(e.Position);
+                    if ((kind & ObjKind.Fire) != 0) { Fires.Add(e.Position); FireObjects.Add(e); }
                 }
                 else if (e is VMAvatar a)
                 {
@@ -727,6 +729,8 @@ namespace FSO.SimAntics.Primitives
         private bool NeedsFine;
 
         private readonly List<LotTilePos> Fires = new List<LotTilePos>();
+        /// <summary>18.5: the fire objects themselves (from the same pass), for Extinguish - no copy of the whole lot per decision.</summary>
+        private readonly List<VMEntity> FireObjects = new List<VMEntity>();
         private readonly List<VMAvatar> Sleepers = new List<VMAvatar>();
         private readonly List<LotTilePos> Doors = new List<LotTilePos>();
 
@@ -1202,7 +1206,7 @@ namespace FSO.SimAntics.Primitives
             VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
             var done = new HashSet<short>();
             // (a copy: the check trees run below can make or delete objects, which changes the lot's list)
-            foreach (var iobj in context.VM.Entities.ToArray())
+            foreach (var iobj in FireObjects) // (18.5 review: the fires from this decision's one pass over the lot - its own list, so the check trees run below can't change it)
             {
                 if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD || !IsFire(iobj)) continue;
                 var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
@@ -1215,6 +1219,9 @@ namespace FSO.SimAntics.Primitives
                     var english = (FSO.SimAntics.Utils.VMReduxBrain.LotName(ttas, (int)ia.TTAIndex) ?? "").Trim();
                     if (!english.Equals("Extinguish", StringComparison.OrdinalIgnoreCase)) continue;
                     if (GivenUp(obj.ObjectID, ia.TTAIndex)) break;
+                    // (18.5 review: a fire tried twice in half an hour without getting there is skipped for another one - the
+                    //  give-up memory has one slot, so giving up on fire B used to bring fire A back, round and round)
+                    if (TriesRecently(obj.ObjectID, ia.TTAIndex, 30) >= 2) break;
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
                     if (action == null) break;
                     Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
