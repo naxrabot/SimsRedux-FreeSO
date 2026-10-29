@@ -55,6 +55,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         {
                             var ent = vm.GetObjectById(ObjectID);
                             if (ent == null || ent.Dead) return false;
+                            // (18.6: not while someone is in the middle of an interaction with them - petting a visiting pet, a
+                            //  chat: their script still points at this Sim and broke when it vanished (Headless Test #13:
+                            //  "Standard Exit" on Henri LeStanc). The game that sent this tries again later.)
+                            if (InUseByOthers(vm, ent)) return false;
                             ent.Delete(true, vm.Context);
                             return true;
                         }
@@ -71,6 +75,23 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             catch (Exception e)
             {
                 Console.WriteLine("[SimsRedux] townie command " + Mode + " failed: " + e.Message);
+            }
+            return false;
+        }
+
+        /// <summary>Another Sim's running script has this one as its object (or is running one of its interactions) right now.</summary>
+        private static bool InUseByOthers(VM vm, VMEntity ent)
+        {
+            foreach (var o in vm.Context.ObjectQueries.Avatars)
+            {
+                if (o == ent || o.Dead || o.Thread == null) continue;
+                var st = o.Thread.Stack;
+                for (int i = 0; i < st.Count; i++)
+                {
+                    var f = st[i];
+                    if (f == null) continue;
+                    if (f.Callee == ent || f.StackObject == ent) return true;
+                }
             }
             return false;
         }
