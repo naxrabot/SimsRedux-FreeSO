@@ -82,6 +82,12 @@ namespace FSO.SimAntics.Engine
 
         public static readonly int MAX_LOOP_COUNT = 500000;
 
+        /// <summary>
+        /// SimsRedux 18.7: this thread was loaded busy with an object that isn't there and started over (see Load).
+        /// Not saved: VM.Load reads it straight after loading the threads and clears it (ReduxFinishStartOver).
+        /// </summary>
+        public bool ReduxStartedOver;
+
         // SimsRedux: walks started by this thread in the current tick (see ReduxWalkShouldWait). Not saved -
         // it starts again from 0 on every tick, the same on every machine.
         private uint ReduxWalkTick = uint.MaxValue;
@@ -1475,13 +1481,17 @@ namespace FSO.SimAntics.Engine
             // with a missing sculpture on it) or no longer there, like a missing object dropped from a Sim's hands.
             // (The held-object checks only run on a lot with such objects; "acting on something that isn't in the
             // save" is checked on every lot loaded from disk - not on an online join/resync - see ReduxBusyWithMissing.)
+            string reduxWhy = null;
             if (Stack.Any(f => f.CodeOwner == null) || Queue.Any(q => q.CodeOwner == null)
-                || ReduxBusyWithMissing(input, context))
+                || ReduxBusyWithMissing(input, context, Entity, out reduxWhy))
             {
-                System.Console.WriteLine("[SimsRedux] Something was saved busy with an object that isn't in this game; it starts over.");
+                // (18.7: says who and why - the soak test reads it to find what deleted the object out from under them)
+                System.Console.WriteLine("[SimsRedux] Something was saved busy with an object that isn't in this game; it starts over. ("
+                    + (Entity?.ToString() ?? "?") + ": " + (reduxWhy ?? "its code's object isn't loaded") + ")");
                 Stack.Clear();
                 Queue.Clear();
                 ActiveQueueBlock = -1;
+                ReduxStartedOver = true; // (18.7: VM.Load finishes the reset once the whole lot is in - see ReduxFinishStartOver)
             }
             TempRegisters = input.TempRegisters;
             TempXL = input.TempXL;
@@ -1501,11 +1511,19 @@ namespace FSO.SimAntics.Engine
         /// its first tick)? The held-back checks only on a lot that has held-back or dropped objects; the "isn't
         /// there" check (the object acted on) on every lot.
         /// </summary>
-        private static bool ReduxBusyWithMissing(VMThreadMarshal input, VMContext context)
+        private static bool ReduxBusyWithMissing(VMThreadMarshal input, VMContext context, VMEntity entity, out string why)
         {
+            why = null;
             if (context?.VM == null) return false;
             var held = context.VM.ReduxHeld;
             Func<short, bool> isGone = (id) => id > 0 && context.VM.GetObjectById(id) == null;
+            // 18.7: a Sim's interaction (or an order waiting in their queue) whose stack object isn't in the save - the other
+            // Sim in a chat, the plate in their hands, when that one was left out of the house's save (a visitor, a townie)
+            // - starts over too: the script went on with no object and stopped with a NullReferenceException a moment after
+            // the house opened (Headless Test #14: "Gossip A:43", "get food:3", "drop food:1" just after arriving by taxi).
+            // (only a Sim's interactions: a Sim's own loop or an object's script often keeps an old stack object it no
+            // longer uses, and starting an object's script over would run its setup again)
+            bool sim = entity is VMAvatar;
             // (15.1: on every lot, something saved busy with an object that isn't in the save - a visitor left out
             // of the house's save, a "go here" marker - starts over: it used to load with nothing to act on and
             // stop with a SimAntics error on its first use of it, e.g. "Go Here" Standard entry, "Tease Scare")
@@ -1516,19 +1534,26 @@ namespace FSO.SimAntics.Engine
                 if (context.VM.ReduxLoadingLiveState) return false;
                 if (input.Stack != null)
                     foreach (var f in input.Stack)
-                        if (f != null && isGone(f.Callee)) return true;
+                    {
+                        if (f != null && isGone(f.Callee)) { why = "script " + f.RoutineID + " acting on object " + f.Callee + ", gone"; return true; }
+                        if (f != null && sim && f.ActionTree && isGone(f.StackObject)) { why = "script " + f.RoutineID + " with stack object " + f.StackObject + ", gone"; return true; }
+                    }
                 if (input.Queue != null)
                     foreach (var q in input.Queue)
-                        if (q != null && isGone(q.Callee)) return true;
+                    {
+                        if (q != null && isGone(q.Callee)) { why = "queued '" + q.Name + "' on object " + q.Callee + ", gone"; return true; }
+                        if (q != null && sim && isGone(q.StackObject)) { why = "queued '" + q.Name + "' with stack object " + q.StackObject + ", gone"; return true; }
+                    }
                 return false;
             }
             Func<short, bool> isHeld = (id) => id != 0 && (held.Holds(id) || held.Dropped.Contains(id));
+            if (context.VM.ReduxLoadingLiveState) sim = false; // (the stack-object check: disk loads only, as above - never an online join)
             if (input.Stack != null)
                 foreach (var f in input.Stack)
-                    if (f != null && (isHeld(f.Callee) || isHeld(f.StackObject) || isHeld(f.Caller) || isGone(f.Callee))) return true;
+                    if (f != null && (isHeld(f.Callee) || isHeld(f.StackObject) || isHeld(f.Caller) || isGone(f.Callee) || (sim && f.ActionTree && isGone(f.StackObject)))) { why = "script " + f.RoutineID + " with held/gone object " + f.Callee + "/" + f.StackObject; return true; }
             if (input.Queue != null)
                 foreach (var q in input.Queue)
-                    if (q != null && (isHeld(q.Callee) || isHeld(q.StackObject) || isHeld(q.IconOwner) || isGone(q.Callee))) return true;
+                    if (q != null && (isHeld(q.Callee) || isHeld(q.StackObject) || isHeld(q.IconOwner) || isGone(q.Callee) || (sim && isGone(q.StackObject)))) { why = "queued '" + q.Name + "' with held/gone object " + q.Callee + "/" + q.StackObject; return true; }
             return false;
         }
 

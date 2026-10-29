@@ -981,6 +981,8 @@ namespace FSO.SimAntics
                 if (ent.Container == null) ent.PositionChange(Context, true); //called recursively for contained objects.
             }
 
+            ReduxFinishStartOver();
+
             GlobalState = input.GlobalState;
             if (TS1)
             {
@@ -1050,6 +1052,46 @@ namespace FSO.SimAntics
             {
                 Context.Blueprint.SM64 = lastBp.SM64;
                 Context.Blueprint.SM64?.MigrateSM64(Context.World.State, Context.Blueprint);
+            }
+        }
+
+        /// <summary>
+        /// SimsRedux 18.7: a Sim whose thread was loaded busy with an object that isn't there starts over
+        /// (VMThread.Load) - but only its script was cleared, not the rest of what a reset clears. Its "priority"
+        /// stayed at the old interaction's (e.g. 100 for a player's order), so nothing new could ever run: every
+        /// autonomous or player action was "not more important than what's running", stayed in the queue, and
+        /// with something in the queue the Sim's own loop never waits (Wait For Notify returns at once) - it
+        /// went round check queue / reset idle / check next motive until the 500,000-primitive limit
+        /// ("LOOP:check a motive", "LOOP:reset idle", "LOOP:Wait For Notify" right after a taxi home).
+        /// Here it gets what VMAvatar.Reset / the Reset Sim command give it. Lot state only, worked out from
+        /// the save alone, so every game loading the same save does the same.
+        /// </summary>
+        private void ReduxFinishStartOver()
+        {
+            foreach (var ent in Entities)
+            {
+                var thread = ent.Thread;
+                if (thread == null || !thread.ReduxStartedOver) continue;
+                thread.ReduxStartedOver = false;
+                var sim = ent as VMAvatar;
+                if (sim == null) continue;
+                try
+                {
+                    thread.BlockingState = null;
+                    thread.EODConnection = null;
+                    thread.Interrupt = false;
+                    thread.QueueDirty = true;
+                    sim.SetPersonData(VMPersonDataVariable.Priority, 0);
+                    sim.SetPersonData(VMPersonDataVariable.NonInterruptable, 0);
+                    sim.SetFlag(VMEntityFlags.InteractionCanceled, false);
+                    sim.SetFlag(VMEntityFlags.NotifiedByIdleForInput, false);
+                    sim.ClearMotiveChanges();
+                    if (sim.Animations != null) sim.Animations.Clear();
+                    // (as the Reset Sim command: not left inside the chair / bed / car the old script had them in)
+                    if (TS1 && sim.Container is VMGameObject) VMNetDebugSimCmd.MoveToFreeSpot(this, sim);
+                    Console.WriteLine("[SimsRedux] " + sim.ToString() + " starts over (was busy with something that isn't here).");
+                }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] finishing a Sim's start-over: " + e.Message); }
             }
         }
 

@@ -17,6 +17,12 @@ namespace FSO.SimAntics.Primitives
             var completedPickup = false;
             int height;
 
+            // SimsRedux 18.7: reaching for a stack object that has gone (picked up and washed by someone else, deleted)
+            // stopped with a NullReferenceException (Headless Test #14: "get food:3"). There's nothing to reach for:
+            // the reach fails, and the script takes its own "couldn't" branch. (Lot state only - the same on every game.)
+            if ((operand.Mode == 0 || operand.Mode == 1) && context.StackObject == null && context.VM.TS1)
+                return VMPrimitiveExitCode.GOTO_FALSE;
+
             if (operand.Mode == 0)
             { //reach to stack object
                 var container = context.StackObject.Container;

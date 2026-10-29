@@ -21,8 +21,33 @@ namespace FSO.SimAntics.Engine.Utils
         /// <returns></returns>
         private static int ReduxMissingStackObjectNotes;
 
+        private static int ReduxMissingStackObjectWriteNotes;
+
+        /// <summary>
+        /// SimsRedux soak test: told about every read or write (true) of a stack object that isn't there, when the frame
+        /// names one (an object that was deleted - not object 0). Null unless the soak test is running; it only looks.
+        /// </summary>
+        public static Action<VMStackFrame, VMVariableScope, bool> ReduxOnMissingStackObject;
+
         /// <summary>SimsRedux: is this a read of the stack object's own data, in the Sims 1, with no stack object? (noted in the console a few times)</summary>
         private static bool ReduxMissingStackObjectRead(VMStackFrame context, VMVariableScope scope)
+        {
+            return ReduxMissingStackObject(context, scope, false);
+        }
+
+        /// <summary>
+        /// SimsRedux 18.7: the same for a write. A Sims 1 script writing to a stack object that has gone (deleted while
+        /// the script still had it: a wagon that drove off, a plate washed up by someone else, the other Sim in a social)
+        /// stopped with a NullReferenceException and the Sim was reset mid-interaction (Headless Test #13/#14: "Follower Get
+        /// In Wagon:23", "drop food:1", "Gossip A:43"). Now the write goes nowhere, as a read already gets 0: there's no
+        /// object to change. Every game does the same (it depends only on the lot), so online lots stay in step.
+        /// </summary>
+        private static bool ReduxMissingStackObjectWrite(VMStackFrame context, VMVariableScope scope)
+        {
+            return ReduxMissingStackObject(context, scope, true);
+        }
+
+        private static bool ReduxMissingStackObject(VMStackFrame context, VMVariableScope scope, bool write)
         {
             switch (scope)
             {
@@ -38,11 +63,17 @@ namespace FSO.SimAntics.Engine.Utils
                     return false;
             }
             if (context.VM == null || !context.VM.TS1) return false;
-            if (ReduxMissingStackObjectNotes < 20)
+            if (write ? (ReduxMissingStackObjectWriteNotes < 20) : (ReduxMissingStackObjectNotes < 20))
             {
-                ReduxMissingStackObjectNotes++;
-                Console.WriteLine("[SimsRedux] " + (context.Caller?.ToString() ?? "?") + " read " + scope + " of a missing stack object (id "
-                    + context.StackObjectID + ") in " + (context.Routine?.Rti?.Name ?? "?") + ":" + context.InstructionPointer + " - read as 0");
+                if (write) ReduxMissingStackObjectWriteNotes++; else ReduxMissingStackObjectNotes++;
+                Console.WriteLine("[SimsRedux] " + (context.Caller?.ToString() ?? "?") + (write ? " wrote " : " read ") + scope + " of a missing stack object (id "
+                    + context.StackObjectID + ") in " + (context.Routine?.Rti?.Name ?? "?") + ":" + context.InstructionPointer
+                    + (write ? " - nothing to write to, skipped" : " - read as 0"));
+            }
+            var hook = ReduxOnMissingStackObject;
+            if (hook != null && context.StackObjectID != 0)
+            {
+                try { hook(context, scope, write); } catch { }
             }
             return true;
         }
@@ -517,6 +548,8 @@ namespace FSO.SimAntics.Engine.Utils
         /// <param name="data"></param>
         /// <param name="value"></param>
         public static bool SetVariable(VMStackFrame context, VMVariableScope scope, short data, short value){
+            // SimsRedux 18.7: writing to a stack object that has gone is skipped (see ReduxMissingStackObjectWrite)
+            if (context.StackObject == null && ReduxMissingStackObjectWrite(context, scope)) return true;
             switch (scope){
                 case VMVariableScope.MyObjectAttributes: //0
                     context.Caller.SetAttribute((ushort)data, value);

@@ -32,6 +32,12 @@ namespace FSO.SimAntics
     public abstract class VMEntity
     {
         public static Func<VMEntity, Texture2D> MissingIconProvider;
+
+        /// <summary>
+        /// SimsRedux soak test: told as each object is deleted (before it goes). Null unless the soak test is running;
+        /// it only looks, never changes anything - it's how the report says what a "missing stack object" was.
+        /// </summary>
+        public static Action<VMEntity, VMContext> ReduxOnDeleting;
         public static bool UseWorld => VM.UseWorld;
 
         public VMEntityRTTI RTTI;
@@ -1457,6 +1463,13 @@ namespace FSO.SimAntics
             else
             {
                 if (Dead) return;
+                // SimsRedux soak test: what was deleted, when and by whom (once - not again when a deletion put off to the
+                // end of the tick happens)
+                var onDeleting = ReduxOnDeleting;
+                if (onDeleting != null && !context.VM.Scheduler.PendingDeletion.Contains(this))
+                {
+                    try { onDeleting(this, context); } catch { }
+                }
                 FSO.SimAntics.Utils.ReduxLeftovers.OnDelete(this, context); // SimsRedux: servings put away go in the fridge
                 
                 //DEBUG
