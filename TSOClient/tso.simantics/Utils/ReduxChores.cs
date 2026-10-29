@@ -363,10 +363,14 @@ namespace FSO.SimAntics.Utils
         private sealed class NameEntry { public string Name; public Chore Kind; }
         private static readonly ConditionalWeakTable<TTAs, Dictionary<uint, NameEntry>> Names = new ConditionalWeakTable<TTAs, Dictionary<uint, NameEntry>>();
 
+        /// <summary>
+        /// (18.5: by the entry's ENGLISH name - VMReduxBrain.LotName, the object's own strings read as English US, or an untagged
+        /// file's own one set - never the player's language: the chores run on the lot, so every game must find the same ones.)
+        /// </summary>
         private static Chore ByName(TTAs ttas, uint index)
         {
             if (ttas == null) return Chore.None;
-            var name = ttas.GetString((int)index) ?? "";
+            var name = VMReduxBrain.LotName(ttas, (int)index) ?? "";
             var dict = Names.GetValue(ttas, _ => new Dictionary<uint, NameEntry>());
             lock (dict)
             {
@@ -410,7 +414,7 @@ namespace FSO.SimAntics.Utils
                 case Chore.Pets:
                     {
                         var label = ReduxWooHoo.Label(obj);
-                        var name = (obj.TreeTableStrings?.GetString((int)ia.TTAIndex) ?? "").ToLowerInvariant();
+                        var name = (VMReduxBrain.LotName(obj, ia) ?? "").ToLowerInvariant(); // (18.5: English)
                         if (Has(label, "baby", "bassinet", "crib")) return Chore.None;
                         return Has(label, "bowl", "feeder", "pet", "aquarium", "fish", "tank", "dish") || Has(name, "fish", "pet", "bowl") ? Chore.Pets : Chore.None;
                     }

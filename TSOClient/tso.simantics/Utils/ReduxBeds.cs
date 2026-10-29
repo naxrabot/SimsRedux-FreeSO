@@ -37,7 +37,7 @@ namespace FSO.SimAntics.Utils
             if (ttas == null || ttab == null) return false;
             bool sleep = false;
             foreach (var ia in ttab.Interactions)
-                if (IsSleepName(ttas.GetString((int)ia.TTAIndex))) { sleep = true; break; }
+                if (IsSleepName(VMReduxBrain.LotName(ttas, (int)ia.TTAIndex))) { sleep = true; break; } // (18.5: English - the same on every game)
             if (!sleep) return false;
             var b = obj.MultitileGroup.BaseObject ?? obj;
             var def = b.MasterDefinition ?? b.Object?.OBJ;
@@ -55,10 +55,13 @@ namespace FSO.SimAntics.Utils
             return name != null && name.Trim().Equals("Sleep", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Is this interaction (by its number) the bed's "Sleep"?</summary>
+        /// <summary>
+        /// Is this interaction (by its number) the bed's "Sleep"? (18.5: by its English name - VMReduxBrain.LotName - so a bed
+        /// is a bed on every game of a visit, whatever language each is in. IsSleepName takes that English name.)
+        /// </summary>
         public static bool IsSleep(VMEntity obj, int ttaIndex)
         {
-            return obj?.TreeTableStrings != null && IsSleepName(obj.TreeTableStrings.GetString(ttaIndex));
+            return obj?.TreeTableStrings != null && IsSleepName(VMReduxBrain.LotName(obj.TreeTableStrings, ttaIndex));
         }
 
         /// <summary>

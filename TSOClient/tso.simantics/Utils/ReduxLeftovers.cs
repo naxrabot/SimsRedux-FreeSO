@@ -60,7 +60,7 @@ namespace FSO.SimAntics.Utils
                     TTABInteraction src = null;
                     foreach (var ia in ttab.Interactions)
                     {
-                        var s = ttas.GetString((int)ia.TTAIndex) ?? "";
+                        var s = VMReduxBrain.LotName(ttas, (int)ia.TTAIndex) ?? ""; // (18.5: English - the patch must be the same on every game)
                         if (s.Equals(want, StringComparison.OrdinalIgnoreCase)) { src = ia; break; }
                     }
                     if (src == null) { Patched[ttab] = null; return; }

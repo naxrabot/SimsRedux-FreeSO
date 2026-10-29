@@ -42,6 +42,10 @@ namespace FSO.SimAntics.Utils
     /// </summary>
     public static class VMReduxBrain
     {
+        /// <summary>18.5 (B5a): the behaviour factors register here, once, before anything reads the factor set - the same in every
+        /// game of the same build (see FACTOR DETERMINISM).</summary>
+        static VMReduxBrain() { VMReduxBrainFactors.RegisterAll(); }
+
         public const int FreeWillAttr = 120, FirstWeightAttr = 121, WeightAttrs = 9, Cells = 36;
         public const int KindCount = 10, NeedCount = 8, NeedCellsStart = 20;
         /// <summary>A need under this counts as "low" for the need cells.</summary>
@@ -227,6 +231,37 @@ namespace FSO.SimAntics.Utils
         {
             if (target == null || entry == null) return null;
             try { return target.TreeTableStrings?.TaggedEnglish((int)entry.TTAIndex); } catch { return null; }
+        }
+
+        /// <summary>
+        /// 18.5 (B5a): the name the LOT may go by for a string of an object's own (a menu entry's, most often) - the same on every
+        /// game of a visit, whatever language each game is set to:
+        ///   - a file that tags its strings with their language (formats -3/-4 - every Maxis object): the English US string
+        ///     (STR.TaggedEnglish), or null when the file has no English one for it;
+        ///   - an untagged file (formats 0/-1/-2 - some downloads): its own one set of strings. The player's language can't pick
+        ///     anything else there (STR.GetString falls back to that same set), so every game with the same file reads the same
+        ///     words - the "old name match" kept as the fallback, without ever depending on the player's language.
+        /// Use this (never the pie menu's name or STR.GetString) for anything that can change what happens on the lot.
+        /// </summary>
+        public static string LotName(STR strings, int index)
+        {
+            if (strings == null || index < 0) return null;
+            try
+            {
+                if (strings.ReduxFormat == -3 || strings.ReduxFormat == -4) return strings.TaggedEnglish(index);
+                var sets = strings.LanguageSets;
+                var set = (sets != null && sets.Length > 0) ? sets[0] : null;
+                if (set?.Strings == null || index >= set.Strings.Length) return null;
+                return set.Strings[index]?.Value;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>18.5 (B5a): a menu entry's lot name (LotName) - its English name, or an untagged file's own name.</summary>
+        public static string LotName(VMEntity target, TTABInteraction entry)
+        {
+            if (target == null || entry == null) return null;
+            return LotName(target.TreeTableStrings, (int)entry.TTAIndex);
         }
 
         /// <summary>
@@ -598,9 +633,10 @@ namespace FSO.SimAntics.Utils
             var what = (chosen.Name ?? "").Trim();
             string why;
             if (choreCode == 101) why = "There's a fire - calling for help";
+            else if (choreCode == 102) why = "There's a fire - putting it out";
             else if (choreCode == 100) why = "Something's broken - calling the repairman";
             else if (bed) why = sim.GetMotiveData(VMMotive.Energy) < RedBelow ? "Exhausted" : "Bedtime";
-            else if (chore) why = what.IndexOf("Bill", StringComparison.OrdinalIgnoreCase) >= 0 ? "The bills need paying" : "Keeping the house in order";
+            else if (chore) why = (LotName(chosen.Callee, chosen.Entry) ?? "").IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0 ? "The bills need paying" : "Keeping the house in order"; // (18.5: by its English name)
             else
             {
                 // the lowest need it helps with

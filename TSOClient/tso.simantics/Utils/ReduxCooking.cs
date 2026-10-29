@@ -175,11 +175,25 @@ namespace FSO.SimAntics.Utils
             {
                 if (fridge == null || interaction < 0 || !ReduxLeftovers.IsFridge(fridge)) return null;
                 var ttab = fridge.TreeTable;
-                var ttas = fridge.TreeTableStrings;
-                if (ttab?.InteractionByIndex == null || ttas == null) return null;
+                if (ttab?.InteractionByIndex == null) return null;
                 FSO.Files.Formats.IFF.Chunks.TTABInteraction ia;
                 if (!ttab.InteractionByIndex.TryGetValue((uint)interaction, out ia)) return null;
-                var s = (ttas.GetString((int)ia.TTAIndex) ?? "").Trim();
+                return KindOf(fridge, ia);
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>
+        /// The same from the menu entry. 18.5 (B5a): by the fridge's ENGLISH name for it (VMReduxBrain.LotName - never the
+        /// player's language: Cost charges the family by it, so every game on a visit must get the same answer).
+        /// </summary>
+        public static Kind? KindOf(VMEntity fridge, FSO.Files.Formats.IFF.Chunks.TTABInteraction ia)
+        {
+            try
+            {
+                if (fridge == null || ia == null || !ReduxLeftovers.IsFridge(fridge)) return null;
+                var s = (VMReduxBrain.LotName(fridge, ia) ?? "").Trim();
                 if (s.Equals("Have A Meal", StringComparison.OrdinalIgnoreCase)) return Kind.Meal;
                 if (s.Equals("Have Lite Meal", StringComparison.OrdinalIgnoreCase)) return Kind.Quick;
                 if (s.Equals("Serve Meal", StringComparison.OrdinalIgnoreCase)) return Kind.Group;

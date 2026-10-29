@@ -562,7 +562,7 @@ namespace FSO.SimAntics.Primitives
         /// </summary>
         private static string ReduxEnglish(VMPieMenuInteraction a)
         {
-            return FSO.SimAntics.Utils.VMReduxBrain.EnglishName(a.Callee, a.Entry) ?? "";
+            return FSO.SimAntics.Utils.VMReduxBrain.LotName(a.Callee, a.Entry) ?? ""; // (18.5: + an untagged file's own name)
         }
 
         private static void ReduxPreferReadyFood(List<VMPieMenuInteraction> actions)
@@ -675,7 +675,9 @@ namespace FSO.SimAntics.Primitives
                     if (a.BrainMemory != null && a.BrainMemory.Length >= 14 && a.Thread?.Queue != null && a.Thread.Queue.Count > 0)
                     {
                         var q = a.Thread.Queue[0];
-                        if (q.Callee != null && q.Callee != a && IsPlate(q.Callee) && (q.Name ?? "").IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0)
+                        // (18.5: by the action's English name - QueuedLotName - never q.Name, which is in the player's language;
+                        //  this is written into the Sim's memory on the lot, so every game must agree)
+                        if (q.Callee != null && q.Callee != a && IsPlate(q.Callee) && QueuedLotName(q).IndexOf("Eat", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
                             a.BrainMemory[12] = q.Callee.ObjectID;
                             a.BrainMemory[13] = Now;
@@ -759,6 +761,21 @@ namespace FSO.SimAntics.Primitives
             }
         }
 
+        /// <summary>
+        /// 18.5 (B5a): a queued action's lot name - the English name of its menu entry (VMReduxBrain.LotName), the same on every
+        /// game whatever its language - or "" (a global interaction, or no English name). Never the action's Name (that's the
+        /// pie menu's, in the player's language, and may have been renamed by its own script).
+        /// </summary>
+        private static string QueuedLotName(VMQueuedAction q)
+        {
+            var callee = q?.Callee;
+            var ttab = callee?.TreeTable;
+            if (ttab?.InteractionByIndex == null || q.InteractionNumber < 0) return ""; // (a global interaction has the top bit set)
+            TTABInteraction ia;
+            if (!ttab.InteractionByIndex.TryGetValue((uint)q.InteractionNumber, out ia)) return "";
+            return FSO.SimAntics.Utils.VMReduxBrain.LotName(callee.TreeTableStrings, (int)ia.TTAIndex) ?? "";
+        }
+
         private static bool IsDoor(VMEntity e) { return (KindOf(e) & ObjKind.Door) != 0; }
         /// <summary>A single plate of food (not the serving dish a group meal is shared from).</summary>
         private static bool IsPlate(VMEntity e) { return (KindOf(e) & ObjKind.Plate) != 0; }
@@ -821,7 +838,12 @@ namespace FSO.SimAntics.Primitives
             return false;
         }
 
-        /// <summary>A phone service (by words in its menu name), as a choice the Sim can make, or null.</summary>
+        /// <summary>
+        /// A phone service, as a choice the Sim can make, or null. 18.5 (B5a): found by the menu entry's ENGLISH name
+        /// (VMReduxBrain.LotName - "Services.../Fire Dept.", "Services.../Repairman": each service is its own entry in the
+        /// phone's menu), never by the menu text in the player's language - so it's the same call on every game of a visit.
+        /// (Only the entries that match have their check tree run.)
+        /// </summary>
         private VMPieMenuInteraction PhoneService(VMStackFrame context, List<VMEntity> ents, Func<string, bool> wanted)
         {
             var done = new HashSet<short>();
@@ -836,23 +858,21 @@ namespace FSO.SimAntics.Primitives
                 var ttas = obj.TreeTableStrings;
                 foreach (var ia in obj.TreeTable.Interactions)
                 {
+                    var english = FSO.SimAntics.Utils.VMReduxBrain.LotName(ttas, (int)ia.TTAIndex);
+                    if (english == null || !wanted(english)) continue;
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
                     if (action == null) continue;
                     Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
                     var avail = Sim.Thread.CheckAction(action, false);
                     if (avail == null) continue;
-                    var baseName = ttas?.GetString((int)ia.TTAIndex) ?? "";
-                    var options = (avail.Count > 0) ? avail : new List<VMPieMenuInteraction> { new VMPieMenuInteraction { Name = baseName } };
-                    foreach (var opt in options)
+                    var d = Tiles(Sim.Position, obj.Position);
+                    if (d < bestDist)
                     {
-                        var name = opt.Name ?? baseName;
-                        if (!wanted(name) && !wanted(baseName + "/" + name)) continue;
-                        var d = Tiles(Sim.Position, obj.Position);
-                        if (d < bestDist)
-                        {
-                            bestDist = d;
-                            best = new VMPieMenuInteraction { Name = name, ID = (byte)ia.TTAIndex, Param0 = opt.Param0, Entry = ia, Global = false, Callee = obj, Score = 1 };
-                        }
+                        bestDist = d;
+                        // (the menu's own name only for the "Why I'm doing this" line - nothing on the lot reads it)
+                        var shown = (avail.Count > 0 ? avail[0].Name : null) ?? ttas?.GetString((int)ia.TTAIndex) ?? english;
+                        best = new VMPieMenuInteraction { Name = shown, ID = (byte)ia.TTAIndex, Param0 = avail.Count > 0 ? avail[0].Param0 : (short)0,
+                            Entry = ia, Global = false, Callee = obj, Score = 1 };
                     }
                 }
             }
@@ -932,8 +952,8 @@ namespace FSO.SimAntics.Primitives
 
         /// <summary>
         /// A chore worth doing now (bills to pay, something broken it can fix), or null. essentialsOnly (17.4: free will Off or
-        /// Needs only): only the essentials - calling the fire department, paying the bills, calling the repairman - no
-        /// housework and no fixing things themselves.
+        /// Needs only): only the essentials - calling the fire department, putting a fire out (18.5), paying the bills, calling
+        /// the repairman - no housework and no fixing things themselves.
         /// </summary>
         public VMPieMenuInteraction FindChore(VMStackFrame context, List<VMEntity> ents, bool essentialsOnly = false)
         {
@@ -941,12 +961,20 @@ namespace FSO.SimAntics.Primitives
             if (family == null || !FSO.SimAntics.Utils.ReduxComputer.IsHouseholdSim(context.VM, Sim)) return null; // (not a guest player's Sim)
 
             // stage 3 - a fire: the nearest grown-up calls the fire department (once), before anything else
+            // (18.5: by the phone entry's English name - "Services.../Fire Dept." - see PhoneService)
             if (Fires.Count > 0 && !Sim.IsChild && !CalledRecently(context.VM, 101, Now, 60))
             {
                 var call = PhoneService(context, ents, n => n.IndexOf("Fire Dep", StringComparison.OrdinalIgnoreCase) >= 0
                     || n.IndexOf("Firem", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Fire Brigade", StringComparison.OrdinalIgnoreCase) >= 0
                     || n.EndsWith("/Fire", StringComparison.OrdinalIgnoreCase));
                 if (call != null) { ChoreCode = 101; return call; }
+            }
+            // 18.5 (B5a, sensible behaviour): help has been called (or there's no phone to call it on) - a grown-up puts the
+            // fire out themselves instead of panicking: the fire's own "Extinguish", when its own check lets them
+            if (Fires.Count > 0 && !Sim.IsChild && Needs[(int)VMMotive.Energy] > -80)
+            {
+                var ext = Extinguish(context);
+                if (ext != null) { ChoreCode = 102; return ext; }
             }
             if (Urgent || !NeedsFine) return null;
             bool handy = Sim.GetPersonData(VMPersonDataVariable.MechanicalSkill) >= 200;
@@ -968,7 +996,7 @@ namespace FSO.SimAntics.Primitives
                     bool repair = handy && !essentialsOnly && (kind & TtaKind.Repair) != 0;
                     bool housework = messy && !essentialsOnly && IsHousework(obj, kind);
                     if (!bills && !repair && !housework) continue;
-                    var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
+                    var name = ttas?.GetString((int)ia.TTAIndex) ?? ""; // (shown only - "Why I'm doing this"; what it IS came from TtaKindOf)
                     if (housework && (IsPlate(obj) && SomeoneElsesPlate(context.VM, obj))) continue; // (someone's still eating)
                     if (GivenUp(obj.ObjectID, ia.TTAIndex)) continue; // tried it again and again: leave it for a while
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
@@ -997,6 +1025,7 @@ namespace FSO.SimAntics.Primitives
             // stage 3 - something is broken and nobody in the family here can fix it: call the repairman (once)
             // (once a day at most - the repairman can take a while to come, and is already on the way -
             //  and not while one is here)
+            // (18.5: by the phone entry's English name - "Services.../Repairman" - see PhoneService)
             if (!Sim.IsChild && !CalledRecently(context.VM, 100, Now, 24 * 60) && !RepairmanHere(context.VM) && !SomeoneHandy(context.VM, family.ChunkID) && SomethingBroken(context))
             {
                 var call = PhoneService(context, ents, n => n.IndexOf("Repairman", StringComparison.OrdinalIgnoreCase) >= 0
@@ -1020,6 +1049,9 @@ namespace FSO.SimAntics.Primitives
 
         // SimsRedux perf: what a menu choice is (from its name) - worked out once per object type's menu and kept
         // (with the name it came from, so a changed name is looked at again), not on every decision.
+        // 18.5 (B5a, lockstep): the name is the entry's ENGLISH name (VMReduxBrain.LotName: the object's own strings read as
+        // English US, or an untagged file's own one set) - never the player's language, so bedtime, the bills, repairs and
+        // housework are found the same way on every game of a visit. No English name = not recognised (on every game).
         [Flags] private enum TtaKind : ushort { None = 0, Bills = 1, Repair = 2, Clean = 4, Housework = 8, Sleep = 16, Nap = 32 }
         private sealed class TtaEntry { public string Name; public TtaKind Kind; }
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TTAs, Dictionary<uint, TtaEntry>> TtaKinds
@@ -1028,7 +1060,7 @@ namespace FSO.SimAntics.Primitives
         private static TtaKind TtaKindOf(TTAs ttas, uint index)
         {
             if (ttas == null) return TtaKind.None;
-            var name = ttas.GetString((int)index) ?? "";
+            var name = FSO.SimAntics.Utils.VMReduxBrain.LotName(ttas, (int)index) ?? "";
             var dict = TtaKinds.GetValue(ttas, _ => new Dictionary<uint, TtaEntry>());
             lock (dict)
             {
@@ -1101,14 +1133,21 @@ namespace FSO.SimAntics.Primitives
             m[15] = Now;
         }
 
-        /// <summary>A repairman is already on the lot.</summary>
+        /// <summary>The Sims 1 repairman's person object (People\repairman.iff, "NPC Repairman").</summary>
+        private const uint RepairmanGUID = 0x565AA54B;
+
+        /// <summary>
+        /// A repairman is already on the lot. (18.5: by his object - its GUID, or its file's own label - never the Sim's shown
+        /// name, which can be in the player's language.)
+        /// </summary>
         private static bool RepairmanHere(VM vm)
         {
             foreach (var e in vm.Context.ObjectQueries.Avatars)
             {
                 if (e.Position == LotTilePos.OUT_OF_WORLD) continue;
-                var n = (e.Name ?? "") + " " + (e.Object?.OBJ?.ChunkLabel ?? "");
-                if (n.IndexOf("repair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                var objd = e.Object?.OBJ;
+                if (objd == null) continue;
+                if (objd.GUID == RepairmanGUID || (objd.ChunkLabel ?? "").IndexOf("repair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             }
             return false;
         }
@@ -1143,8 +1182,7 @@ namespace FSO.SimAntics.Primitives
                 var ttas = obj.TreeTableStrings;
                 foreach (var ia in obj.TreeTable.Interactions)
                 {
-                    var name = ttas?.GetString((int)ia.TTAIndex) ?? "";
-                    if (!name.StartsWith("Repair", StringComparison.OrdinalIgnoreCase)) continue;
+                    if ((TtaKindOf(ttas, ia.TTAIndex) & TtaKind.Repair) == 0) continue; // (18.5: its English name - "Repair")
                     var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
                     if (action == null) continue;
                     Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
@@ -1152,6 +1190,47 @@ namespace FSO.SimAntics.Primitives
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// 18.5 (B5a): the nearest fire's own "Extinguish" (by its English name - not the magic "Cast.../Extinguish"), when the
+        /// fire's own check lets this Sim do it now, or null. One the Sim has gone for three times in half an hour and still
+        /// can't reach is left for a while (GiveUp), like a chore.
+        /// </summary>
+        private VMPieMenuInteraction Extinguish(VMStackFrame context)
+        {
+            VMPieMenuInteraction best = null; float bestDist = float.MaxValue;
+            var done = new HashSet<short>();
+            // (a copy: the check trees run below can make or delete objects, which changes the lot's list)
+            foreach (var iobj in context.VM.Entities.ToArray())
+            {
+                if (!(iobj is VMGameObject) || iobj.Position == LotTilePos.OUT_OF_WORLD || !IsFire(iobj)) continue;
+                var obj = iobj.MultitileGroup.GetInteractionGroupLeader(iobj);
+                if (!done.Add(obj.ObjectID) || obj.TreeTable == null) continue;
+                var d = Tiles(Sim.Position, obj.Position);
+                if (d >= bestDist) continue;
+                var ttas = obj.TreeTableStrings;
+                foreach (var ia in obj.TreeTable.Interactions)
+                {
+                    var english = (FSO.SimAntics.Utils.VMReduxBrain.LotName(ttas, (int)ia.TTAIndex) ?? "").Trim();
+                    if (!english.Equals("Extinguish", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (GivenUp(obj.ObjectID, ia.TTAIndex)) break;
+                    var action = obj.GetAction((int)ia.TTAIndex, Sim, context.VM.Context, false);
+                    if (action == null) break;
+                    Sim.ObjectData[(int)VMStackObjectVariable.HideInteraction] = 0;
+                    // (checked as the player clicking it, like the phone services: the fire's own "Extinguish test" turns down
+                    //  any Sims 1 free-will try (its argument 0 = 1) - here the Sim acts as a sensible player would, the same
+                    //  essential as calling the fire department. Its other checks - not a child, the fire still burning - stay.)
+                    var avail = Sim.Thread.CheckAction(action, false);
+                    if (avail == null) break; // (the fire's own check says no)
+                    bestDist = d;
+                    best = new VMPieMenuInteraction { Name = ttas?.GetString((int)ia.TTAIndex) ?? english, ID = (byte)ia.TTAIndex, Entry = ia, Global = false, Callee = obj, Score = 1,
+                        Param0 = avail.Count > 0 ? avail[0].Param0 : (short)0 };
+                    break;
+                }
+            }
+            if (best != null && TriesRecently(best.Callee.ObjectID, best.ID, 30) >= 3) { GiveUp(best.Callee.ObjectID, best.ID); return null; }
+            return best;
         }
 
         private bool Ads(TTABInteraction entry, VMPieMenuInteraction first, VMMotive m)
@@ -1225,11 +1304,12 @@ namespace FSO.SimAntics.Primitives
             }
 
             // stage 2 - safety: with very low Cooking skill, a snack beats cooking a full meal (fires)
+            // (18.5: by the fridge's own English entry - "Have A Meal" / "Serve Meal", the ones that use the stove (ReduxCooking.KindOf).
+            //  The 17.4 English check looked for "Breakfast"/"Dinner", which only the shown, renamed name has - so it never matched.)
             if (Level >= 2 && Sim.GetPersonData(VMPersonDataVariable.CookingSkill) < 200 && Needs[(int)VMMotive.Hunger] > -60)
             {
-                var n = FSO.SimAntics.Utils.VMReduxBrain.EnglishName(target, entry) ?? ""; // (17.4: English - never the shown name, lockstep)
-                if (n.IndexOf("Breakfast", StringComparison.OrdinalIgnoreCase) >= 0 || n.IndexOf("Lunch", StringComparison.OrdinalIgnoreCase) >= 0
-                    || n.IndexOf("Dinner", StringComparison.OrdinalIgnoreCase) >= 0 || n.StartsWith("Cook", StringComparison.OrdinalIgnoreCase)) w *= 0.5f;
+                var meal = FSO.SimAntics.Utils.ReduxCooking.KindOf(target, entry);
+                if (meal == FSO.SimAntics.Utils.ReduxCooking.Kind.Meal || meal == FSO.SimAntics.Utils.ReduxCooking.Kind.Group) w *= 0.5f;
             }
             bool helpsPhysical = false, onlyFunSocial = true;
             foreach (var m in NonFunNeeds)
