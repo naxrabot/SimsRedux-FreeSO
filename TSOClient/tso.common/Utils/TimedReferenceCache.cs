@@ -200,6 +200,17 @@ namespace FSO.Common.Utils
             if (Cache.TryRemove(key, out resultRef))
             {
                 value = (VALUE)resultRef.Target;
+                // SimsRedux 18.3: the permanent cache (Windows) let go of it too. It kept every value it ever made, so an object
+                // taken out (a Sim's character file is loaded again after every save) stayed in memory for good - about 14 MB
+                // a lot on the headless test, 4 GB after a few hours (Headless Test #10's census: +2.3 GB of byte[] from object files).
+                if (PermaMode && value != null)
+                {
+                    lock (PermaRef)
+                    {
+                        for (int i = PermaRef.Count - 1; i >= 0; i--)
+                            if (ReferenceEquals(PermaRef[i], value)) { PermaRef.RemoveAt(i); break; }
+                    }
+                }
                 return true;
             } else
             {
