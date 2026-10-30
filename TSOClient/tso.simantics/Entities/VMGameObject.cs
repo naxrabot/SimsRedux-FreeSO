@@ -377,7 +377,11 @@ namespace FSO.SimAntics
 
         public override int GetSlotHeight(int slot)
         {
-            if (slot < TotalSlots()) return Slots.Slots[0][0].Height;
+            // SimsRedux: an object can come back from a save with slot places (Contained, from the house file) but no SLOT
+            // table of its own to say how high they are - buying something onto it threw a NullReferenceException (the
+            // 19.2 soak test's "CMD:VMNetBuyObjectCmd ... GetSlotHeight"). No table: no slot height (nothing goes on it).
+            if (slot < TotalSlots() && Slots?.Slots != null && Slots.Slots.TryGetValue(0, out var slots0) && slots0 != null && slots0.Count > 0)
+                return slots0[0].Height;
             else return -1;
         }
 

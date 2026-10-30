@@ -247,6 +247,11 @@ namespace FSO.Common.Utils
                 else
                 {
                     _UpdateHooks.CopyTo(_UpdateHooksCopy);
+                    // SimsRedux: the slots past the hooks still running held hooks already removed - a finished
+                    // timeout and whatever it pointed at (a lot's screen piece, so the whole lot left behind: the
+                    // 19.2 soak test's "MEM:old-lots-kept ... GameThread._UpdateHooksCopy[12]"). Cleared.
+                    if (_UpdateHooksCopy.Length > hookCount)
+                        Array.Clear(_UpdateHooksCopy, hookCount, _UpdateHooksCopy.Length - hookCount);
                 }
 
                 _hooks = _UpdateHooksCopy;

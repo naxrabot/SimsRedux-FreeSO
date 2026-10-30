@@ -866,6 +866,17 @@ namespace FSO.SimAntics
             return true;
         }
 
+        /// <summary>
+        /// SimsRedux: what this motive is being raised by right now (per hour; 0 for none) and the level it stops at (Sims 1's
+        /// "set motive change" can set a level with no rise - a sofa nap's energy: see VMTS1MotiveDecay). Saved fields only.
+        /// </summary>
+        public short ReduxMotiveChangeRate(VMMotive motive, out short max)
+        {
+            var change = MotiveChanges[(int)motive];
+            max = change?.MaxValue ?? short.MaxValue;
+            return change?.PerHourChange ?? 0;
+        }
+
         public virtual void ClearMotiveChanges()
         {
             for (int i = 0; i < 16; i++)

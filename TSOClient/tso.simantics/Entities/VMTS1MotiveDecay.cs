@@ -1,4 +1,5 @@
 using FSO.SimAntics.Model;
+using System;
 using System.IO;
 
 namespace FSO.SimAntics.Entities
@@ -98,6 +99,21 @@ namespace FSO.SimAntics.Entities
                             else
                             {
                                 frac = (context.Clock.Hours >= Constants[2]) ? ToFixed1000(Constants[3]) : 0;
+                                // SimsRedux: a sofa nap. Sims 1's sofas set the nap's energy change to "no rise, up to 80" and
+                                // end the nap only once energy is above 0 - the rise itself came from being asleep. With
+                                // nothing here, a Sim who lay down tired napped for ever with energy flat (the 19.2 soak
+                                // test's "STUCK:family:Nap": 6+ hours at energy -40). Asleep with no energy rise of the
+                                // object's own (a bed's or recliner's), energy comes back at the asleep rate for how deep the
+                                // sleep is (a nap's -20 of a bed's -40: half a cheap bed, 15 an hour), up to that level.
+                                var sleepDepth = Math.Min(40, -(int)avatar.GetMotiveData(VMMotive.SleepState));
+                                short napMax;
+                                var napRise = avatar.ReduxMotiveChangeRate(VMMotive.Energy, out napMax);
+                                if (!avatar.IsPet && sleepDepth > 0 && napRise <= 0)
+                                {
+                                    int cap = (napMax > 0 && napMax < 100) ? napMax : 100;
+                                    if (motive < cap)
+                                        frac = -(ToFixed1000(Constants[18]) / (30 * (24 - (int)Constants[1]))) * sleepDepth / 40;
+                                }
                             }
                         } else
                         {

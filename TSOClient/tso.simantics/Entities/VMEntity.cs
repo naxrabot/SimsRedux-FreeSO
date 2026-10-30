@@ -149,7 +149,7 @@ namespace FSO.SimAntics
         {
             get
             {
-                if (MultitileGroup.Name != "") return MultitileGroup.Name;
+                if (MultitileGroup != null && MultitileGroup.Name != "") return MultitileGroup.Name;
                 else return this.ToString();
             }
             set
@@ -168,8 +168,11 @@ namespace FSO.SimAntics
 
         public override string ToString()
         {
-            if (MultitileGroup.Name != "") return MultitileGroup.Name;
-            var strings = Object.Resource.Get<CTSS>(Object.OBJ.CatalogStringsID);
+            // SimsRedux: a lot being loaded has no multitile groups yet (VMThread.Load's "starts over" note named the
+            // object then and threw - the lot never finished loading: the 19.2 soak test's "LOAD:timeout")
+            if (MultitileGroup != null && MultitileGroup.Name != "") return MultitileGroup.Name;
+            if (Object?.OBJ == null) return "object " + ObjectID;
+            var strings = Object.Resource?.Get<CTSS>(Object.OBJ.CatalogStringsID);
             if (strings != null)
             {
                 return strings.GetString(0);
