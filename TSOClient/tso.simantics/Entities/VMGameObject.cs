@@ -60,7 +60,11 @@ namespace FSO.SimAntics
                     break;
 
             }
-            return base.SetValue(var, value);
+            var result = base.SetValue(var, value);
+            // SimsRedux 18.10: hangs on a wall? (drawing only - see ObjectComponent.ReduxWallHung)
+            if (var == VMStackObjectVariable.Flags && UseWorld && WorldUI is ObjectComponent)
+                ((ObjectComponent)WorldUI).ReduxWallHung = VMNetLiftObjectCmd.IsWallItem(this);
+            return result;
         }
 
         public override short GetValue(VMStackObjectVariable var)

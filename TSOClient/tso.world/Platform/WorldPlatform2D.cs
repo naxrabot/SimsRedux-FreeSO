@@ -119,6 +119,9 @@ namespace FSO.LotView.Platform
             state.CenterTile = oldCenter; //must be restored after rotation.
             state.RenderingThumbnail = false;
             bp.Cutaway = oldCutaway;
+            // SimsRedux 18.10: the walls were worked out uncut for the picture - work the cuts out again, so things
+            // hung on cut walls (and doors in them) hide again
+            bp.Changes.SetFlag(BlueprintGlobalChanges.WALL_CUT_CHANGED);
 
             var tex = bufferTexture.Get();
             return tex;

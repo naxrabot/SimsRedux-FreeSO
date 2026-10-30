@@ -607,14 +607,17 @@ namespace FSO.LotView.Components
             }
             else _IdleFramesPct = 0;
 
-            if (HideForCutaway && Level > 0)
+            if ((HideForCutaway || ReduxWallHung) && Level > 0)
             {
-                if (!(world.BuildMode > 1) && world.DynamicCutaway && Level == world.Level)
+                if (HideForCutaway && !(world.BuildMode > 1) && world.DynamicCutaway && Level == world.Level)
                 {
                     if (blueprint != null && RenderInfo.Layer == WorldObjectRenderLayer.STATIC) blueprint.Changes.RegisterObjectChange(this);
                 }
 
-                if (Level != world.Level || world.BuildMode > 1) CutawayHidden = false;
+                // SimsRedux 18.10: things hung on a wall (paintings, mirrors, wall lamps...) show on both sides of
+                // their wall in Buy and Build mode; only Live mode hides them with a cut-away wall.
+                bool showAll = world.BuildMode > 1 || (ReduxWallHung && world.BuildMode > 0);
+                if (Level != world.Level || showAll || blueprint == null) CutawayHidden = false;
                 else
                 {
                     var tilePos = new Point((int)Math.Round(Position.X), (int)Math.Round(Position.Y));
@@ -622,36 +625,80 @@ namespace FSO.LotView.Components
                     if (tilePos.X >= 0 && tilePos.X < blueprint.Width && tilePos.Y >= 0 && tilePos.Y < blueprint.Height)
                     {
                         var wall = blueprint.Walls[Level - 1][tilePos.Y * blueprint.Width + tilePos.X];
-                        var cutTest = new Point();
-                        if (!CutawayTests.TryGetValue(AdjacentWall & wall.Segments, out cutTest))
-                        {
-                            CutawayTests.TryGetValue(wall.OccupiedWalls & wall.Segments, out cutTest);
-                        }
-                        var positions = new Point[] { tilePos, tilePos + cutTest };
+                        var seg = AdjacentWall & wall.Segments;
+                        var cutTest = ReduxCutTest(seg);
+                        if (cutTest == Point.Zero) cutTest = ReduxCutTest(wall.OccupiedWalls & wall.Segments);
+                        var other = tilePos + cutTest;
+                        var cutaway = blueprint.Cutaway;
 
-                        var canContinue = true;
+                        // (the tiles on both sides of the wall cut away - checked without per-frame allocations)
+                        var canContinue = cutaway != null
+                            && cutaway[tilePos.Y * blueprint.Width + tilePos.X]
+                            && other.X >= 0 && other.X < blueprint.Width && other.Y >= 0 && other.Y < blueprint.Height
+                            && cutaway[other.Y * blueprint.Width + other.X];
 
-                        foreach (var pos in positions)
-                        {
-                            canContinue = canContinue && (pos.X >= 0 && pos.X < blueprint.Width && pos.Y >= 0 && pos.Y < blueprint.Height
-                                && blueprint.Cutaway[pos.Y * blueprint.Width + pos.X]);
-                            if (!canContinue) break;
-                        }
                         // SimsRedux: also hidden when the wall it hangs on is drawn cut down (fully or partly),
                         // so a painting doesn't float in the air (its back showing) over a cut wall
-                        if (!canContinue && blueprint.WallComp != null && world.CameraMode == CameraRenderMode._2D)
+                        if (seg == 0) seg = wall.OccupiedWalls & wall.Segments;
+                        if (!canContinue && seg != 0)
                         {
-                            var seg = (AdjacentWall & wall.Segments);
-                            if (seg == 0) seg = wall.OccupiedWalls & wall.Segments;
-                            if ((seg & WallSegments.TopLeft) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X, tilePos.Y, true);
-                            else if ((seg & WallSegments.TopRight) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X, tilePos.Y, false);
-                            else if ((seg & WallSegments.BottomRight) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X + 1, tilePos.Y, true);
-                            else if ((seg & WallSegments.BottomLeft) > 0) canContinue = blueprint.WallComp.ReduxWallCutAt(tilePos.X, tilePos.Y + 1, false);
+                            int wx = tilePos.X, wy = tilePos.Y;
+                            bool topLeft = true, straight = true;
+                            if ((seg & WallSegments.TopLeft) > 0) topLeft = true;
+                            else if ((seg & WallSegments.TopRight) > 0) topLeft = false;
+                            else if ((seg & WallSegments.BottomRight) > 0) { wx++; topLeft = true; }
+                            else if ((seg & WallSegments.BottomLeft) > 0) { wy++; topLeft = false; }
+                            else straight = false; // (a diagonal wall: left as it was)
+
+                            if (!straight) { }
+                            else if (world.CameraMode == CameraRenderMode._2D)
+                            {
+                                if (blueprint.WallComp != null) canContinue = blueprint.WallComp.ReduxWallCutAt(wx, wy, topLeft);
+                            }
+                            else if (ReduxWallHung) canContinue = ReduxWallCut3D(world, wx, wy, topLeft);
                         }
                         CutawayHidden = canContinue;
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// SimsRedux 18.10: hangs on a wall (a painting, mirror, wall lamp...). Set by the game (drawing only):
+        /// in Live mode it's hidden while its wall is cut away or down, so it doesn't float over the room.
+        /// </summary>
+        public bool ReduxWallHung;
+
+        /// <summary>The tile on the other side of this wall side (as CutawayTests, without a dictionary lookup).</summary>
+        private static Point ReduxCutTest(WallSegments seg)
+        {
+            switch (seg)
+            {
+                case WallSegments.BottomLeft: return new Point(0, 1);
+                case WallSegments.TopLeft: return new Point(-1, 0);
+                case WallSegments.TopRight: return new Point(0, -1);
+                case WallSegments.BottomRight: return new Point(1, 0);
+            }
+            return Point.Zero;
+        }
+
+        /// <summary>
+        /// SimsRedux 18.10: is this wall (the top-left or top-right edge of tile x,y) drawn cut down in 3D? The 3D
+        /// walls look up their height at each end, a little towards the camera (as WallComponentRC does).
+        /// </summary>
+        private bool ReduxWallCut3D(WorldState world, int x, int y, bool topLeft)
+        {
+            var cut = blueprint.Cutaway;
+            if (cut == null) return false;
+            var off = RC.WallComponentRC.CutCheckDir[(int)world.CutRotation] * 0.66f;
+            for (int i = 0; i < 2; i++)
+            {
+                float px = x + off.X, py = y + off.Y;
+                if (i == 1) { if (topLeft) py += 1; else px += 1; }
+                var index = (int)py * blueprint.Width + (int)px;
+                if (index >= 0 && index < cut.Length && cut[index]) return true;
+            }
+            return false;
         }
 
         public override float GetHeadlineScale()
@@ -673,7 +720,7 @@ namespace FSO.LotView.Components
         {
             if (!Visible || (!world.DrawOOB && (Position.X < -2043 && Position.Y < -2043))) return;
             //#endif
-            if (CutawayHidden) return;
+            if (CutawayHidden && !world.RenderingThumbnail) return; // (SimsRedux 18.10: a lot picture has its walls up)
             var pos = Position;
 
             if (world.CameraMode > CameraRenderMode._2D || Mode.IsSet(ComponentRenderMode._3D)) //)
