@@ -607,7 +607,11 @@ namespace FSO.LotView.Components
             }
             else _IdleFramesPct = 0;
 
-            if ((HideForCutaway || ReduxWallHung) && Level > 0)
+            // SimsRedux 19.2: a wall hanging (painting, mirror, wall lamp...) - hidden in Live mode while its wall is cut away
+            // or down, shown in Buy and Build mode. Worked out every frame (a few array reads), so it follows the walls
+            // setting, cutaway changes, turning the camera, changing floors and modes, and loading a lot.
+            if (ReduxWallSides != 0) ReduxUpdateWallHidden(world);
+            else if ((HideForCutaway || ReduxWallHung) && Level > 0)
             {
                 if (HideForCutaway && !(world.BuildMode > 1) && world.DynamicCutaway && Level == world.Level)
                 {
@@ -661,13 +665,82 @@ namespace FSO.LotView.Components
                     }
                 }
             }
+            else if (_CutawayHidden) CutawayHidden = false; // (19.2: no longer hangs on a wall, e.g. its flags changed)
         }
 
         /// <summary>
         /// SimsRedux 18.10: hangs on a wall (a painting, mirror, wall lamp...). Set by the game (drawing only):
         /// in Live mode it's hidden while its wall is cut away or down, so it doesn't float over the room.
+        /// (19.2: set together with ReduxWallSides, which is what the hiding uses.)
         /// </summary>
         public bool ReduxWallHung;
+
+        /// <summary>
+        /// SimsRedux 19.2: the sides of its tile (lot directions) this wall hanging hangs on; 0 when it isn't one. Set
+        /// by the game (VMGameObject.ReduxRefreshWallHung - drawing only) when it's placed, moved, turned or loaded.
+        /// </summary>
+        public WallSegments ReduxWallSides;
+
+        /// <summary>
+        /// SimsRedux 19.2: in Live mode a wall hanging is hidden while the wall it hangs on is cut away or down (or
+        /// gone), so its back doesn't show floating over the room; in Buy and Build mode it shows on both sides.
+        /// Changing CutawayHidden tells the 2D static layer to redraw (see its setter).
+        /// </summary>
+        private void ReduxUpdateWallHidden(WorldState world)
+        {
+            bool hide = false;
+            var bp = blueprint;
+            if (bp != null && world.BuildMode == 0 && Level > 0 && Level == world.Level && Container == null
+                && bp.Walls != null && Level - 1 < bp.Walls.Length && bp.Walls[Level - 1] != null)
+            {
+                int w = bp.Width, h = bp.Height;
+                int tx = (int)Math.Round(Position.X), ty = (int)Math.Round(Position.Y);
+                if (tx >= 0 && ty >= 0 && tx < w && ty < h)
+                {
+                    var walls = bp.Walls[Level - 1];
+                    int sides = (int)ReduxWallSides;
+                    for (int bit = 1; bit <= 8 && !hide; bit <<= 1)
+                    {
+                        if ((sides & bit) == 0) continue;
+                        // walls belong to the top-left or top-right edge of a tile: (wx, wy) is the wall's own tile,
+                        // (ox, oy) the tile across the wall from this one
+                        int wx = tx, wy = ty, ox = tx, oy = ty;
+                        bool topLeft;
+                        switch (bit)
+                        {
+                            case 1: topLeft = true; ox--; break; // top left
+                            case 2: topLeft = false; oy--; break; // top right
+                            case 4: topLeft = true; wx++; ox++; break; // bottom right
+                            default: topLeft = false; wy++; oy++; break; // bottom left
+                        }
+                        var wi = wy * w + wx;
+                        if (wx >= w || wy >= h || wi >= walls.Length
+                            || (walls[wi].Segments & (topLeft ? WallSegments.TopLeft : WallSegments.TopRight)) == 0)
+                        {
+                            hide = true; // (its wall is gone: it would float)
+                            break;
+                        }
+                        hide = ReduxWallDown(world, bp, tx, ty, ox, oy, wx, wy, topLeft);
+                    }
+                }
+            }
+            CutawayHidden = hide;
+        }
+
+        /// <summary>SimsRedux 19.2: is this wall (the top-left or top-right edge of tile wx, wy) drawn cut away or down?</summary>
+        private bool ReduxWallDown(WorldState world, Blueprint bp, int tx, int ty, int ox, int oy, int wx, int wy, bool topLeft)
+        {
+            // the tiles on both sides of it cut away (Walls Down, or inside a cut): down, whatever the camera
+            var cut = bp.Cutaway;
+            if (cut != null && ox >= 0 && oy >= 0 && ox < bp.Width && oy < bp.Height)
+            {
+                int a = ty * bp.Width + tx, b = oy * bp.Width + ox;
+                if (a < cut.Length && b < cut.Length && cut[a] && cut[b]) return true;
+            }
+            // otherwise as the walls are drawn: the 2D walls' own cuts, or the 3D walls' heights
+            if (world.CameraMode == CameraRenderMode._2D) return bp.WallComp != null && bp.WallComp.ReduxWallCutAt(wx, wy, topLeft);
+            return ReduxWallCut3D(world, wx, wy, topLeft);
+        }
 
         /// <summary>The tile on the other side of this wall side (as CutawayTests, without a dictionary lookup).</summary>
         private static Point ReduxCutTest(WallSegments seg)

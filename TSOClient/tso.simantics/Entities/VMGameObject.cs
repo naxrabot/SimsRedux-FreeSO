@@ -61,10 +61,34 @@ namespace FSO.SimAntics
 
             }
             var result = base.SetValue(var, value);
-            // SimsRedux 18.10: hangs on a wall? (drawing only - see ObjectComponent.ReduxWallHung)
-            if (var == VMStackObjectVariable.Flags && UseWorld && WorldUI is ObjectComponent)
-                ((ObjectComponent)WorldUI).ReduxWallHung = VMNetLiftObjectCmd.IsWallItem(this);
+            // SimsRedux 19.2: hangs on a wall? (drawing only - see ObjectComponent.ReduxWallSides)
+            if (UseWorld && (var == VMStackObjectVariable.Flags || var == VMStackObjectVariable.FlagField2
+                || var == VMStackObjectVariable.WallPlacementFlags || var == VMStackObjectVariable.Direction))
+                ReduxRefreshWallHung();
             return result;
+        }
+
+        /// <summary>
+        /// SimsRedux 19.2: tells the drawing which sides of its tile this object hangs on (a painting, mirror, wall
+        /// lamp, wall phone, smoke alarm...), so in Live mode it's hidden while that wall is cut away or down and its
+        /// back doesn't float over the room. Drawing only: reads the object's data, never changes the lot.
+        /// (Sims 1 wall hangings have "zero extent" rather than "hide for cutaway" - see ReduxWallHanging.)
+        /// </summary>
+        internal void ReduxRefreshWallHung()
+        {
+            if (!UseWorld) return;
+            var oc = WorldUI as ObjectComponent;
+            if (oc == null) return;
+            int sides = 0;
+            if (Container == null && Position != LotTilePos.OUT_OF_WORLD)
+            {
+                var wallPlace = ObjectData[(int)VMStackObjectVariable.WallPlacementFlags];
+                if (FSO.SimAntics.Utils.ReduxWallHanging.HangsOnWall(ObjectData[(int)VMStackObjectVariable.Flags],
+                    ObjectData[(int)VMStackObjectVariable.FlagField2], wallPlace))
+                    sides = FSO.SimAntics.Utils.ReduxWallHanging.Sides(wallPlace, Direction);
+            }
+            oc.ReduxWallSides = (WallSegments)sides;
+            oc.ReduxWallHung = sides != 0;
         }
 
         public override short GetValue(VMStackObjectVariable var)

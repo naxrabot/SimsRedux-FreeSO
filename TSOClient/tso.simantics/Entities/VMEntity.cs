@@ -1423,6 +1423,9 @@ namespace FSO.SimAntics
         {
             var wall = arch.GetWall(Position.TileX, Position.TileY, Position.Level);
 
+            // SimsRedux 19.2: hangs on a wall? (drawing only - hidden in Live mode while its wall is cut away)
+            if (set && this is VMGameObject) ((VMGameObject)this).ReduxRefreshWallHung();
+
             var placeFlags = (WallPlacementFlags)ObjectData[(int)VMStackObjectVariable.WallPlacementFlags];
             int rotate = (8 - (DirectionToWallOff(Direction) + 1)) % 4;
             byte rotPart = (byte)RotateWallSegs((WallSegments)((int)placeFlags % 15), rotate);
@@ -1443,13 +1446,9 @@ namespace FSO.SimAntics
 
             if (rotPart == 0) return;
 
-            // SimsRedux 18.10: hangs on a wall (painting, mirror, wall lamp...) - drawing only: hidden in Live mode while its wall is cut away
-            bool wallHung = UseWorld && WorldUI is ObjectComponent && FSO.SimAntics.NetPlay.Model.Commands.VMNetLiftObjectCmd.IsWallItem(this);
-            if (UseWorld && WorldUI is ObjectComponent) ((ObjectComponent)WorldUI).ReduxWallHung = wallHung;
-
             // SimsRedux: a wall detail (ReduxCustomObjects) shares its wall with a painting, but still hides with the wall when walls are cut away
-            // (18.10: so does any other wall hanging that doesn't take the wall for itself)
-            if (!exclusive && UseWorld && Object != null && (wallHung || FSO.Content.TS1.ReduxCustomObjects.IsDetail(Object.OBJ.GUID))) ((ObjectComponent)WorldUI).AdjacentWall = (WallSegments)rotPart;
+            // (19.2: wall hangings hide by ObjectComponent.ReduxWallSides instead - see ReduxRefreshWallHung)
+            if (!exclusive && UseWorld && Object != null && FSO.Content.TS1.ReduxCustomObjects.IsDetail(Object.OBJ.GUID)) ((ObjectComponent)WorldUI).AdjacentWall = (WallSegments)rotPart;
 
             if (exclusive)
             {
