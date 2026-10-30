@@ -538,58 +538,40 @@ namespace FSO.SimAntics.Utils
             return ava;
         }
 
-        // ------------------------------------------------------------------ the dating app: Chat (18.8)
+        // ------------------------------------------------------------------ the dating app: Chat (18.8, 19.4)
 
         /// <summary>Chats with the same match in a game day that count in full; after these each one counts for less.</summary>
         public const int ChatsFull = 2;
 
         /// <summary>
-        /// What one chat on the dating app gives, both ways (daily, lifetime) - about a friendly in-person talk or the house
-        /// phone's chat with a friend (Spend Quality Time here is 6/2). Chemistry adds or takes up to 2 (as closeness does),
-        /// a very good or bad mood 1. The 3rd chat of the day with the same Sim gives half, the 4th and on 1 daily only.
+        /// 19.4: what a Dating App chat (VMReduxDatingChat) did to the two Sims' relationship, written where the game itself
+        /// keeps it: in Sims 1 every relationship between two Sims with neighbour ids - on the lot or not - lives in the
+        /// neighbourhood's relationship lists (VMRelationship reads and writes them there; the Relationships page, the house
+        /// phone's calls and in-person Talk all use them), saved with the neighbourhood. So a's list for the match and the
+        /// match's list for a both change (daily and lifetime), and they pick up from there on the phone or in person.
+        /// Only this game's neighbourhood (a visitor's game hasn't the match - nothing happens there, as with any
+        /// relationship primitive). Returns false when either isn't in this neighbourhood.
         /// </summary>
-        public static void ChatGain(int nth, int chem, int mood, out int daily, out int life)
+        internal static bool HoodChat(VMAvatar a, uint guid, int daily, int life)
         {
-            daily = 5 + (Math.Max(0, Math.Min(100, chem)) - 50) / 25 + (mood >= 50 ? 1 : (mood <= -50 ? -1 : 0));
-            daily = Math.Max(2, daily);
-            life = 2;
-            if (nth > ChatsFull + 1) { daily = 1; life = 0; }
-            else if (nth > ChatsFull) { daily = (daily + 1) / 2; life = 1; }
+            try
+            {
+                if (a == null || guid == 0) return false;
+                var hood = Content.Content.Get().Neighborhood;
+                var nid = hood?.GetNeighborIDForGUID(guid);
+                if (nid == null || nid.Value <= 0) return false;
+                var them = hood.GetNeighborByID(nid.Value);
+                var myNid = a.GetPersonData(VMPersonDataVariable.NeighborId);
+                var me = myNid > 0 ? hood.GetNeighborByID(myNid) : null;
+                if (them == null || me == null || myNid == nid.Value) return false;
+                HoodCloser(me, nid.Value, daily, life);
+                HoodCloser(them, myNid, daily, life);
+                return true;
+            }
+            catch { return false; }
         }
 
-        /// <summary>
-        /// My Sim a chats with neighbour GUID (not on the lot) on the dating app (VMNetReduxMatchCmd's Chat, the lot's game
-        /// only). The relationship goes up both ways in the neighbourhood's own relationship lists - exactly where the
-        /// game's relationship primitive keeps a Sim's numbers for a neighbour (and where the house phone's calls change
-        /// them): a's list for the neighbour, and the neighbour's list for a. They're saved with the neighbourhood like any
-        /// other relationship, so both remember it when they meet. nth: the pair's chat number today (from the game that
-        /// sent it), chem: their chemistry. Grown-ups only. null: done; else why not ("" to say nothing).
-        /// </summary>
-        public static string Chat(VM vm, VMAvatar a, uint guid, int nth, int chem, bool phone)
-        {
-            if (vm == null || guid == 0 || !ReduxWooHoo.Grownup(a)) return "";
-            var hood = Content.Content.Get().Neighborhood;
-            var nid = hood?.GetNeighborIDForGUID(guid);
-            if (nid == null || nid.Value <= 0) return "";
-            var them = hood.GetNeighborByID(nid.Value);
-            var myNid = a.GetPersonData(VMPersonDataVariable.NeighborId);
-            var me = myNid > 0 ? hood.GetNeighborByID(myNid) : null;
-            if (them?.PersonData == null || me == null || myNid == nid.Value) return "";
-            // (never a child, a ghost or a pet: grown-ups only)
-            var pd = them.PersonData;
-            if (pd.Length <= (int)VMPersonDataVariable.IsGhost || pd[(int)VMPersonDataVariable.PersonsAge] < 18 || pd[(int)VMPersonDataVariable.IsGhost] > 0) return "";
-            if (vm.Context.ObjectQueries.Avatars.OfType<VMAvatar>().Any(x => !x.Dead && x.GetPersonData(VMPersonDataVariable.NeighborId) == nid.Value))
-                return "They're right here on the lot - go and say hello in person!";
-            int daily, life;
-            ChatGain(nth, chem, a.GetMotiveData(VMMotive.Mood), out daily, out life);
-            HoodCloser(me, nid.Value, daily, life);
-            HoodCloser(them, myNid, daily, life);
-            if (nth <= ChatsFull + 1) Motive(a, VMMotive.Social, nth <= ChatsFull ? 10 : 5);
-            if (phone) VMReduxPhone.Set(vm, a, true); // (the phone by their head while they chat - VMNetReduxPhoneCmd puts it away)
-            return null;
-        }
-
-        /// <summary>A neighbour's numbers for another (by neighbour id): daily and lifetime up, made if they hadn't met - as the game keeps them.</summary>
+        /// <summary>A neighbour's numbers for another (by neighbour id): daily and lifetime changed (19.4: up or down), made if they hadn't met - as the game keeps them.</summary>
         private static void HoodCloser(Neighbour from, short to, int daily, int life)
         {
             if (from == null || to <= 0) return;

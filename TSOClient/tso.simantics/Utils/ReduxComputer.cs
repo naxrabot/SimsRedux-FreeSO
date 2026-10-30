@@ -246,7 +246,8 @@ namespace FSO.SimAntics.Utils
                 if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return 0;
                 // (18.8: Shop Online - they type until the order's in, then VMReduxShop cancels it and they get up)
                 var shop = ava.Thread?.ActiveAction;
-                if (shop != null && shop.Name == VMReduxShop.ActionName && shop.Callee == callee)
+                // (19.4: and the Dating App's chat - they type until it's over, then VMReduxDatingChat cancels it)
+                if (shop != null && (shop.Name == VMReduxShop.ActionName || shop.Name == VMReduxDatingChat.ActionName) && shop.Callee == callee)
                 {
                     var check = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
                     if (check != null && check.GetReduxKind() == VMRoutine.ReduxKindHappyEnough) return shop.NotifyIdle ? -1 : 1;
@@ -329,6 +330,7 @@ namespace FSO.SimAntics.Utils
         {
             if (ava?.Thread == null) return;
             VMReduxShop.Tick(ava); // (18.8: a Shop Online order goes through after a few minutes typing)
+            VMReduxDatingChat.Tick(ava); // (19.4: a Dating App chat - typed for a while, then the relationship changes)
             VMReduxPlayerPause.Tick(ava); // (18.8: free will waits a while after the player's own order)
             int genre;
             VMQueuedAction action;

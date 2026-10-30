@@ -23,10 +23,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     ///   AdoptBaby  - a baby adopted by A (and B, a second parent, or 0) arrives in a bassinet, named Name. Lot's game only.
     ///   AdoptChild - a child (Female, Skin 0-2, Name) adopted by A joins the family and turns up by the mailbox. Lot's game only.
     ///   MoveIn     - A (a life partner on the lot) moves into the lot's family. Lot's game only.
-    ///   Chat       - (18.8) A chats with neighbour GUID (not on the lot) on the dating app: the relationship goes up both
-    ///                ways in the neighbourhood's relationship lists (VMReduxMatch.Chat). T0: the pair's chat number today
-    ///                (the 3rd and on count for less), T1: their chemistry (0-100), Yes: A has their cellphone out for it.
-    ///                Lot's game only (a visiting player's game can't send it).
+    ///   Chat       - (18.8, 19.4) A chats with neighbour GUID (not on the lot) on the dating app: A goes to the computer B
+    ///                (0: on their cellphone) and types for a while; the conversation (topics from both Sims' interests)
+    ///                and how it went are decided now, the relationship changes both ways when it ends
+    ///                (VMReduxDatingChat). T0: the pair's chat number today (the 3rd and on count for less), T1: their
+    ///                chemistry (0-100), Anchor/Kind/Skin: the match's 8 interests (0-10, 4 bits each), T2: their Nice
+    ///                (0-10). Lot's game only (a visiting player's game can't send it).
     /// </summary>
     public class VMNetReduxMatchCmd : VMNetCommandBodyAbstract
     {
@@ -113,7 +115,15 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         }
                     case MatchMode.Chat:
                         {
-                            var why = VMReduxMatch.Chat(vm, a, GUID, Math.Max(1, (int)T0), T1, Yes);
+                            // 19.4: the Sim goes and chats (phone or computer) - how it goes is decided here, from the lot and
+                            // the lot's random numbers; the relationship changes when they finish (VMReduxDatingChat)
+                            var interests = new int[VMReduxDatingChat.Topics];
+                            for (int i = 0; i < 4; i++) interests[i] = (Anchor >> (i * 4)) & 15;
+                            interests[4] = Kind & 15; interests[5] = (Kind >> 4) & 15;
+                            interests[6] = Skin & 15; interests[7] = (Skin >> 4) & 15;
+                            var computer = B != 0 ? vm.GetObjectById(B) : null;
+                            var why = (B != 0 && (computer == null || computer is VMAvatar)) ? ""
+                                : VMReduxDatingChat.Start(vm, a, computer, GUID, Math.Max(1, (int)T0), T1, interests, T2 & 15);
                             Fire(Chatted, vm, why);
                             return why == null;
                         }
