@@ -23,10 +23,14 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     ///   AdoptBaby  - a baby adopted by A (and B, a second parent, or 0) arrives in a bassinet, named Name. Lot's game only.
     ///   AdoptChild - a child (Female, Skin 0-2, Name) adopted by A joins the family and turns up by the mailbox. Lot's game only.
     ///   MoveIn     - A (a life partner on the lot) moves into the lot's family. Lot's game only.
+    ///   Chat       - (18.8) A chats with neighbour GUID (not on the lot) on the dating app: the relationship goes up both
+    ///                ways in the neighbourhood's relationship lists (VMReduxMatch.Chat). T0: the pair's chat number today
+    ///                (the 3rd and on count for less), T1: their chemistry (0-100), Yes: A has their cellphone out for it.
+    ///                Lot's game only (a visiting player's game can't send it).
     /// </summary>
     public class VMNetReduxMatchCmd : VMNetCommandBodyAbstract
     {
-        public enum MatchMode : byte { SetTurnOns = 0, Close = 1, Ask = 2, Answer = 3, LifeTalk = 4, Arrive = 5, AdoptBaby = 6, AdoptChild = 7, MoveIn = 8 }
+        public enum MatchMode : byte { SetTurnOns = 0, Close = 1, Ask = 2, Answer = 3, LifeTalk = 4, Arrive = 5, AdoptBaby = 6, AdoptChild = 7, MoveIn = 8, Chat = 9 }
 
         public MatchMode Mode;
         public short A, B, Anchor;
@@ -47,6 +51,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public static event Action<VM, VMNetReduxMatchCmd, uint, string> Adopted;
         /// <summary>MoveIn: why not (null: moved in).</summary>
         public static event Action<VM, VMNetReduxMatchCmd, string> MovedIn;
+        /// <summary>Chat (18.8): why not (null: they chatted).</summary>
+        public static event Action<VM, VMNetReduxMatchCmd, string> Chatted;
 
         public override bool Execute(VM vm, VMAvatar caller)
         {
@@ -103,6 +109,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         {
                             var why = VMReduxMatch.MoveIn(vm, a, b);
                             try { MovedIn?.Invoke(vm, this, why); } catch (Exception e) { Console.WriteLine("[SimsRedux] match: " + e.Message); }
+                            return why == null;
+                        }
+                    case MatchMode.Chat:
+                        {
+                            var why = VMReduxMatch.Chat(vm, a, GUID, Math.Max(1, (int)T0), T1, Yes);
+                            Fire(Chatted, vm, why);
                             return why == null;
                         }
                 }
