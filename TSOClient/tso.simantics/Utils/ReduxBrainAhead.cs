@@ -278,6 +278,56 @@ namespace FSO.SimAntics.Utils
             return 0;
         }
 
+        /// <summary>18.8: a choice that's cooking (a meal for one or for everyone - not a snack), by its English name.</summary>
+        public static bool CookingChoice(VMEntity target, string english) { return CookKind(target, english) != 0; }
+
+        // ------------------------------------------------------------------ 18.8: a delivery on its way
+
+        /// <summary>Sims 1's own scheduler object ("Schedule" in Global.iff makes one per visit it books - attribute 0 is who's coming).</summary>
+        public const uint SchedulerGUID = 0x8535DBF8;
+        /// <summary>The NPC Pizza Dude (PeopleObjects/PizzaDude.iff).</summary>
+        public const uint PizzaDudeGUID = 0xFC72C0C0;
+
+        /// <summary>
+        /// Food the family ordered is on its way: the phone's "Call for pizza" booked the Pizza Dude (a Scheduler whose
+        /// attribute 0 is him - the same thing the phone itself checks, "Check Schedule", before letting you order another), or
+        /// he's here on the lot with it. (An expansion's delivery person is recognised by name: an NPC called Pizza or Delivery.) Sims 1
+        /// has no grocery delivery. Lot state only: the objects, their attributes and their game-file labels.
+        /// </summary>
+        public static bool FoodOnTheWay(VM vm)
+        {
+            if (vm == null || !vm.TS1) return false;
+            var q = vm.Context.ObjectQueries;
+            var sched = q.GetObjectsByGUID(SchedulerGUID);
+            if (sched != null)
+            {
+                for (int i = 0; i < sched.Count; i++)
+                {
+                    var s = sched[i];
+                    if (s == null || s.Dead) continue;
+                    if (IsDelivery(vm.GetObjectById(s.GetAttribute(0)))) return true;
+                }
+            }
+            var dudes = q.GetObjectsByGUID(PizzaDudeGUID);
+            if (dudes != null)
+                for (int i = 0; i < dudes.Count; i++)
+                {
+                    var d = dudes[i];
+                    if (d is VMAvatar && !d.Dead && d.Position != LotTilePos.OUT_OF_WORLD) return true;
+                }
+            return false;
+        }
+
+        private static bool IsDelivery(VMEntity who)
+        {
+            var obj = who?.Object?.OBJ;
+            if (obj == null) return false;
+            if (obj.GUID == PizzaDudeGUID) return true;
+            var label = obj.ChunkLabel ?? "";
+            return label.IndexOf("NPC", StringComparison.OrdinalIgnoreCase) >= 0
+                && (label.IndexOf("Pizza", StringComparison.OrdinalIgnoreCase) >= 0 || label.IndexOf("Deliver", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
         /// <summary>What the Sim at the front of their queue is cooking (CookKind), from the queued choice's English name.</summary>
         private static int CookingNow(VMAvatar a)
         {
@@ -302,7 +352,10 @@ namespace FSO.SimAntics.Utils
         private static int OneCook(VMReduxBrainContext ctx)
         {
             int mine = CookKind(ctx.Target, ctx.Name);
-            if (mine == 0 || ctx.VM == null || VMReduxBrain.InRed(ctx.Sim)) return 1000;
+            if (mine == 0 || ctx.VM == null) return 1000;
+            // (18.8: a pizza's on its way - nobody cooks; VMFindBestAction leaves cooking out altogether then, this is the "why")
+            if (FoodOnTheWay(ctx.VM)) { ctx.Note("Pizza's on its way"); return 100; }
+            if (VMReduxBrain.InRed(ctx.Sim)) return 1000;
             var avatars = ctx.VM.Context.ObjectQueries.Avatars;
             int others = 0, hungry = 0;
             for (int i = 0; i < avatars.Count; i++)

@@ -244,6 +244,13 @@ namespace FSO.SimAntics.Utils
                 var ava = frame?.Caller as VMAvatar;
                 var callee = frame?.Callee;
                 if (ava == null || callee?.TreeTable == null || callee is VMAvatar) return 0;
+                // (18.8: Shop Online - they type until the order's in, then VMReduxShop cancels it and they get up)
+                var shop = ava.Thread?.ActiveAction;
+                if (shop != null && shop.Name == VMReduxShop.ActionName && shop.Callee == callee)
+                {
+                    var check = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
+                    if (check != null && check.GetReduxKind() == VMRoutine.ReduxKindHappyEnough) return shop.NotifyIdle ? -1 : 1;
+                }
                 // (the cheap check first: is the script being called "happy enough"? - see VMRoutine.ReduxKind)
                 var routine = frame.ScopeResource?.GetRoutine(opcode) as VMRoutine;
                 if (routine == null || routine.GetReduxKind() != VMRoutine.ReduxKindHappyEnough) return 0;
@@ -321,6 +328,8 @@ namespace FSO.SimAntics.Utils
         public static void Tick(VMAvatar ava)
         {
             if (ava?.Thread == null) return;
+            VMReduxShop.Tick(ava); // (18.8: a Shop Online order goes through after a few minutes typing)
+            VMReduxPlayerPause.Tick(ava); // (18.8: free will waits a while after the player's own order)
             int genre;
             VMQueuedAction action;
             var kind = Current(ava, out genre, out action);
@@ -648,6 +657,28 @@ namespace FSO.SimAntics.Utils
                     list.Add(action.Callee);
             }
             return list;
+        }
+
+        /// <summary>18.8: the progress bar over a Sim ordering on the computer (VMReduxShop).</summary>
+        internal static void ShowShopProgress(VMAvatar ava, int percent) { ShowProgress(ava, Clamp(percent, 0, 99)); }
+
+        /// <summary>
+        /// 18.8: the pie menu number to queue for using this computer (VMReduxShop): our "Surf the Web" - the computer's own
+        /// "Play" in every way but with no test to fail (a Sim whose Fun is full still sits down) - else its own "Play". False
+        /// for anything that isn't a computer.
+        /// </summary>
+        public static bool PlayOf(VMEntity obj, out uint index)
+        {
+            index = 0;
+            if (obj?.TreeTable == null || obj is VMAvatar) return false;
+            lock (Lock)
+            {
+                Dictionary<uint, Entry> map;
+                if (Patched.TryGetValue(obj.TreeTable, out map) && map != null)
+                    foreach (var kv in map)
+                        if (kv.Value.Kind == Kind.SurfWeb) { index = kv.Key; return true; }
+                return PlayIndex.TryGetValue(obj.TreeTable, out index);
+            }
         }
 
         /// <summary>

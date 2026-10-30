@@ -159,6 +159,8 @@ namespace FSO.SimAntics.Primitives
             if (level < 0 && familySim)
                 return VMPrimitiveExitCode.GOTO_FALSE;
             var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
+            // SimsRedux 18.8: a while after the player's own order, free will waits (a need in the red or a fire aside) - Utils/ReduxPlayerPause.cs
+            if (familySim && FSO.SimAntics.Utils.VMReduxPlayerPause.Holds(context.VM, caller) && !(brain != null && brain.FireOnLot)) return VMPrimitiveExitCode.GOTO_FALSE;
 
             // SimsRedux 17.4: free will per Sim (attribute 120, VMReduxBrain) - how OFTEN a Sim acts on their own; Sim Smarts
             // decides how WELL. For the household's Sims and a visiting player's own Sim (EffectiveFreeWill - only the Sim's own
@@ -379,6 +381,8 @@ namespace FSO.SimAntics.Primitives
             // SimsRedux: food that's already made comes first - a hungry Sim finishes their plate, takes a
             // serving from the group meal or has the leftovers, instead of cooking a whole new meal
             if (context.VM.TS1) ReduxPreferReadyFood(validActions);
+            // SimsRedux 18.8: a pizza on its way - the family waits for it instead of cooking (snacks are fine) - Utils/ReduxBrainAhead.cs
+            if (familySim && FSO.SimAntics.Utils.VMReduxBrainAhead.FoodOnTheWay(context.VM)) validActions.RemoveAll(a => FSO.SimAntics.Utils.VMReduxBrainAhead.CookingChoice(a.Callee, ReduxEnglish(a)));
             List<VMPieMenuInteraction> sorted = validActions.OrderByDescending(x => x.Score).ToList();
             sorted = TakeTopActions(sorted, 4);
             var selection = sorted.FirstOrDefault();

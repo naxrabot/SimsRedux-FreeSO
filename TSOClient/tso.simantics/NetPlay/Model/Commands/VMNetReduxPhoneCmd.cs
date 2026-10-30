@@ -17,7 +17,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     ///           menu is open (VMReduxPhone, person attribute 105). Always the Sim sending it (online: the lot sets who sent
     ///           it, so only a player's own Sim), only a grown-up; a visiting player's game at most once a second.
     ///   Buy   - a family grown-up orders a cellphone (VMReduxPhone.BuyPrice from the family's money) on the home computer's
-    ///           Shop Online (Place) for themselves or another family grown-up (For); they spend a moment there. It comes
+    ///           Shop Online (Place) for themselves or another family grown-up (For). 18.8: at a computer the Sim first walks
+    ///           over and types (VMReduxShop) - the money goes when the order's in, nothing if they're stopped. It comes
     ///           as a package the next day (the player's own game - Simitone's ReduxPackages).
     ///   Sell  - a family grown-up sells their cellphone back (VMReduxPhone.SellPrice to the family's money), at home.
     ///   Place - (17.2) a Shop Online package box (VMReduxPhone.PackageGUID) put down by the mailbox (Place) with the
@@ -69,9 +70,17 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (Mode == PhoneMode.Buy)
             {
                 if (fam.Budget < VMReduxPhone.BuyPrice) return Tell(vm, who, "Your family doesn't have §" + VMReduxPhone.BuyPrice + ".");
-                fam.Budget -= VMReduxPhone.BuyPrice;
                 var at = Place != 0 ? vm.GetObjectById(Place) : null;
-                if (at != null && !(at is VMAvatar)) ReduxWooHoo.PushWait(vm, who, at, Math.Max(1, vm.Context.Clock.TicksPerMinute) * 3, "Shopping");
+                if (at != null && !(at is VMAvatar))
+                {
+                    // 18.8: at the computer - the Sim goes and types first; the money goes (and VMReduxShop.Done says so) once the
+                    // order's in, nothing if they're stopped before. Done(null) here only means "on their way to the computer".
+                    var whyNot = VMReduxShop.Start(vm, who, at, VMReduxShop.ItemPhone, 1, VMReduxPhone.BuyPrice);
+                    if (whyNot != null) return Tell(vm, who, whyNot);
+                    Tell(vm, who, null);
+                    return true;
+                }
+                fam.Budget -= VMReduxPhone.BuyPrice;
             }
             else
             {
@@ -97,11 +106,39 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             VMMultitileGroup group = null;
             try { group = vm.Context.CreateObjectInstance(VMReduxPhone.PackageGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH); } catch { group = null; }
             if (group?.BaseObject == null) return Tell(vm, who, "");
-            VMFindLocationFor.FindLocationFor(group.BaseObject, mailbox, vm.Context, VMPlaceRequestFlags.Default);
+            // 18.8: the box has no scripts of its own, so nothing told the game where it may stand - every spot was "not allowed"
+            // (no floor height, not on grass) and it was never put down: Joey's cellphone package never came. It may stand on the
+            // ground, a floor or a slope, and Sims walk through it (it never blocks the path to the door or the mailbox).
+            foreach (var o in group.Objects)
+            {
+                o.SetValue(VMStackObjectVariable.PlacementFlags, (short)(VMPlacementFlags.OnFloor | VMPlacementFlags.OnTerrain | VMPlacementFlags.OnSlope));
+                o.SetValue(VMStackObjectVariable.AllowedHeightFlags, 1);
+                o.SetFlag(VMEntityFlags.AllowPersonIntersection, true);
+            }
+            if (!NearMailbox(vm, group.BaseObject, mailbox)) VMFindLocationFor.FindLocationFor(group.BaseObject, mailbox, vm.Context, VMPlaceRequestFlags.Default);
             if (group.BaseObject.Position == LotTilePos.OUT_OF_WORLD) { group.Delete(vm.Context); return Tell(vm, who, ""); }
             foreach (var o in group.Objects) o.SetAttribute(VMReduxPhone.TagAttr, Tag);
             Tell(vm, who, null);
             return true;
+        }
+
+        /// <summary>
+        /// 18.8: the first free spot next to the mailbox inside the lot (not out on the sidewalk or the street), nearest first, in
+        /// the same order on every game. False: none within a few tiles (VMFindLocationFor then finds anywhere it can).
+        /// </summary>
+        private static bool NearMailbox(VM vm, VMEntity box, VMEntity mailbox)
+        {
+            var at = mailbox.Position;
+            for (int r = 1; r <= 4; r++)
+                for (int dy = -r; dy <= r; dy++)
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != r) continue; // (this ring only)
+                        var pos = LotTilePos.FromBigTile((short)(at.TileX + dx), (short)(at.TileY + dy), at.Level);
+                        if (vm.Context.IsOutOfBounds(pos) || vm.Context.IsUserOutOfBounds(pos)) continue;
+                        if (box.SetPosition(pos, Direction.NORTH, vm.Context, VMPlaceRequestFlags.Default).Status == VMPlacementError.Success) return true;
+                    }
+            return false;
         }
 
         /// <summary>17.2: the package box goes (opened, or a box with no order) - its order's tag goes to Done.</summary>
@@ -142,9 +179,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         private bool Check(VM vm, VMAvatar caller)
         {
-            if (vm == null || !vm.TS1 || caller == null) return false;
-            if (Mode > PhoneMode.Remove) return false;
-            if (Mode == PhoneMode.Place || Mode == PhoneMode.Remove) return true; // (the lot's own game - whoever it's playing)
+            if (vm == null || !vm.TS1 || Mode > PhoneMode.Remove) return false;
+            // (the lot's own game - whoever it's playing; 18.8: even with nobody of the family here to be "its" Sim, e.g. all at work)
+            if (Mode == PhoneMode.Place || Mode == PhoneMode.Remove) return true;
+            if (caller == null) return false;
             return ReduxWooHoo.Grownup(caller); // (a grown-up, on the lot - not a pet, a child, a ghost or the maid)
         }
 

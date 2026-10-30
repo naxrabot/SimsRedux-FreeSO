@@ -310,6 +310,15 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (who == null || fam == null || at == null || Item > 2 || Count < 1 || Price < 0) return NotBought(vm, ""); // (17.0: 2 = pregnancy tests)
             if (!(fam.FamilyGUIDs ?? new uint[0]).Contains(who.Object.OBJ.GUID) || !ReduxWooHoo.Grownup(who)) return NotBought(vm, "");
             if (fam.Budget < Price) return NotBought(vm, "Your family doesn't have §" + Price.ToString("N0") + ".");
+            if (Source == 2 && !(at is VMAvatar))
+            {
+                // 18.8: Shop Online - the Sim goes to the computer and types first; the money goes once the order's in
+                // (VMReduxShop.Done), nothing if they're stopped before. Bought(null) here only means "on their way".
+                var whyNot = VMReduxShop.Start(vm, who, at, Item, Count, Price);
+                if (whyNot != null) return NotBought(vm, whyNot);
+                try { Bought?.Invoke(vm, this, null); } catch { }
+                return true;
+            }
             fam.Budget -= Price;
             // the Sim goes over: the computer's own "Surf the Web" when it has one, else a moment at the shelf or cabinet
             bool pushed = false;

@@ -675,6 +675,8 @@ namespace FSO.SimAntics.Utils
         /// <summary>Called by the two commands (display/learning only; any error is swallowed).</summary>
         public static void Heard(VM vm, VMNetCommandBodyAbstract cmd, VMAvatar sim, VMEntity callee, int interaction, VMQueuedAction cancelled)
         {
+            // (18.8: an order or a cancel from the player - free will waits a while; on every game, inside the command)
+            if (vm != null && vm.TS1 && sim != null) { try { VMReduxPlayerPause.Mark(vm, sim); } catch { } }
             var h = PlayerAct;
             if (h == null || vm == null || !vm.TS1) return;
             try { h(vm, cmd, sim, callee, interaction, cancelled); } catch { }
