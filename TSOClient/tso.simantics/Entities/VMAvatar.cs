@@ -550,6 +550,8 @@ namespace FSO.SimAntics
                 try { FSO.SimAntics.Utils.VMReduxMultitask.Tick(this); } catch (Exception e) { Console.WriteLine("[SimsRedux] multitask: " + e.Message); } // (17.2: a second activity - chatting, TV, music, reading)
                 // SimsRedux: skills grow by doing (cooking raises Cooking, repairing Mechanical...)
                 FSO.SimAntics.Utils.ReduxSkillByDoing.Tick(this);
+                // SimsRedux 19.5 (B5b): habits - favourites, boredom, bedtime - learned from what the Sim does (Utils/ReduxHabitMemory.cs)
+                try { FSO.SimAntics.Utils.VMReduxHabitMemory.Tick(this); } catch (Exception e) { Console.WriteLine("[SimsRedux] habits: " + e.Message); }
                 if (Position == LotTilePos.OUT_OF_WORLD && (PersistID > 0 || IsPet) && (Container == null || Container.Position == LotTilePos.OUT_OF_WORLD) && !Content.Content.Get().TS1)
                 {
                     //uh oh!

@@ -154,6 +154,19 @@ namespace FSO.SimAntics.Utils
             return sinceBedtime < 0 ? 1000 : 800;
         }
 
+        /// <summary>
+        /// 19.5 (B5b): is ahead-bedtime's "early start tomorrow" window on for this Sim now (an hour before that bedtime to 5
+        /// hours after)? VMReduxBrainHabits' usual-bedtime habit leaves bedtime to it then (extends it, never doubles it).
+        /// </summary>
+        internal static bool EarlyBedtimeWindow(VMReduxBrainContext ctx)
+        {
+            bool school;
+            int mins = MinutesToLeave(ctx, out school);
+            if (mins < 0) return false;
+            int sinceBedtime = (school ? 600 : 540) - mins;
+            return sinceBedtime >= -60 && sinceBedtime < 300;
+        }
+
         // ------------------------------------------------------------------ predicting needs, two needs at once
 
         // (a need "will be low soon" under these - hunger and the bladder fall fastest, so they're looked after earlier.

@@ -636,7 +636,8 @@ namespace FSO.SimAntics.Utils
             else if (choreCode == 102) why = "There's a fire - putting it out";
             else if (choreCode == 100) why = "Something's broken - calling the repairman";
             else if (bed) why = sim.GetMotiveData(VMMotive.Energy) < RedBelow ? "Exhausted" : "Bedtime";
-            else if (chore) why = (LotName(chosen.Callee, chosen.Entry) ?? "").IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0 ? "The bills need paying" : "Keeping the house in order"; // (18.5: by its English name)
+            else if (chore) why = VMReduxBrainCare.EssentialWhy(vm, sim, chosen) // (19.5 B5b: a pet fed, a guest greeted or seen off, homework)
+                ?? ((LotName(chosen.Callee, chosen.Entry) ?? "").IndexOf("Pay Bills", StringComparison.OrdinalIgnoreCase) >= 0 ? "The bills need paying" : "Keeping the house in order"); // (18.5: by its English name)
             else
             {
                 // the lowest need it helps with

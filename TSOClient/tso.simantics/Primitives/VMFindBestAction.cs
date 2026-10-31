@@ -161,6 +161,9 @@ namespace FSO.SimAntics.Primitives
             var brain = (level > 0 && context.VM.TS1 && !caller.IsPet) ? new ReduxBrain(context.VM, caller, level) : null;
             // SimsRedux 18.8: a while after the player's own order, free will waits (a need in the red or a fire aside) - Utils/ReduxPlayerPause.cs
             if (familySim && FSO.SimAntics.Utils.VMReduxPlayerPause.Holds(context.VM, caller) && !(brain != null && brain.FireOnLot)) return VMPrimitiveExitCode.GOTO_FALSE;
+            // SimsRedux 19.5 (B5b): finish what they start - an Adaptive Sim nearly done with their own action keeps at it rather than
+            // drop it for something minor (a need in the red, a fire or the baby aside; the player's orders are never touched) - Utils/ReduxBrainHabits.cs
+            if (brain != null && FSO.SimAntics.Utils.VMReduxBrainHabits.FinishFirst(context.VM, caller, level, brain.FireOnLot)) return VMPrimitiveExitCode.GOTO_FALSE;
 
             // SimsRedux 17.4: free will per Sim (attribute 120, VMReduxBrain) - how OFTEN a Sim acts on their own; Sim Smarts
             // decides how WELL. For the household's Sims and a visiting player's own Sim (EffectiveFreeWill - only the Sim's own
@@ -419,6 +422,13 @@ namespace FSO.SimAntics.Primitives
             {
                 var c = brain.FindChore(context, ents, fwRestrict); // (17.4 free will Off / Needs only: only the essentials - a fire, the bills, the repairman)
                 if (c != null) { selection = c; chore = true; }
+            }
+            // SimsRedux 19.5 (B5b): caring for others, chosen outright (the Sims 1 choices advertise nothing) - a family pet in the
+            // red fed, a guest greeted or seen off, a child's homework on a school-day afternoon - Utils/ReduxBrainCare.cs
+            if (!chore && brain != null && level >= 3 && familySim && !brain.Urgent)
+            {
+                var careChoice = FSO.SimAntics.Utils.VMReduxBrainCare.FindCare(context.VM, caller, ents, fwOff, fwRestrict);
+                if (careChoice != null) { selection = careChoice; chore = true; }
             }
             if (selection == null) return VMPrimitiveExitCode.GOTO_FALSE;
             if (!chore && !selection.Entry.AutoFirst && !(brain != null && brain.Urgent))
@@ -914,7 +924,9 @@ namespace FSO.SimAntics.Primitives
         {
             if (Sim.IsPet || Sim.GetMotiveData(VMMotive.SleepState) != 0) return null;
             var energy = Needs[(int)VMMotive.Energy];
-            bool tired = energy < -55 || (Night && energy < 15) || (LateNight && energy < 40);
+            bool tired = energy < -55 || (Night && energy < 15) || (LateNight && energy < 40)
+                // SimsRedux 19.5 (B5b): Adaptive - their own usual bedtime (learned; an hour later before a day off) - Utils/ReduxBrainHabits.cs
+                || (Level >= 3 && FSO.SimAntics.Utils.VMReduxBrainHabits.PastUsualBedtime(context.VM, Sim, energy));
             if (!tired) return null;
             if (BeforeWork && energy > -60) return null; // (the carpool is coming)
             // the bathroom or a meal first if that's worse
