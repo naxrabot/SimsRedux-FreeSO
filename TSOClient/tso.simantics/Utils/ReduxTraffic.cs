@@ -16,6 +16,14 @@ namespace FSO.SimAntics.Utils
     /// Everything here is worked out from what every player already has the same - the game clock and the
     /// cars' own positions - so online every player sees the same cars at the same time. A traffic car is
     /// marked by its attribute 0 (= Marker), so one that was saved with the lot simply drives on.
+    ///
+    /// 19.6 "Neighbourhood life" (on by default): the street follows the town's day - a morning rush (7-9) and
+    /// an evening rush (4-7 PM) on weekdays with up to three cars at once, a little busier on weekend days,
+    /// quiet late at night - with a wider mix of the game's own cars (the pickup truck, the staff sedan, now and
+    /// then a limo or a jeep), and on school-day mornings and afternoons the school bus drives past when it
+    /// isn't stopping for this family. Off (this device, single player): the street is as it was before 19.6.
+    /// On a visit or an online lot it's always on, for every game there alike (a setting can't differ between
+    /// two games playing one lot).
     /// </summary>
     public static class ReduxTraffic
     {
@@ -55,7 +63,37 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>The cars (their main object), with how often each turns up.</summary>
         private static readonly uint[] Cars = { 0xdb6dedb2, 0xdb6dedb2, 0xdb6dedb2, 0xbc3aec18, 0xbc3aec18, 0x1d3dec63, 0x1d3dec63, 0x4b71ecda, 0x17acec22, 0xc8ee6e7d };
+
+        /// <summary>
+        /// 19.6 Neighbourhood life: the wider mix - standard carpool car, town car, SUV, pickup truck (the expansion
+        /// packs' shared objects - if it isn't there, nothing is made that time), junker, staff sedan, Bentley, limo,
+        /// military jeep. (Not the squad car - the police come in one, and a passing one could be taken for theirs.) All use the game's shared car script, which just waits when attribute 0 isn't 1.
+        /// </summary>
+        private static readonly uint[] MoreCars =
+        {
+            0xdb6dedb2, 0xdb6dedb2, 0xdb6dedb2, 0xdb6dedb2, // standard carpool
+            0xbc3aec18, 0xbc3aec18, 0xbc3aec18,             // town car
+            0x1d3dec63, 0x1d3dec63, 0x1d3dec63,             // SUV
+            0xcd0876e1, 0xcd0876e1,                         // pickup truck
+            0x4b71ecda, 0x4b71ecda,                         // junker
+            0xf72aec44,                                     // staff sedan
+            0x17acec22,                                     // Bentley
+            0xc8ee6e7d,                                     // limo (rarely)
+            0xa6f5ed9a,                                     // military jeep (rarely)
+        };
+        /// <summary>The school bus (its own script also just waits when attribute 0 isn't 1).</summary>
+        private const uint SchoolBusGUID = 0x50ac15bf;
         private static readonly HashSet<uint> AllCarGUIDs = new HashSet<uint>();
+
+        /// <summary>
+        /// 19.6: Options > Play > "Neighbourhood life" (this device). The game sets this from the setting; on a
+        /// visit or online lot (vm.ReduxNoPause - set alike on every game there) it counts as on whatever it says.
+        /// The setting itself is never read here.
+        /// </summary>
+        public static bool ExtraLife = true;
+        /// <summary>The setting's key (ReduxSettings) - the same switch for passing cars, street sounds and people.</summary>
+        public const string SettingKey = "nhoodlife";
+        public static bool ExtraOn(VM vm) { return ExtraLife || (vm != null && vm.ReduxNoPause); }
 
         private class Road { public bool AlongX; public int Middle, Start, End; }
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>> RoadCache
@@ -102,19 +140,35 @@ namespace FSO.SimAntics.Utils
                 for (int i = 0; i < traffic.Count; i++) Drive(vm, traffic[i]);
 
                 // a new one now and then (decided from the game clock, the same for everyone)
-                if (clock.Ticks % 30 != 0 || otherCar || carCount >= 2) return;
+                if (clock.Ticks % 30 != 0 || otherCar) return;
                 int hour = clock.Hours;
-                bool night = hour >= 22 || hour < 6;
-                bool evening = hour >= 19 || hour < 7;
-                int chance = night ? 240 : evening ? 120 : 60; // one in this many game minutes or so
+                bool extra = ExtraOn(vm);
+                int chance, maxCars;
+                if (extra) Busy(hour, ReduxWeek.Day(clock) >= 5, out chance, out maxCars);
+                else
+                {
+                    bool night = hour >= 22 || hour < 6;
+                    bool evening = hour >= 19 || hour < 7;
+                    chance = night ? 240 : evening ? 120 : 60; // one in this many game minutes or so
+                    maxCars = 2;
+                }
+                bool bus = extra && SchoolBusDue(vm, clock); // (its one minute: it may make a rush-hour street one busier)
+                if (carCount >= maxCars + (bus ? 1 : 0)) return;
                 uint h = Hash((uint)(clock.Ticks / 30) * 2654435761u ^ (uint)vm.GetGlobalValue(10) * 40503u);
-                if (h % (uint)chance != 0) return;
+                if (!bus && h % (uint)chance != 0) return;
 
                 var roads = Roads(ctx.Architecture);
                 if (roads.Count == 0) return;
                 var road = roads[(int)((h >> 8) % (uint)roads.Count)];
                 bool forward = ((h >> 16) & 1) == 0;
-                uint guid = Cars[(h >> 20) % (uint)Cars.Length];
+                if (extra && !LaneFree(traffic, road, forward))
+                {
+                    forward = !forward; // (the other way, if that lane's clear)
+                    if (!LaneFree(traffic, road, forward)) return;
+                }
+                uint guid = bus ? SchoolBusGUID
+                    : extra ? MoreCars[(h >> 20) % (uint)MoreCars.Length]
+                    : Cars[(h >> 20) % (uint)Cars.Length];
                 Spawn(vm, road, forward, guid);
                 st.Traffic = null; // (the new car is picked up on the next tick)
             }
@@ -123,12 +177,95 @@ namespace FSO.SimAntics.Utils
 
         private static bool IsCar(VMEntity e)
         {
-            if (AllCarGUIDs.Count == 0) lock (AllCarGUIDs) if (AllCarGUIDs.Count == 0) foreach (var g in Cars) AllCarGUIDs.Add(g);
+            if (AllCarGUIDs.Count == 0) lock (AllCarGUIDs) if (AllCarGUIDs.Count == 0)
+                    {
+                        foreach (var g in Cars) AllCarGUIDs.Add(g);
+                        foreach (var g in MoreCars) AllCarGUIDs.Add(g);
+                        AllCarGUIDs.Add(SchoolBusGUID);
+                    }
             var guid = e.Object?.OBJ?.GUID ?? 0;
             if (AllCarGUIDs.Contains(guid)) return true;
             // any other carpool car (the game's carpools and visitors' cars) - by its name
             var label = e.Object?.OBJ?.ChunkLabel ?? "";
             return label.StartsWith("Car - ", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 19.6 Neighbourhood life: how busy the street is at this hour - one new car in about this many game
+        /// minutes, and the most cars on the street at once. Weekdays: a morning rush (7-9) and an evening rush
+        /// (4-7 PM); weekends: no rush, a little busier all day; late at night: quiet.
+        /// </summary>
+        private static void Busy(int hour, bool weekend, out int chance, out int maxCars)
+        {
+            if (!weekend)
+            {
+                if (hour >= 7 && hour < 9) { chance = 12; maxCars = 3; return; }   // morning rush
+                if (hour >= 16 && hour < 19) { chance = 14; maxCars = 3; return; } // evening rush
+                if (hour >= 9 && hour < 16) { chance = 45; maxCars = 2; return; }
+            }
+            else if (hour >= 8 && hour < 20) { chance = 30; maxCars = 2; return; } // weekend days
+            if (hour >= 19 && hour < 22) { chance = 80; maxCars = 2; return; }
+            if (hour >= 5 && hour < 9) { chance = 110; maxCars = 2; return; }
+            if (hour >= 22) { chance = 220; maxCars = 1; return; }
+            chance = 320; maxCars = 1; // midnight to 5 AM
+        }
+
+        /// <summary>
+        /// 19.6: the school bus drives past once on a school-day morning (7:20-8:19) and once in the afternoon
+        /// (3:00-3:49), at a minute picked from the date and the lot - unless it stops here for this family's
+        /// children (then the game's own bus comes, as always). Monday to Friday, like school (ReduxWeek).
+        /// </summary>
+        private static bool SchoolBusDue(VM vm, VMClock clock)
+        {
+            if (ReduxWeek.Day(clock) >= 5) return false;
+            if (clock.MinuteFractions >= 30) return false; // (one try at that minute, even when a minute is longer)
+            int now = clock.Hours * 60 + clock.Minutes;
+            bool morning = now >= 7 * 60 && now < 9 * 60;
+            bool afternoon = now >= 15 * 60 && now < 16 * 60;
+            if (!morning && !afternoon) return false;
+            uint date = (uint)((clock.Year - 1997) * 360 + (clock.Month - 1) * 30 + clock.DayOfMonth);
+            uint bh = Hash(date * 7919u ^ (uint)vm.GetGlobalValue(10) * 40503u ^ (morning ? 0x5bu : 0xa7u));
+            int at = morning ? 7 * 60 + 20 + (int)(bh % 60) : 15 * 60 + (int)(bh % 50);
+            if (now != at) return false;
+            return !FamilyHasChildren(vm);
+        }
+
+        /// <summary>Does the family living here have school-age children (the game's own bus stops for them)?</summary>
+        private static bool FamilyHasChildren(VM vm)
+        {
+            var fam = vm.TS1State?.CurrentFamily;
+            if (fam == null) return false;
+            foreach (var a in vm.Context.ObjectQueries.Avatars)
+            {
+                var ava = a as VMAvatar;
+                if (ava == null || ava.IsPet) continue;
+                if (ava.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != fam.ChunkID) continue;
+                if (ava.IsChild) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 19.6: no new car in a lane while another car going the same way is still near where it would appear
+        /// (they all drive at the same speed, so the gap stays).
+        /// </summary>
+        private static bool LaneFree(List<VMMultitileGroup> traffic, Road road, bool forward)
+        {
+            var dir = DirFor(road.AlongX, forward);
+            int lane = road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
+            int along = forward ? road.Start + 7 : road.End - 7;
+            for (int i = 0; i < traffic.Count; i++)
+            {
+                var b = traffic[i].BaseObject;
+                if (b == null || b.Dead || b.Direction != dir) continue;
+                var p = b.Position;
+                if (p == LotTilePos.OUT_OF_WORLD) continue;
+                int tAlong = road.AlongX ? p.x / 16 : p.y / 16;
+                int tAcross = road.AlongX ? p.y / 16 : p.x / 16;
+                if (Math.Abs(tAcross - lane) > 3) continue; // (another street)
+                if (Math.Abs(tAlong - along) < 14) return false;
+            }
+            return true;
         }
 
         /// <summary>The streets on the lot: 5+ tiles of road side by side (the Sims 1 street is 7 tiles wide,

@@ -106,6 +106,8 @@ namespace FSO.SimAntics.Primitives
                 context.StackObject = better.Callee;
                 return VMPrimitiveExitCode.GOTO_TRUE;
             }
+            // SimsRedux 19.6: someone walking along the street outside chooses nothing of their own (Utils/ReduxSidewalk.cs)
+            if (context.VM.TS1 && FSO.SimAntics.Utils.ReduxSidewalk.NoFreeWill(context.Caller as VMAvatar)) return VMPrimitiveExitCode.GOTO_FALSE;
 
             // SimsRedux: the player is always in charge. While anything the player ordered is still
             // waiting in this Sim's queue (even behind the action that's running now), the Sim never

@@ -35,6 +35,22 @@ namespace FSO.SimAntics.Utils
             return true;
         }
 
+        /// <summary>19.6: the most people out on the street in front of a lot at once (passers-by, joggers, children... - a
+        /// dog walker's dog not counted), and the most of them and visitors together.</summary>
+        public const int StreetHome = 3, StreetCommunity = 4, StreetAndVisitorsHome = 6, StreetAndVisitorsCommunity = 10;
+
+        /// <summary>
+        /// 19.6: room for more people walking by (ReduxStreetPeople): street = people out on the street now (and on their
+        /// way), adding = how many more would come (2 for a pair), visitors = the lot's visitors. Passers-by don't count
+        /// towards the uninvited visitors a day (TryVisit): they walk on - unless the family stops them, as any walk-by.
+        /// </summary>
+        public static bool StreetRoom(bool community, int street, int adding, int visitors)
+        {
+            int max = community ? StreetCommunity : StreetHome;
+            int both = community ? StreetAndVisitorsCommunity : StreetAndVisitorsHome;
+            return street + adding <= max && street + adding + visitors <= both;
+        }
+
         /// <summary>
         /// Called for each global script call: the Visit Generator scheduling someone to come over
         /// ("Schedule with param"). True: skip it - enough visitors today.
