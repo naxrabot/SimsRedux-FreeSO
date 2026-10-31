@@ -109,8 +109,22 @@ namespace FSO.SimAntics.Utils
             var result = new List<Walk>();
             try { Find(ctx, arch, result); }
             catch (Exception e) { Console.WriteLine("[SimsRedux] sidewalks: " + e.Message); }
-            try { Cache.Add(arch, result); } catch (ArgumentException) { }
+            // (19.6 fix: an empty answer isn't kept - asked before the lot's floor was in, it stayed "no street" for good)
+            if (result.Count > 0)
+            {
+                try { Cache.Add(arch, result); } catch (ArgumentException) { }
+            }
             return result;
+        }
+
+        /// <summary>19.6: the game log's street-life line - how many sidewalks, and their tiles.</summary>
+        public static string Describe(VMContext ctx)
+        {
+            var walks = Sidewalks(ctx);
+            if (walks.Count == 0) return "no sidewalk (no street on this lot)";
+            int tiles = 0;
+            foreach (var wk in walks) tiles += Math.Abs(wk.To - wk.From) + 1;
+            return walks.Count + " sidewalk" + (walks.Count == 1 ? "" : "s") + ", " + tiles + " tiles";
         }
 
         private static void Find(VMContext ctx, VMArchitecture arch, List<Walk> result)

@@ -197,17 +197,57 @@ namespace FSO.SimAntics.Utils
         /// </summary>
         private static void Busy(int hour, bool weekend, out int chance, out int maxCars)
         {
+            // (19.6 fix: the first numbers - one in 45 game minutes by day, 30 at weekends - were hardly more than
+            //  the old street's one in 60, so the street looked the same. A car takes about 15 game minutes to drive
+            //  past, so one in 10 keeps a car or two in sight most of the day, and the rush hours are clearly busy.)
             if (!weekend)
             {
-                if (hour >= 7 && hour < 9) { chance = 12; maxCars = 3; return; }   // morning rush
-                if (hour >= 16 && hour < 19) { chance = 14; maxCars = 3; return; } // evening rush
-                if (hour >= 9 && hour < 16) { chance = 45; maxCars = 2; return; }
+                if (hour >= 7 && hour < 9) { chance = 4; maxCars = 3; return; }   // morning rush
+                if (hour >= 16 && hour < 19) { chance = 4; maxCars = 3; return; } // evening rush
+                if (hour >= 9 && hour < 16) { chance = 10; maxCars = 3; return; }
             }
-            else if (hour >= 8 && hour < 20) { chance = 30; maxCars = 2; return; } // weekend days
-            if (hour >= 19 && hour < 22) { chance = 80; maxCars = 2; return; }
-            if (hour >= 5 && hour < 9) { chance = 110; maxCars = 2; return; }
-            if (hour >= 22) { chance = 220; maxCars = 1; return; }
-            chance = 320; maxCars = 1; // midnight to 5 AM
+            else if (hour >= 8 && hour < 20) { chance = 8; maxCars = 3; return; } // weekend days
+            if (hour >= 19 && hour < 22) { chance = 16; maxCars = 2; return; }
+            if (hour >= 5 && hour < 9) { chance = 25; maxCars = 2; return; }
+            if (hour >= 22) { chance = 45; maxCars = 2; return; }
+            chance = 90; maxCars = 1; // midnight to 5 AM
+        }
+
+        /// <summary>19.6: how many streets this lot has (for the game log's street-life line).</summary>
+        public static int RoadCount(VMArchitecture arch)
+        {
+            try { return arch == null ? 0 : Roads(arch).Count; } catch { return 0; }
+        }
+
+        /// <summary>
+        /// 19.6: the "streetlife" test cheat (through VMNetReduxTownieCmd StreetCar, so every game on the lot does the
+        /// same): a car drives past right away - on the first street with a free lane. False: no street, or no room.
+        /// </summary>
+        public static bool SpawnNow(VM vm)
+        {
+            if (vm == null || !vm.TS1 || vm.Context?.Architecture == null) return false;
+            var roads = Roads(vm.Context.Architecture);
+            if (roads.Count == 0) return false;
+            var st = Seen.GetValue(vm, _ => new LotCars());
+            var traffic = new List<VMMultitileGroup>();
+            foreach (var e in vm.Entities)
+            {
+                if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject || e.Dead) continue;
+                if (IsCar(e) && e.GetAttribute(0) == Marker) traffic.Add(e.MultitileGroup);
+            }
+            uint h = Hash((uint)vm.Context.Clock.Ticks * 2654435761u ^ 0x51u);
+            for (int i = 0; i < roads.Count * 2; i++)
+            {
+                var road = roads[(int)((h + (uint)(i / 2)) % (uint)roads.Count)];
+                bool forward = (((h >> 16) & 1) == 0) ^ (i % 2 == 1);
+                if (!LaneFree(traffic, road, forward)) continue;
+                if (Spawn(vm, road, forward, MoreCars[(h >> 20) % (uint)MoreCars.Length]))
+                {
+                    st.Traffic = null; // (picked up on the next tick)
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -324,7 +364,7 @@ namespace FSO.SimAntics.Utils
             return d;
         }
 
-        private static void Spawn(VM vm, Road road, bool forward, uint guid)
+        private static bool Spawn(VM vm, Road road, bool forward, uint guid)
         {
             var ctx = vm.Context;
             // right-hand traffic: heading +x the lane is on the +y side, heading +y it's on the -x side
@@ -332,21 +372,22 @@ namespace FSO.SimAntics.Utils
             var dir = DirFor(road.AlongX, forward);
             int along = forward ? road.Start + 7 : road.End - 7;
             var group = ctx.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, dir);
-            if (group == null) return;
+            if (group == null) return false;
             foreach (var o in group.Objects) o.SetAttribute(0, Marker); // (not a carpool: its main just waits)
             MarkMoving(group);
 
             // put it there, then line its middle up with the lane
             var pos = road.AlongX ? LotTilePos.FromBigTile((short)along, (short)lane, 1) : LotTilePos.FromBigTile((short)lane, (short)along, 1);
             pos = new LotTilePos((short)(pos.x + 8), (short)(pos.y + 8), 1);
-            if (Move(group, pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return; }
+            if (Move(group, pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return false; }
             int cx = 0, cy = 0, n = 0;
             foreach (var o in group.Objects) { if (o.Position == LotTilePos.OUT_OF_WORLD) continue; cx += o.Position.x; cy += o.Position.y; n++; }
-            if (n == 0) { group.Delete(ctx); return; }
+            if (n == 0) { group.Delete(ctx); return false; }
             cx /= n; cy /= n;
             int want = lane * 16 + 8;
             var fixedPos = road.AlongX ? new LotTilePos(pos.x, (short)(pos.y + (want - cy)), 1) : new LotTilePos((short)(pos.x + (want - cx)), pos.y, 1);
-            if (Move(group, fixedPos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) group.Delete(ctx);
+            if (Move(group, fixedPos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return false; }
+            return true;
         }
 
         private static void Drive(VM vm, VMMultitileGroup group)

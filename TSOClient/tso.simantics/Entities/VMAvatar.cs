@@ -445,6 +445,8 @@ namespace FSO.SimAntics
             }
             BoundAppearances.Clear();
             if (context.VM.EODHost != null) context.VM.EODHost.ForceDisconnect(this);
+            // SimsRedux 19.6: reset while away at work or school (script cleared, still out of the world) - back onto the lot
+            FSO.SimAntics.Utils.ReduxAway.AfterReset(context.VM, this);
         }
 
         private void HandleTimePropsEvent(TimePropertyListItem tp)

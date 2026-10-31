@@ -45,6 +45,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             StreetStay = 7,
             /// <summary>Street Sim ObjectID reached the end of the sidewalk: taken off the lot (with its Go Here markers).</summary>
             StreetRemove = 8,
+            /// <summary>19.6 test cheat "streetlife": a passing car right away (FSO.SimAntics.Utils.ReduxTraffic.SpawnNow).</summary>
+            StreetCar = 9,
         }
 
         /// <summary>Sims 1's global "Leave" routine (route to a random portal, then go).</summary>
@@ -95,6 +97,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     case TownieMode.StreetGo: return StreetGo(vm);
                     case TownieMode.StreetStay: return StreetStay(vm);
                     case TownieMode.StreetRemove: return StreetRemove(vm);
+                    case TownieMode.StreetCar: return FSO.SimAntics.Utils.ReduxTraffic.SpawnNow(vm);
                 }
             }
             catch (Exception e)
@@ -207,6 +210,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             // passing by: a visitor nobody has greeted yet (Sims 1's walk-by - the family can greet them as usual)
             ava.SetPersonData(VMPersonDataVariable.PersonType, 1);
             ava.SetPersonData(VMPersonDataVariable.GreetStatus, (short)(Greet >= 0 ? Greet : 0));
+            // (19.6 fix: when a Sim starts, Sims 1's "person main" sends a visitor whose greet status is 0 on a home lot
+            //  straight to the front door - "begin visiting": ring the bell, wait to be greeted, go home - so every
+            //  passer-by turned into a bell-ringer. -1 is what "begin visiting" itself sets on the way to the door, so
+            //  person main lets them be; once they're walking, the game deciding sets 0 again (SetPerson, from
+            //  ReduxStreetPeople) so the family can greet them as usual. Dogs don't have that script.)
+            if (!dog && Greet <= 0) ava.SetPersonData(VMPersonDataVariable.GreetStatus, -1);
             // in good shape, as Arrive (a visitor low on a need heads home at once) - the lot's own random numbers
             foreach (var m in new[] { VMMotive.Energy, VMMotive.Comfort, VMMotive.Hunger, VMMotive.Hygiene, VMMotive.Bladder })
                 ava.SetMotiveData(m, (short)(45 + (int)vm.Context.NextRandom(40)));

@@ -91,6 +91,7 @@ namespace FSO.SimAntics.Utils
         private static bool Guest(VM vm, VMAvatar a)
         {
             if (!Here(a) || a.IsPet || Family(vm, a) || Npc(a) || a.GetPersonData(VMPersonDataVariable.IsGhost) != 0) return false;
+            if (ReduxSidewalk.IsStreet(a)) return false; // (19.6: only walking past on the street - not greeted or seen off)
             return a.GetPersonData(VMPersonDataVariable.PersonType) == 1 || VMReduxBrain.VisitingSim(vm, a);
         }
 

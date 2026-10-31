@@ -44,6 +44,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     }
                     sim.Thread.BlockingState = null;
                     sim.Reset(vm.Context);
+                    // (19.6: off the lot - in a car, left out of the world - back by the mailbox, no longer hidden or "at work")
+                    if (vm.TS1 && FSO.SimAntics.Utils.ReduxAway.OffLot(sim)) return FSO.SimAntics.Utils.ReduxAway.BringBack(vm, sim, "was un-stuck from the debug menu");
                     return MoveToFreeSpot(vm, sim);
                 case DebugAction.FillNeeds:
                     foreach (var m in new[] { VMMotive.Energy, VMMotive.Comfort, VMMotive.Hunger, VMMotive.Hygiene,

@@ -31,6 +31,9 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             // sofa): they stood inside it and couldn't walk anywhere until it was deleted. Put them on the nearest
             // open spot, as the debug menu's un-stick does. (Lot state only, so every game on the lot does the same.)
             if (vm.TS1 && sim.Container is VMGameObject) VMNetDebugSimCmd.MoveToFreeSpot(vm, sim);
+            // SimsRedux 19.6: reset while off the lot (in a car, at work...): with their script gone nothing would bring
+            // them back - they come back onto the lot now (Utils/ReduxAway.cs; the at-work case is already done by the reset)
+            if (vm.TS1 && FSO.SimAntics.Utils.ReduxAway.OffLot(sim)) FSO.SimAntics.Utils.ReduxAway.BringBack(vm, sim, "was reset while off the lot");
             return true;
         }
 

@@ -382,6 +382,7 @@ namespace FSO.SimAntics.Engine
             if (interaction.Callback != null) interaction.Callback.Run(Entity);
             if (Queue.Count > 0) Queue.RemoveAt(ActiveQueueBlock);
             if (Entity is VMAvatar && !IsCheck && ActiveQueueBlock == 0) ReduxStopLeftoverSounds();
+            if (Entity is VMAvatar && !IsCheck) FSO.SimAntics.Utils.ReduxAway.InteractionEnded(Entity, interaction); // (19.6: At Work/School ended off the lot)
             if (Entity is VMAvatar && !IsCheck && ActiveQueueBlock == 0)
             {
                 //some things are reset when an interaction ends

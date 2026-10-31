@@ -28,7 +28,17 @@ namespace FSO.Content
     /// </summary>
     public class Content
     {
-        public static ContentLoadingProgress LoadProgress;
+        public static ContentLoadingProgress LoadProgress
+        {
+            get { return _LoadProgress; }
+            set { _LoadProgress = value; try { ReduxProgressChanged?.Invoke(value); } catch { } }
+        }
+        private static ContentLoadingProgress _LoadProgress;
+        /// <summary>
+        /// SimsRedux 19.6 (web): told at each loading stage as it starts - the browser writes it down at once, because the
+        /// whole content load is one long step there and Safari can close the page part way through it.
+        /// </summary>
+        public static System.Action<ContentLoadingProgress> ReduxProgressChanged;
 
         public static void Init(string basepath, GraphicsDevice device){
             if (INSTANCE != null) {

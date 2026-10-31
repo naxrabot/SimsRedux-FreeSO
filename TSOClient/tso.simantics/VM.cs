@@ -1043,6 +1043,14 @@ namespace FSO.SimAntics
                 });
             }
             
+            // SimsRedux 19.6: a family Sim saved off the lot with nothing to bring them back (an "At Work" cancelled and
+            // reset by older versions) comes back by the mailbox - from the save alone, and never on an online join/resync
+            if (TS1)
+            {
+                try { FSO.SimAntics.Utils.ReduxAway.RepairStranded(this); }
+                catch (Exception e) { Console.WriteLine("[SimsRedux] away: checking for stranded Sims: " + e.Message); }
+            }
+
             Context.UpdateTSOBuildableArea();
             Tuning = input.Tuning;
             UpdateTuning();
