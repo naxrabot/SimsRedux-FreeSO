@@ -101,6 +101,8 @@ namespace FSO.SimAntics
             if (!UseWorld) return true;
             var newGraphic = Object.OBJ.BaseGraphicID + ObjectData[(int)VMStackObjectVariable.Graphic];
             var dgrp = Object.Resource.Get<DGRP>((ushort)newGraphic);
+            // SimsRedux: an NFSU2 car's picture over a Maxis car, when the car pack is here (drawing only - ReduxCarSkins)
+            if (dgrp != null) dgrp = Utils.ReduxCarSkins.Swap(this) ?? dgrp;
             if (dgrp != null)
             {
                 ((ObjectComponent)WorldUI).DGRP = dgrp;

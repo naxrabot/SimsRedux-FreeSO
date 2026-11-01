@@ -129,7 +129,7 @@ namespace FSO.SimAntics.Utils
                             st.Traffic.Add(e.MultitileGroup);
                             MarkMoving(e.MultitileGroup); // (one saved with the lot, or just made)
                         }
-                        else st.OtherCar = true;
+                        else { st.OtherCar = true; ReduxCarSkins.EnsureDrawn(e); } // (a carpool: its NFSU2 picture once the lot's Sims are in)
                     }
                 }
                 st.Traffic.RemoveAll(g => g.BaseObject == null || g.BaseObject.Dead);
@@ -169,7 +169,8 @@ namespace FSO.SimAntics.Utils
                 uint guid = bus ? SchoolBusGUID
                     : extra ? MoreCars[(h >> 20) % (uint)MoreCars.Length]
                     : Cars[(h >> 20) % (uint)Cars.Length];
-                Spawn(vm, road, forward, guid);
+                // 20.x: which NFSU2 car it's drawn as when the car pack is here - decided now, the same on every game (ReduxCarSkins)
+                Spawn(vm, road, forward, guid, bus ? (short)0 : ReduxCarSkins.PickTraffic(vm, h, traffic));
                 st.Traffic = null; // (the new car is picked up on the next tick)
             }
             catch (Exception ex) { Console.WriteLine("[SimsRedux] traffic: " + ex.Message); }
@@ -241,7 +242,7 @@ namespace FSO.SimAntics.Utils
                 var road = roads[(int)((h + (uint)(i / 2)) % (uint)roads.Count)];
                 bool forward = (((h >> 16) & 1) == 0) ^ (i % 2 == 1);
                 if (!LaneFree(traffic, road, forward)) continue;
-                if (Spawn(vm, road, forward, MoreCars[(h >> 20) % (uint)MoreCars.Length]))
+                if (Spawn(vm, road, forward, MoreCars[(h >> 20) % (uint)MoreCars.Length], ReduxCarSkins.PickTraffic(vm, h, traffic)))
                 {
                     st.Traffic = null; // (picked up on the next tick)
                     return true;
@@ -364,7 +365,7 @@ namespace FSO.SimAntics.Utils
             return d;
         }
 
-        private static bool Spawn(VM vm, Road road, bool forward, uint guid)
+        private static bool Spawn(VM vm, Road road, bool forward, uint guid, short skin = 0)
         {
             var ctx = vm.Context;
             // right-hand traffic: heading +x the lane is on the +y side, heading +y it's on the -x side
@@ -374,6 +375,12 @@ namespace FSO.SimAntics.Utils
             var group = ctx.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, dir);
             if (group == null) return false;
             foreach (var o in group.Objects) o.SetAttribute(0, Marker); // (not a carpool: its main just waits)
+            // 20.x: its NFSU2 car (picked without looking at the pack, so every game keeps the same lot), then its pictures
+            if (skin > 0 && group.BaseObject != null && ReduxCarSkins.IsSkinnable(group.BaseObject.Object?.OBJ?.GUID ?? 0))
+            {
+                group.BaseObject.SetAttribute(ReduxCarSkins.SkinAttribute, skin);
+                ReduxCarSkins.Refresh(group);
+            }
             MarkMoving(group);
 
             // put it there, then line its middle up with the lane
