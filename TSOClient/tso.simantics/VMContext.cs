@@ -1261,6 +1261,8 @@ namespace FSO.SimAntics
                     var flags = (VMEntityFlags)obj.GetValue(VMStackObjectVariable.Flags);
                     bool allowAvatars = (obj is VMAvatar && meAllowAvatars) || 
                         (((flags & VMEntityFlags.DisallowPersonIntersection) == 0) && ((flags & VMEntityFlags.AllowPersonIntersection) > 0));
+                    // SimsRedux 20.2: two Sims out on the street pass each other on the sidewalk (one tile wide - no room to step aside)
+                    if (obj is VMAvatar && VM != null && VM.TS1 && FSO.SimAntics.Utils.ReduxSidewalk.IsStreet(target) && FSO.SimAntics.Utils.ReduxSidewalk.IsStreet(obj)) allowAvatars = true;
 
                     if (allASolid && obj is VMAvatar) allowAvatars = false;
 

@@ -79,7 +79,8 @@ namespace FSO.SimAntics.Engine
         {
             get
             {
-                return (InPool)?(short)0:Caller.GetValue(VMStackObjectVariable.WalkStyle);
+                // (SimsRedux 20.2: a Sim out on the street walks - never runs - whatever set its walk style; joggers and the dog excepted)
+                return (InPool)?(short)0:FSO.SimAntics.Utils.ReduxSidewalk.WalkStyleOf(Caller, Caller.GetValue(VMStackObjectVariable.WalkStyle));
             }
             set
             {
@@ -357,10 +358,15 @@ namespace FSO.SimAntics.Engine
             obstacles.Add(new VMObstacle(bx+width, by-16, bx+width+16, by+height+16));
 
             var considerAvatars = !Caller.GetFlag(VMEntityFlags.AllowPersonIntersection);
+            // SimsRedux 20.2: a Sim out on the street routes along the sidewalk only (and passes the others out there)
+            var reduxStreet = VM.TS1 && FSO.SimAntics.Utils.ReduxSidewalk.IsStreet(Caller);
+            if (reduxStreet && !FSO.SimAntics.Utils.ReduxSidewalk.LimitRoute(VM.Context, startPos, CurRoute.Position,
+                Callee?.Object?.GUID == GOTO_GUID, obstacles)) return false;
 
             foreach (var obj in roomInfo.Entities)
             {
                 var ft = obj.Footprint;
+                if (reduxStreet && obj is VMAvatar && FSO.SimAntics.Utils.ReduxSidewalk.IsStreet(obj)) continue;
 
                 var flags = (VMEntityFlags)obj.GetValue(VMStackObjectVariable.Flags);
                 if (obj != Caller && ft != null &&

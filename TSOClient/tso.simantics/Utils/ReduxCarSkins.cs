@@ -174,9 +174,24 @@ namespace FSO.SimAntics.Utils
         public static string PackFolder = "";
         /// <summary>Options switch (this device): NFSU2 cars on, when the pack is there.</summary>
         public static bool Enabled = true;
+        /// <summary>
+        /// 20.2: where the pack came from on this game, or why there's none - in plain words, set by whoever sets PackFolder
+        /// (the apps' NativeGameFlow, the Windows build, the website's WebStartup). Shown by the "carpack" cheat.
+        /// </summary>
+        public static string Source = "not set up by this program";
+        /// <summary>20.2: how many car parts have been drawn from the pack so far (the "carpack" cheat).</summary>
+        public static int Swapped;
 
         private class PackFile { public string Path; public Dictionary<short, ushort> DgrpBySub; public byte[] Bytes; }
         private static Dictionary<string, PackFile> Files; // "COROLLA" / "COROLLA_custom" -> file
+        /// <summary>20.2: the folder Files was read from (PackFolder changed since - e.g. set after something asked: read again).</summary>
+        private static string IndexedFolder;
+        /// <summary>20.2: what reading the manifest found ("" = fine) - the "carpack" cheat.</summary>
+        private static string IndexProblem = "";
+        private static bool ManifestSeen;
+        /// <summary>The IFFs read from the pack (to tell a car drawn from the pack from one drawn as the Sims car).</summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IffFile, object> PackIffs
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<IffFile, object>();
         private static readonly object Lock = new object();
         private static readonly Dictionary<short, IffFile> Loaded = new Dictionary<short, IffFile>(); // skin code -> its IFF (with its paint)
         private static readonly Queue<short> LoadOrder = new Queue<short>();
@@ -194,23 +209,36 @@ namespace FSO.SimAntics.Utils
 
         private static void EnsureIndex()
         {
-            if (Files != null) return;
+            var folder = PackFolder ?? "";
+            if (Files != null && IndexedFolder == folder) return;
+            // (20.2: read again when the folder changed - it was once cached empty for good when asked before it was set)
+            if (Files != null) { Loaded.Clear(); LoadOrder.Clear(); }
             Files = new Dictionary<string, PackFile>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrEmpty(PackFolder)) return;
+            IndexedFolder = folder;
+            ManifestSeen = false;
+            IndexProblem = "";
+            if (string.IsNullOrEmpty(folder)) { IndexProblem = "no pack folder"; return; }
             try
             {
-                var manifest = Path.Combine(PackFolder, "carpack.json");
-                if (!FSOFile.Exists(manifest)) return;
+                var manifest = Path.Combine(folder, "carpack.json");
+                if (!FSOFile.Exists(manifest))
+                {
+                    IndexProblem = "no carpack.json in " + folder;
+                    Console.WriteLine("[SimsRedux] car pack: " + IndexProblem + " - the Sims cars stay");
+                    return;
+                }
+                ManifestSeen = true;
                 // the manifest's "file" entries (cars/COROLLA.iff, cars/COROLLA_custom.iff) - only plain names inside the pack
                 foreach (Match m in Regex.Matches(FSOFile.ReadAllText(manifest), "\"file\"\\s*:\\s*\"(cars/[A-Za-z0-9_\\-]+\\.iff)\""))
                 {
                     var rel = m.Groups[1].Value;
                     var key = Path.GetFileNameWithoutExtension(rel);
-                    Files[key] = new PackFile { Path = Path.Combine(PackFolder, rel) };
+                    Files[key] = new PackFile { Path = Path.Combine(folder, rel) };
                 }
-                Console.WriteLine("[SimsRedux] car pack: " + Files.Count + " car files from " + PackFolder);
+                if (Files.Count == 0) IndexProblem = "carpack.json lists no car files";
+                Console.WriteLine("[SimsRedux] car pack: " + Files.Count + " car files from " + folder + " (" + Source + ")");
             }
-            catch (Exception e) { Console.WriteLine("[SimsRedux] car pack: " + e.Message); Files.Clear(); }
+            catch (Exception e) { IndexProblem = "couldn't read carpack.json: " + e.Message; Console.WriteLine("[SimsRedux] car pack: " + e.Message); Files.Clear(); }
         }
 
         /// <summary>The IFF for a skin with its paint copied over PALT #1 (a few kept; the oldest dropped).</summary>
@@ -237,6 +265,7 @@ namespace FSO.SimAntics.Utils
                     foreach (var o in iff.List<OBJD>()) if (o.SubIndex != -1) file.DgrpBySub[o.SubIndex] = o.BaseGraphicID;
                 }
                 Loaded[code] = iff;
+                try { PackIffs.Add(iff, null); } catch { }
                 LoadOrder.Enqueue(code);
                 while (LoadOrder.Count > MaxLoaded) Loaded.Remove(LoadOrder.Dequeue());
                 return iff;
@@ -283,7 +312,9 @@ namespace FSO.SimAntics.Utils
                     var iff = Load(code, out file);
                     ushort id;
                     if (iff == null || file.DgrpBySub == null || !file.DgrpBySub.TryGetValue(obj.Object.OBJ.SubIndex, out id)) return null;
-                    return iff.Get<DGRP>(id);
+                    var d = iff.Get<DGRP>(id);
+                    if (d != null && Swapped++ == 0) Console.WriteLine("[SimsRedux] car pack: the first car part is drawn from the pack (" + CarFolders[code > 0 ? ((code - 1) / 16) % 64 : 0] + ")");
+                    return d;
                 }
             }
             catch (Exception e) { Console.WriteLine("[SimsRedux] car pack: " + e.Message); return null; }
@@ -309,6 +340,58 @@ namespace FSO.SimAntics.Utils
                 Refresh(baseObj.MultitileGroup);
             }
             catch { }
+        }
+
+        // ================================================================ 20.2: what's going on (the "carpack" cheat)
+
+        /// <summary>Forget what was read and draw every car on the lot again (drawing only - the cheat's "try again").</summary>
+        public static void Redraw(VM vm)
+        {
+            Reset();
+            if (vm?.Entities == null) return;
+            foreach (var g in vm.Entities.Where(e => e != null && e.MultitileGroup != null && e.MultitileGroup.BaseObject == e
+                && IsSkinnable(e.Object?.OBJ?.GUID ?? 0)).Select(e => e.MultitileGroup).ToList())
+                Refresh(g);
+        }
+
+        /// <summary>
+        /// The pack's side of the chain, for the "carpack" cheat: the folder, its manifest, the car files listed, and the
+        /// cars on this lot - how many could be NFSU2 cars, how many the pack has a car for, how many are drawn from it now.
+        /// Read only (drawing state).
+        /// </summary>
+        public static string Report(VM vm, out bool working)
+        {
+            working = false;
+            int indexed, cars = 0, haveSkin = 0, drawn = 0;
+            bool manifest; string problem;
+            lock (Lock)
+            {
+                EnsureIndex();
+                indexed = Files.Count; manifest = ManifestSeen; problem = IndexProblem;
+                if (vm?.Entities != null)
+                {
+                    foreach (var e in vm.Entities.ToList())
+                    {
+                        if (e == null || e.MultitileGroup == null || e.MultitileGroup.BaseObject != e || !IsSkinnable(e.Object?.OBJ?.GUID ?? 0)) continue;
+                        cars++;
+                        try
+                        {
+                            short code = SkinOf(e);
+                            if (Decode(code, out int car, out bool custom, out _) && Files.ContainsKey(CarFolders[car] + (custom ? "_custom" : ""))) haveSkin++;
+                            object x;
+                            if (e.MultitileGroup.Objects.Any(o => (o as VMGameObject)?.WorldUI is FSO.LotView.Components.ObjectComponent oc
+                                && oc.DGRP?.ChunkParent != null && PackIffs.TryGetValue(oc.DGRP.ChunkParent, out x))) drawn++;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            working = Enabled && indexed > 0 && (cars == 0 || drawn > 0);
+            var folder = string.IsNullOrEmpty(PackFolder) ? "(none)" : PackFolder;
+            return "Pack: " + Source + "\n" +
+                "Folder: " + folder + "\n" +
+                "carpack.json " + (manifest ? "found" : "NOT found") + ", " + indexed + " car files" + (problem.Length > 0 ? " (" + problem + ")" : "") + "\n" +
+                "This lot: " + cars + " cars, " + haveSkin + " in the pack, " + drawn + " drawn as NFSU2 cars (" + Swapped + " parts so far)" + (Enabled ? "" : " - switched off on this device");
         }
 
         /// <summary>After a car's skin is set: its pictures again (drawing only).</summary>

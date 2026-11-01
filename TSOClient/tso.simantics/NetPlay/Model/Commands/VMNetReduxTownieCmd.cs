@@ -501,7 +501,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (Sidewalk.PlanFor(vm.Context, me.Position.TileX, me.Position.TileY, ex, ey, false, out tx, out ty) == null) return false;
             // the walk they were on stops (where they are, on the sidewalk); after the social they set off again for the same
             // end, along the sidewalk (19.10; 20.1: round the corner if their way goes on there)
-            CancelWalk(vm, me, false);
+            CancelWalk(vm, me, true); // (20.2: and any Sims 1 "Leave" - a street Sim only ever leaves at the end of its sidewalk)
             if (!WalkRoute(vm, me, ex, ey, true)) return false;
             me.Thread.EnqueueAction(social); // (ahead of the new walk: both go right after what's running now)
             return true;

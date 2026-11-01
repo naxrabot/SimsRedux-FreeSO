@@ -115,7 +115,7 @@ namespace FSO.SimAntics.Engine.Primitives
                     var state = new VMAnimationState(animation, operand.PlayBackwards);
                     if (context.VM.TS1 || newMode)
                         state.Speed = 30 / 25f;
-                    if (avatar.GetValue(VMStackObjectVariable.WalkStyle) == 1 && operand.Hurryable) state.Speed *= 2;
+                    if (FSO.SimAntics.Utils.ReduxSidewalk.WalkStyleOf(avatar, avatar.GetValue(VMStackObjectVariable.WalkStyle)) == 1 && operand.Hurryable) state.Speed *= 2;
                     state.Loop = true;
                     avatar.Animations.Add(state);
 
@@ -134,7 +134,7 @@ namespace FSO.SimAntics.Engine.Primitives
                         var astate = new VMAnimationState(animation, operand.PlayBackwards);
                         if (context.VM.TS1 || newMode)
                             astate.Speed = 30 / 25f;
-                        if (avatar.GetValue(VMStackObjectVariable.WalkStyle) == 1 && operand.Hurryable) astate.Speed *= 2;
+                        if (FSO.SimAntics.Utils.ReduxSidewalk.WalkStyleOf(avatar, avatar.GetValue(VMStackObjectVariable.WalkStyle)) == 1 && operand.Hurryable) astate.Speed *= 2;
                         avatar.Animations.Add(astate);
                     
                         avatar.Avatar.LeftHandGesture = SimHandGesture.Idle;
