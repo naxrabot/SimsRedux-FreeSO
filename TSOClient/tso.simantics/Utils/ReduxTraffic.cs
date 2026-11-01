@@ -100,6 +100,8 @@ namespace FSO.SimAntics.Utils
             = new System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>>();
 
         private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; public List<VMEntity> Others = new List<VMEntity>(); }
+        // (car pack round 3: a family's own car, or one parked for a trip - ReduxCarShop - is neither traffic nor a carpool:
+        //  it's left where it is, and it doesn't stop the street's traffic the way a carpool waiting at the kerb does)
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars> Seen = new System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars>();
 
         /// <summary>The lot was loaded again (a resync, an undo): the cars are looked for again straight away.</summary>
@@ -131,6 +133,7 @@ namespace FSO.SimAntics.Utils
                             MarkMoving(e.MultitileGroup); // (one saved with the lot, or just made)
                             ReduxCarSkins.EnsureDrawn(e); // (20.3: its NFSU2 picture, if it isn't drawn with it yet - drawing only)
                         }
+                        else if (ReduxCarShop.IsParkedCar(e)) ReduxCarSkins.EnsureDrawn(e); // (round 3: a parked car - its NFSU2 picture, nothing else)
                         else { st.OtherCar = true; st.Others.Add(e); ReduxCarSkins.EnsureDrawn(e); } // (a carpool: its NFSU2 picture once the lot's Sims are in)
                     }
                 }
@@ -362,6 +365,58 @@ namespace FSO.SimAntics.Utils
             return result;
         }
 
+        /// <summary>
+        /// Car pack round 3: the street nearest a tile - whether it runs along x, and the line down its middle. False: no street
+        /// on this lot. Read only (the lot's own floors - the same on every game).
+        /// </summary>
+        public static bool NearestRoad(VMArchitecture arch, int x, int y, out bool alongX, out int middle)
+        {
+            alongX = true; middle = 0;
+            if (arch == null) return false;
+            var roads = Roads(arch);
+            int best = int.MaxValue;
+            foreach (var r in roads)
+            {
+                int d = Math.Abs((r.AlongX ? y : x) - r.Middle);
+                if (d < best) { best = d; alongX = r.AlongX; middle = r.Middle; }
+            }
+            return best != int.MaxValue;
+        }
+
+        /// <summary>
+        /// Car pack round 3: a family's parked car drives off - a passing car with its look (skin) pulls out into the street's
+        /// near lane level with it, driving the way that lane goes, and drives off the lot like any other (marked with the
+        /// parked car's object id, TagAttribute). The parked car itself stays (it's still theirs - it's there again when they
+        /// come home; their own game doesn't draw it meanwhile). False: no street. Called by VMNetReduxCarCmd only.
+        /// </summary>
+        public static bool DriveAway(VM vm, VMEntity parked, short skin, short tag)
+        {
+            if (vm?.Context?.Architecture == null || parked == null) return false;
+            var tiles = ReduxCarShop.TilesOf(parked);
+            if (tiles.Count == 0) return false;
+            int sx = 0, sy = 0;
+            foreach (var t in tiles) { sx += t.X; sy += t.Y; }
+            int cx = sx / tiles.Count, cy = sy / tiles.Count;
+            var roads = Roads(vm.Context.Architecture);
+            Road road = null;
+            int best = int.MaxValue;
+            foreach (var r in roads)
+            {
+                int d = Math.Abs((r.AlongX ? cy : cx) - r.Middle);
+                if (d < best) { best = d; road = r; }
+            }
+            if (road == null) return false;
+            // (the lane on the car's side of the street: right-hand traffic - +x on the +y side, +y on the -x side)
+            bool forward = road.AlongX ? cy >= road.Middle : cx < road.Middle;
+            int along = road.AlongX ? cx : cy;
+            // (it starts a car's length back, so its middle is level with where it was parked)
+            along += forward ? -3 : 3;
+            bool ok = Spawn(vm, road, forward, ReduxCarShop.CarGUID, skin, along, tag);
+            LotCars st;
+            if (ok && Seen.TryGetValue(vm, out st)) st.Traffic = null; // (picked up on the next tick)
+            return ok;
+        }
+
         private static Direction DirFor(bool alongX, bool forward)
         {
             Direction d;
@@ -371,16 +426,18 @@ namespace FSO.SimAntics.Utils
             return d;
         }
 
-        private static bool Spawn(VM vm, Road road, bool forward, uint guid, short skin = 0)
+        private static bool Spawn(VM vm, Road road, bool forward, uint guid, short skin = 0, int alongAt = int.MinValue, short tag = 0)
         {
             var ctx = vm.Context;
             // right-hand traffic: heading +x the lane is on the +y side, heading +y it's on the -x side
             int lane = road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
             var dir = DirFor(road.AlongX, forward);
             int along = forward ? road.Start + 7 : road.End - 7;
+            if (alongAt != int.MinValue) along = Math.Max(road.Start + 1, Math.Min(road.End - 1, alongAt)); // (round 3: a parked car pulling out)
             var group = ctx.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, dir);
             if (group == null) return false;
             foreach (var o in group.Objects) o.SetAttribute(0, Marker); // (not a carpool: its main just waits)
+            if (tag != 0 && group.BaseObject != null) group.BaseObject.SetAttribute(ReduxCarShop.TagAttribute, tag);
             // 20.x: its NFSU2 car (picked without looking at the pack, so every game keeps the same lot), then its pictures
             // (20.3: by the car's own GUID - 20.0-20.2 looked at the (0,0) tile's GUID, so no car ever got its skin)
             if (skin > 0 && group.BaseObject != null && ReduxCarSkins.IsSkinnableCar(group.BaseObject))

@@ -45,6 +45,10 @@ namespace FSO.SimAntics.Utils
     ///     its tile parts (never half a car);
     ///   * the Lite pack (phones and Lite mode) has fewer cars: a car it doesn't have is drawn as one it does (the same
     ///     kind, picked from the car's number - the same on every game with that pack), a customised car as its stock one.
+    ///
+    /// ROUND 3: a family's own car (ReduxCarShop - bought in The Showroom, parked on their lot) keeps its skin on itself the
+    /// same way. A skin's version is now a number (0 stock, 1 customised, 2..MaxVariant the manifest's other premade versions
+    /// - each with its own "id" and file, round 4's Car Customizer), so more versions slot in without changing a car's code.
     /// </summary>
     public static class ReduxCarSkins
     {
@@ -66,17 +70,32 @@ namespace FSO.SimAntics.Utils
         public const int Bus = 22;
 
         /// <summary>A skin: 0 = none; else 1 + (variant * 64 + car) * 16 + paint, variant 0 stock / 1 customised.</summary>
-        public static short Code(int car, bool custom, int paint) { return (short)(1 + ((custom ? 64 : 0) + car) * 16 + paint); }
+        public static short Code(int car, bool custom, int paint) { return Code(car, custom ? 1 : 0, paint); }
+        /// <summary>
+        /// Round 3: any version - 0 stock, 1 customised, 2..MaxVariant the pack's other premade versions (round 4: the panel's
+        /// Car Customizer adds them to the manifest with their own "id"). The numbers fit an attribute up to version 31.
+        /// </summary>
+        public static short Code(int car, int variant, int paint) { return (short)(1 + (variant * 64 + car) * 16 + paint); }
+        public const int MaxVariant = 31;
         public static bool Decode(short code, out int car, out bool custom, out int paint)
         {
-            car = 0; custom = false; paint = 0;
+            int variant;
+            bool ok = Decode(code, out car, out variant, out paint);
+            custom = variant != 0;
+            return ok;
+        }
+        /// <summary>Round 3: a skin's car, version and paint (a version past 1 is checked against the pack when it's drawn).</summary>
+        public static bool Decode(short code, out int car, out int variant, out int paint)
+        {
+            car = 0; variant = 0; paint = 0;
             if (code <= 0) return false;
             int v = code - 1;
             paint = v % 16; v /= 16;
-            car = v % 64; custom = v / 64 == 1;
-            if (v / 64 > 1 || car >= CarFolders.Length) return false;
-            if (custom && car >= EverydayCars) return false;
-            return paint < (custom ? CustomPaints : NormalPaintsOf(car));
+            car = v % 64; variant = v / 64;
+            if (variant > MaxVariant || car >= CarFolders.Length) return false;
+            if (variant != 0 && car >= EverydayCars) return false;
+            if (variant > 1) return true; // (its paints are the manifest's - up to 16)
+            return paint < (variant == 1 ? CustomPaints : NormalPaintsOf(car));
         }
 
         /// <summary>Passing traffic's mix: each everyday car x3, each traffic vehicle x2, the taxi x1.</summary>
@@ -153,7 +172,7 @@ namespace FSO.SimAntics.Utils
             uint k = Hash(h ^ 0x5ca1ab1e);
             int car = TrafficMix[k % (uint)TrafficMix.Length];
             bool custom = car < EverydayCars && CustomSlot(vm)
-                && !traffic.Any(g => g.BaseObject != null && Decode(g.BaseObject.GetAttribute(SkinAttribute), out _, out var c, out _) && c);
+                && !traffic.Any(g => g.BaseObject != null && Decode(g.BaseObject.GetAttribute(SkinAttribute), out int _, out bool c, out int _) && c);
             int paint = (int)((k >> 8) % (uint)(custom ? CustomPaints : NormalPaintsOf(car)));
             return Code(car, custom, paint);
         }
@@ -238,6 +257,8 @@ namespace FSO.SimAntics.Utils
             public Dictionary<uint, bool> Fits = new Dictionary<uint, bool>();
         }
         private static Dictionary<string, PackFile> Files; // "COROLLA" / "COROLLA_custom" -> file
+        /// <summary>Round 3: the file of each premade version past "custom" (car * 64 + version -> its Files key), from the manifest's ids.</summary>
+        private static Dictionary<int, string> VariantKeys = new Dictionary<int, string>();
         /// <summary>20.2: the folder Files was read from (PackFolder changed since - e.g. set after something asked: read again).</summary>
         private static string IndexedFolder;
         /// <summary>20.2: what reading the manifest found ("" = fine) - the "carpack" cheat.</summary>
@@ -270,6 +291,7 @@ namespace FSO.SimAntics.Utils
             // (20.2: read again when the folder changed - it was once cached empty for good when asked before it was set)
             if (Files != null) { Loaded.Clear(); LoadOrder.Clear(); }
             Files = new Dictionary<string, PackFile>(StringComparer.OrdinalIgnoreCase);
+            VariantKeys = new Dictionary<int, string>();
             IndexedFolder = folder;
             ManifestSeen = false;
             IndexProblem = "";
@@ -292,18 +314,51 @@ namespace FSO.SimAntics.Utils
                     Files[key] = new PackFile { Path = Path.Combine(folder, rel) };
                 }
                 if (Files.Count == 0) IndexProblem = "carpack.json lists no car files";
+                IndexVariants(FSOFile.ReadAllText(manifest));
                 Console.WriteLine("[SimsRedux] car pack: " + Files.Count + " car files from " + folder + " (" + Source + ")");
             }
             catch (Exception e) { IndexProblem = "couldn't read carpack.json: " + e.Message; Console.WriteLine("[SimsRedux] car pack: " + e.Message); Files.Clear(); }
+        }
+
+        /// <summary>
+        /// Round 3: the manifest's premade versions past "custom" (round 4) - each listed with its own "id" (2..MaxVariant) and
+        /// its file. Read only; a manifest without them (round 1 and 2 packs) has none.
+        /// </summary>
+        private static void IndexVariants(string json)
+        {
+            try
+            {
+                using (var doc = System.Text.Json.JsonDocument.Parse(json))
+                {
+                    System.Text.Json.JsonElement cars;
+                    if (!doc.RootElement.TryGetProperty("cars", out cars) || cars.ValueKind != System.Text.Json.JsonValueKind.Array) return;
+                    foreach (var c in cars.EnumerateArray())
+                    {
+                        System.Text.Json.JsonElement idEl, vars;
+                        if (!c.TryGetProperty("id", out idEl) || !idEl.TryGetInt32(out int car) || car < 0 || car >= EverydayCars) continue;
+                        if (!c.TryGetProperty("variants", out vars) || vars.ValueKind != System.Text.Json.JsonValueKind.Array) continue;
+                        foreach (var v in vars.EnumerateArray())
+                        {
+                            System.Text.Json.JsonElement vid, file;
+                            if (!v.TryGetProperty("id", out vid) || vid.ValueKind != System.Text.Json.JsonValueKind.Number || !vid.TryGetInt32(out int id)) continue;
+                            if (id < 2 || id > MaxVariant || !v.TryGetProperty("file", out file) || file.ValueKind != System.Text.Json.JsonValueKind.String) continue;
+                            var rel = file.GetString() ?? "";
+                            if (!Regex.IsMatch(rel, "^cars/[A-Za-z0-9_\\-]+\\.iff$")) continue;
+                            VariantKeys[car * 64 + id] = Path.GetFileNameWithoutExtension(rel);
+                        }
+                    }
+                }
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] car pack: couldn't read the manifest's versions: " + e.Message); }
         }
 
         /// <summary>The IFF for a skin with its paint copied over PALT #1 (a few kept; the oldest dropped).</summary>
         private static IffFile Load(short code, out PackFile file)
         {
             file = null;
-            if (!Decode(code, out int car, out bool custom, out int paint)) return null;
+            if (!Decode(code, out int car, out int variant, out int paint)) return null;
             EnsureIndex();
-            file = FileFor(car, custom);
+            file = FileFor(car, variant);
             if (file == null) return null;
             IffFile iff;
             if (Loaded.TryGetValue(code, out iff)) return iff;
@@ -345,9 +400,14 @@ namespace FSO.SimAntics.Utils
         /// of the same kind (everyday car / traffic vehicle; then any everyday car), picked from the car's number. Service
         /// vehicles only ever use their own. Null = none. Call inside Lock.
         /// </summary>
-        private static PackFile FileFor(int car, bool custom)
+        private static PackFile FileFor(int car, bool custom) { return FileFor(car, custom ? 1 : 0); }
+        /// <summary>Round 3: a premade version's own file (VariantKeys), else as before (the customised file, the stock one...).</summary>
+        private static PackFile FileFor(int car, int variant)
         {
             PackFile f;
+            string key;
+            if (variant > 1 && VariantKeys.TryGetValue(car * 64 + variant, out key) && Files.TryGetValue(key, out f)) return f;
+            bool custom = variant != 0;
             if (custom && Files.TryGetValue(CarFolders[car] + "_custom", out f)) return f;
             if (Files.TryGetValue(CarFolders[car], out f)) return f;
             if (car >= FirstService) return null;
@@ -418,8 +478,9 @@ namespace FSO.SimAntics.Utils
                 if (b == null || !IsSkinnableCar(b)) { why = "not a car the pack covers"; return null; }
                 if (obj.ObjectData[(int)VMStackObjectVariable.Graphic] != 0) { why = "car picture " + obj.ObjectData[(int)VMStackObjectVariable.Graphic] + " (not 0)"; return null; }
                 short code = SkinOf(b);
-                int car; bool custom; int paint;
-                if (code <= 0 || !Decode(code, out car, out custom, out paint)) { why = "no NFSU2 car picked (skin " + code + ")"; return null; }
+                int car; int variant; int paint;
+                if (code <= 0 || !Decode(code, out car, out variant, out paint)) { why = "no NFSU2 car picked (skin " + code + ")"; return null; }
+                bool custom = variant != 0;
                 lock (Lock)
                 {
                     PackFile file;
@@ -438,6 +499,33 @@ namespace FSO.SimAntics.Utils
                 }
             }
             catch (Exception e) { why = e.Message; Console.WriteLine("[SimsRedux] car pack: " + e.Message); return null; }
+        }
+
+        /// <summary>
+        /// Round 3 (The Showroom's picture): the pack's car for this skin, painted - each tile part's SubIndex and its picture
+        /// (DGRP, still wheels). Null without the pack, or a car it can't draw (the Lite pack draws a missing car as one it has,
+        /// as on the lot). Drawing only.
+        /// </summary>
+        public static List<KeyValuePair<short, DGRP>> PreviewParts(short code)
+        {
+            try
+            {
+                if (!Enabled || string.IsNullOrEmpty(PackFolder)) return null;
+                lock (Lock)
+                {
+                    PackFile file;
+                    var iff = Load(code, out file);
+                    if (iff == null || file?.DgrpBySub == null) return null;
+                    var l = new List<KeyValuePair<short, DGRP>>();
+                    foreach (var kv in file.DgrpBySub)
+                    {
+                        var d = iff.Get<DGRP>(kv.Value);
+                        if (d != null) l.Add(new KeyValuePair<short, DGRP>(kv.Key, d));
+                    }
+                    return l.Count > 0 ? l : null;
+                }
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] car pack: preview: " + e.Message); return null; }
         }
 
         // ================================================================ round 2: turning wheels (drawing only)
@@ -577,9 +665,9 @@ namespace FSO.SimAntics.Utils
                     {
                         short attr = e.GetAttribute(SkinAttribute);
                         short code = skinnable ? SkinOf(e) : (short)0;
-                        int car; bool custom; int paint;
-                        bool ok = Decode(code, out car, out custom, out paint);
-                        if (ok) lock (Lock) { if (FileFor(car, custom) != null) haveSkin++; } // (round 2: the Lite pack draws a missing car as one it has)
+                        int car; int variant; int paint;
+                        bool ok = Decode(code, out car, out variant, out paint);
+                        if (ok) lock (Lock) { if (FileFor(car, variant) != null) haveSkin++; } // (round 2: the Lite pack draws a missing car as one it has)
                         int parts = 0, fromPack = 0;
                         foreach (var o in e.MultitileGroup.Objects)
                         {
@@ -591,7 +679,8 @@ namespace FSO.SimAntics.Utils
                         Want(e as VMGameObject, out why);
                         var name = label.StartsWith("Car - ", StringComparison.Ordinal) ? label.Substring(6) : label;
                         lines.Add(name + " " + guid.ToString("X8") + (skinnable ? "" : " (not covered)") +
-                            ": skin " + (ok ? CarFolders[car] + (custom ? " custom" : "") + " paint " + paint : "none") +
+                            ": skin " + (ok ? CarFolders[car] + (variant == 1 ? " custom" : variant > 1 ? " version " + variant : "") + " paint " + paint : "none") +
+                            (ReduxCarShop.IsOwnedCar(e) ? " (a family's own car)" : ReduxCarShop.IsVisitCar(e) ? " (parked for a trip)" : "") +
                             (attr > 0 ? "" : skinnable ? (e.GetAttribute(0) == ReduxTraffic.Marker ? " (from id)" : " (carpool)") : "") +
                             ", picture " + e.ObjectData[(int)VMStackObjectVariable.Graphic] +
                             ", " + fromPack + "/" + parts + " NFSU2" + (fromPack == 0 && why.Length > 0 ? " - " + why : "") + ", wheels step " + StepOf(e));
