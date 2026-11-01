@@ -99,7 +99,7 @@ namespace FSO.SimAntics.Utils
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>> RoadCache
             = new System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>>();
 
-        private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; }
+        private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; public List<VMEntity> Others = new List<VMEntity>(); }
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars> Seen = new System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars>();
 
         /// <summary>The lot was loaded again (a resync, an undo): the cars are looked for again straight away.</summary>
@@ -120,6 +120,7 @@ namespace FSO.SimAntics.Utils
                 {
                     st.Traffic = new List<VMMultitileGroup>();
                     st.OtherCar = false;
+                    st.Others.Clear();
                     foreach (var e in vm.Entities)
                     {
                         if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject) continue;
@@ -130,7 +131,7 @@ namespace FSO.SimAntics.Utils
                             MarkMoving(e.MultitileGroup); // (one saved with the lot, or just made)
                             ReduxCarSkins.EnsureDrawn(e); // (20.3: its NFSU2 picture, if it isn't drawn with it yet - drawing only)
                         }
-                        else { st.OtherCar = true; ReduxCarSkins.EnsureDrawn(e); } // (a carpool: its NFSU2 picture once the lot's Sims are in)
+                        else { st.OtherCar = true; st.Others.Add(e); ReduxCarSkins.EnsureDrawn(e); } // (a carpool: its NFSU2 picture once the lot's Sims are in)
                     }
                 }
                 st.Traffic.RemoveAll(g => g.BaseObject == null || g.BaseObject.Dead);
@@ -139,6 +140,9 @@ namespace FSO.SimAntics.Utils
                 int carCount = traffic.Count;
                 bool otherCar = st.OtherCar;
                 for (int i = 0; i < traffic.Count; i++) Drive(vm, traffic[i]);
+                // car pack round 2: the NFSU2 cars' wheels turn as they move (drawing only - nothing on the lot changes)
+                for (int i = 0; i < traffic.Count; i++) if (traffic[i].BaseObject != null && !traffic[i].BaseObject.Dead) ReduxCarSkins.SpinWheels(traffic[i].BaseObject);
+                for (int i = 0; i < st.Others.Count; i++) if (!st.Others[i].Dead) ReduxCarSkins.SpinWheels(st.Others[i]);
 
                 // a new one now and then (decided from the game clock, the same for everyone)
                 if (clock.Ticks % 30 != 0 || otherCar) return;

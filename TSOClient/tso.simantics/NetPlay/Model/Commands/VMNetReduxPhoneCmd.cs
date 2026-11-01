@@ -24,7 +24,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     ///   Place - (17.2) a Shop Online package box (VMReduxPhone.PackageGUID) put down by the mailbox (Place) with the
     ///           game's own placing, holding order Tag (object attribute 0); visitors see it like any object.
     ///   Remove- (17.2) the package box (Place) goes - opened by the family, or a box with no order any more.
-    /// Buy, Sell, Place and Remove only from the game running the lot (single player, or the visit's host) - a visitor's game can't send
+    ///   Call  - (20.4) a family grown-up makes one of the house phone's calls on their cellphone: the phone's tree table
+    ///           entry Place (its menu's index) with Param 0 Tag (the phone book's pick...) - VMReduxCellCall.PushCall.
+    ///   Answer- (20.4) a family grown-up answers the ringing line on their cellphone (no house phone on the lot) -
+    ///           VMReduxCellCall.PushAnswer.
+    /// Buy, Sell, Place, Remove, Call and Answer only from the game running the lot (single player, or the visit's host) - a visitor's game can't send
     /// them - and only change the family's money; who owns a phone is kept by the player's own game (its side file), never
     /// on the lot, so nothing here depends on it and every game stays in step. Bought / Sold tell the games what happened.
     /// What the phone then does goes through the lot's own commands (the house phone's interactions, the visit's and
@@ -32,7 +36,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     /// </summary>
     public class VMNetReduxPhoneCmd : VMNetCommandBodyAbstract
     {
-        public enum PhoneMode : byte { Out = 0, Buy = 1, Sell = 2, Place = 3, Remove = 4 }
+        public enum PhoneMode : byte { Out = 0, Buy = 1, Sell = 2, Place = 3, Remove = 4, Call = 5, Answer = 6 }
 
         public PhoneMode Mode = PhoneMode.Out;
         public bool Out;
@@ -59,6 +63,14 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     return Trade(vm, caller);
                 case PhoneMode.Place: return PutDown(vm, caller);
                 case PhoneMode.Remove: return TakeAway(vm, caller);
+                case PhoneMode.Call:
+                case PhoneMode.Answer:
+                    {
+                        // (20.4: the cellphone as the house phone - Utils/ReduxCellCall.cs; who owns a cellphone is the sending game's business)
+                        var why = Mode == PhoneMode.Call ? VMReduxCellCall.PushCall(vm, caller, Place, Tag) : VMReduxCellCall.PushAnswer(vm, caller);
+                        Tell(vm, caller, why);
+                        return why == null;
+                    }
             }
             return false;
         }
@@ -179,7 +191,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         private bool Check(VM vm, VMAvatar caller)
         {
-            if (vm == null || !vm.TS1 || Mode > PhoneMode.Remove) return false;
+            if (vm == null || !vm.TS1 || Mode > PhoneMode.Answer) return false;
             // (the lot's own game - whoever it's playing; 18.8: even with nobody of the family here to be "its" Sim, e.g. all at work)
             if (Mode == PhoneMode.Place || Mode == PhoneMode.Remove) return true;
             if (caller == null) return false;

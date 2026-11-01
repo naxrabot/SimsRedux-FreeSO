@@ -4,6 +4,7 @@ using FSO.Files.Formats.IFF.Chunks;
 using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
 using FSO.SimAntics.Engine.Scopes;
+using FSO.LotView.Model;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -31,6 +32,19 @@ namespace FSO.SimAntics.Utils
     ///     the standard car's 3 x 6 tile layout; every Maxis car the street or a carpool uses has the same layout).
     /// Without the pack (or a car the pack doesn't have) the standard picture stays. Nothing here is read inside the
     /// VM's decisions except Pick, which never looks at the pack.
+    ///
+    /// ROUND 2 (drawing only, like the rest):
+    ///   * turning wheels: a pack file made with wheel layers has, per tile, a DGRP per spin step (its DGRP number + step).
+    ///     SpinWheels (ReduxTraffic's tick, every car on the lot) follows how far each car has moved since the last tick on
+    ///     this game - forward or back - and draws the step for that distance: the wheels turn while it drives, faster
+    ///     the faster it goes, and stay still while it waits (a carpool at the kerb). Kept on this game only, never on
+    ///     the lot;
+    ///   * the paints are NFSU2's ten basic gloss colours (NormalPaints = 10; a car saved with 0-5 keeps a valid paint);
+    ///   * the school bus is drawn as NFSU2's bus (its own 3 x 10 layout in the pack), and a Sims cab (a "Car - " object
+    ///     named as a taxi or cab, 3 x 6) as the NFSU2 taxi; a car is only drawn from a pack file that has every one of
+    ///     its tile parts (never half a car);
+    ///   * the Lite pack (phones and Lite mode) has fewer cars: a car it doesn't have is drawn as one it does (the same
+    ///     kind, picked from the car's number - the same on every game with that pack), a customised car as its stock one.
     /// </summary>
     public static class ReduxCarSkins
     {
@@ -48,7 +62,8 @@ namespace FSO.SimAntics.Utils
         public const int EverydayCars = 17, FirstTraffic = 17, Taxi = 21, FirstService = 21;
         /// <summary>How many paints a car's stock file has (PALT #101..): six, one for a service vehicle; customised files have five.</summary>
         public static int NormalPaintsOf(int car) { return car >= FirstService ? 1 : NormalPaints; }
-        public const int NormalPaints = 6, CustomPaints = 5;
+        public const int NormalPaints = 10, CustomPaints = 5;
+        public const int Bus = 22;
 
         /// <summary>A skin: 0 = none; else 1 + (variant * 64 + car) * 16 + paint, variant 0 stock / 1 customised.</summary>
         public static short Code(int car, bool custom, int paint) { return (short)(1 + ((custom ? 64 : 0) + car) * 16 + paint); }
@@ -87,8 +102,27 @@ namespace FSO.SimAntics.Utils
             0x17acec22, // Bentley
             0xc8ee6e7d, // limo
             0xa6f5ed9a, // military jeep
+            SchoolBusGUID, // round 2: the school bus (3 x 10) - always the NFSU2 bus
         };
+        /// <summary>The school bus (ReduxTraffic's passing one and the game's own).</summary>
+        public const uint SchoolBusGUID = 0x50ac15bf;
         public static bool IsSkinnable(uint baseGuid) { return Skinnable.Contains(baseGuid); }
+
+        /// <summary>
+        /// Round 2: the skin a vehicle always has whatever it's picked as: the school bus is the NFSU2 bus, and a cab (an
+        /// expansion pack's "Car - " object named as a taxi or cab - Hot Date's) the NFSU2 taxi. 0 = none. Read only.
+        /// </summary>
+        public static short ServiceSkin(VMEntity e)
+        {
+            var def = e == null ? null : (e.MasterDefinition ?? e.Object?.OBJ);
+            if (def == null) return 0;
+            if (def.GUID == SchoolBusGUID) return Code(Bus, false, 0);
+            var label = def.ChunkLabel ?? "";
+            if (label.StartsWith("Car - ", StringComparison.Ordinal)
+                && (label.IndexOf("taxi", StringComparison.OrdinalIgnoreCase) >= 0 || Regex.IsMatch(label, @"\bcab\b", RegexOptions.IgnoreCase)))
+                return Code(Taxi, false, 0);
+            return 0;
+        }
 
         /// <summary>
         /// 20.3: the car an object is part of (its GUID as the catalog knows it). A Maxis car is a multi-tile object: the
@@ -101,7 +135,7 @@ namespace FSO.SimAntics.Utils
             if (e == null) return 0;
             return (e.MasterDefinition ?? e.Object?.OBJ)?.GUID ?? 0;
         }
-        public static bool IsSkinnableCar(VMEntity e) { return IsSkinnable(CarGuid(e)); }
+        public static bool IsSkinnableCar(VMEntity e) { return IsSkinnable(CarGuid(e)) || ServiceSkin(e) != 0; }
 
         private static uint Hash(uint x)
         {
@@ -195,7 +229,14 @@ namespace FSO.SimAntics.Utils
         /// <summary>20.2: how many car parts have been drawn from the pack so far (the "carpack" cheat).</summary>
         public static int Swapped;
 
-        private class PackFile { public string Path; public Dictionary<short, ushort> DgrpBySub; public byte[] Bytes; }
+        private class PackFile
+        {
+            public string Path; public Dictionary<short, ushort> DgrpBySub; public byte[] Bytes;
+            /// <summary>Round 2: spin steps (1 = still wheels; worked out from the file's DGRPs when it's read).</summary>
+            public int Spins = 1;
+            /// <summary>Round 2: whether this file has every tile part of a vehicle (by its GUID).</summary>
+            public Dictionary<uint, bool> Fits = new Dictionary<uint, bool>();
+        }
         private static Dictionary<string, PackFile> Files; // "COROLLA" / "COROLLA_custom" -> file
         /// <summary>20.2: the folder Files was read from (PackFolder changed since - e.g. set after something asked: read again).</summary>
         private static string IndexedFolder;
@@ -262,7 +303,8 @@ namespace FSO.SimAntics.Utils
             file = null;
             if (!Decode(code, out int car, out bool custom, out int paint)) return null;
             EnsureIndex();
-            if (!Files.TryGetValue(CarFolders[car] + (custom ? "_custom" : ""), out file)) return null;
+            file = FileFor(car, custom);
+            if (file == null) return null;
             IffFile iff;
             if (Loaded.TryGetValue(code, out iff)) return iff;
             try
@@ -278,6 +320,10 @@ namespace FSO.SimAntics.Utils
                 {
                     file.DgrpBySub = new Dictionary<short, ushort>();
                     foreach (var o in iff.List<OBJD>()) if (o.SubIndex != -1) file.DgrpBySub[o.SubIndex] = o.BaseGraphicID;
+                    // round 2: how many spin steps (DGRP number + 1, + 2 ... are there for every tile)
+                    int spins = 1;
+                    while (spins < 8 && file.DgrpBySub.Count > 0 && file.DgrpBySub.Values.All(id => iff.Get<DGRP>((ushort)(id + spins)) != null)) spins++;
+                    file.Spins = spins;
                 }
                 Loaded[code] = iff;
                 try { PackIffs.Add(iff, null); } catch { }
@@ -294,10 +340,44 @@ namespace FSO.SimAntics.Utils
             }
         }
 
+        /// <summary>
+        /// Round 2: the pack file a car is drawn from: its own, else (the Lite pack) its stock one, else one the pack has
+        /// of the same kind (everyday car / traffic vehicle; then any everyday car), picked from the car's number. Service
+        /// vehicles only ever use their own. Null = none. Call inside Lock.
+        /// </summary>
+        private static PackFile FileFor(int car, bool custom)
+        {
+            PackFile f;
+            if (custom && Files.TryGetValue(CarFolders[car] + "_custom", out f)) return f;
+            if (Files.TryGetValue(CarFolders[car], out f)) return f;
+            if (car >= FirstService) return null;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                int from = pass == 0 && car >= FirstTraffic ? FirstTraffic : 0, to = pass == 0 && car >= FirstTraffic ? FirstService : EverydayCars;
+                var have = new List<int>();
+                for (int c = from; c < to; c++) if (Files.ContainsKey(CarFolders[c])) have.Add(c);
+                if (have.Count > 0) return Files[CarFolders[have[car % have.Count]]];
+            }
+            return null;
+        }
+
+        /// <summary>Does this pack file have every tile part of this car (never draw half a car)? Call inside Lock.</summary>
+        private static bool Fits(PackFile file, VMEntity baseObj)
+        {
+            uint guid = CarGuid(baseObj);
+            bool ok;
+            if (file.Fits.TryGetValue(guid, out ok)) return ok;
+            ok = file.DgrpBySub != null && baseObj.MultitileGroup.Objects.All(o => o.Object?.OBJ != null && file.DgrpBySub.ContainsKey(o.Object.OBJ.SubIndex));
+            file.Fits[guid] = ok;
+            return ok;
+        }
+
         /// <summary>The skin a car is drawn with, or 0. Read only.</summary>
         public static short SkinOf(VMEntity baseObj)
         {
             if (baseObj == null) return 0;
+            short service = ServiceSkin(baseObj);
+            if (service != 0) return service;
             short code = baseObj.GetAttribute(SkinAttribute);
             if (code > 0) return code;
             var guid = CarGuid(baseObj);
@@ -348,12 +428,78 @@ namespace FSO.SimAntics.Utils
                     if (iff == null) { why = "couldn't read " + Path.GetFileName(file.Path) + (LoadProblem.Length > 0 ? " (" + LoadProblem + ")" : ""); return null; }
                     ushort id;
                     if (file.DgrpBySub == null || !file.DgrpBySub.TryGetValue(obj.Object.OBJ.SubIndex, out id)) { why = "no tile part " + obj.Object.OBJ.SubIndex + " in " + Path.GetFileName(file.Path); return null; }
+                    if (!Fits(file, b)) { why = Path.GetFileName(file.Path) + " doesn't have every part of this vehicle"; return null; }
+                    // round 2: the wheels' spin step now (SpinWheels), when the file has turning wheels
+                    int step = StepOf(b);
+                    if (step > 0 && step < file.Spins) id = (ushort)(id + step);
                     var d = iff.Get<DGRP>(id);
                     if (d == null) why = "no picture " + id + " in " + Path.GetFileName(file.Path);
                     return d;
                 }
             }
             catch (Exception e) { why = e.Message; Console.WriteLine("[SimsRedux] car pack: " + e.Message); return null; }
+        }
+
+        // ================================================================ round 2: turning wheels (drawing only)
+
+        private class SpinState { public LotTilePos Last; public bool Seen; public float Distance; public int Step; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMEntity, SpinState> SpinStates
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<VMEntity, SpinState>();
+        /// <summary>How far (tiles) a car moves per spin step: a wheel ~0.34 tiles across turns 18 degrees in ~0.1 tile.</summary>
+        public const float SpinStepTiles = 0.1f;
+
+        private static int StepOf(VMEntity baseObj)
+        {
+            SpinState st;
+            return baseObj != null && SpinStates.TryGetValue(baseObj, out st) ? st.Step : 0;
+        }
+
+        /// <summary>
+        /// ReduxTraffic's tick, for every car on the lot: how far it moved since the last tick (on this game - forward or
+        /// back, by its facing) turns its wheels; when that's a new spin step, its tile parts are drawn again with that
+        /// step's picture. Nothing happens on a game that doesn't draw (the server), without the pack, or for a car whose
+        /// file has still wheels. Drawing only - it never changes the lot.
+        /// </summary>
+        public static void SpinWheels(VMEntity baseObj)
+        {
+            try
+            {
+                if (!Enabled || string.IsNullOrEmpty(PackFolder) || baseObj?.MultitileGroup == null || baseObj.WorldUI == null) return;
+                var pos = baseObj.Position;
+                if (pos == LotTilePos.OUT_OF_WORLD) return;
+                var st = SpinStates.GetValue(baseObj, _ => new SpinState());
+                if (!st.Seen) { st.Seen = true; st.Last = pos; return; }
+                int dx = pos.x - st.Last.x, dy = pos.y - st.Last.y;
+                bool jumped = pos.Level != st.Last.Level || Math.Abs(dx) + Math.Abs(dy) > 32; // (placed somewhere else: no spin)
+                st.Last = pos;
+                if ((dx == 0 && dy == 0) || jumped || !IsSkinnableCar(baseObj)) return;
+                int fx = 0, fy = 0;
+                switch (baseObj.Direction)
+                {
+                    case Direction.NORTH: fy = -1; break;
+                    case Direction.SOUTH: fy = 1; break;
+                    case Direction.EAST: fx = 1; break;
+                    case Direction.WEST: fx = -1; break;
+                }
+                bool back = dx * fx + dy * fy < 0;
+                if (ReduxTraffic.FrontFlipped) back = !back;
+                st.Distance += (back ? -1 : 1) * (Math.Abs(dx) + Math.Abs(dy)) / 16f;
+                int spins;
+                lock (Lock)
+                {
+                    PackFile file;
+                    var code = SkinOf(baseObj);
+                    if (Load(code, out file) == null || file == null) return;
+                    spins = file.Spins;
+                }
+                if (spins <= 1) return;
+                int step = (int)Math.Floor(st.Distance / SpinStepTiles) % spins;
+                if (step < 0) step += spins;
+                if (step == st.Step) return;
+                st.Step = step;
+                Refresh(baseObj.MultitileGroup);
+            }
+            catch { }
         }
 
         private static bool FromPack(DGRP d)
@@ -424,7 +570,7 @@ namespace FSO.SimAntics.Utils
                     if (e == null || e.MultitileGroup == null || e.MultitileGroup.BaseObject != e || !(e is VMGameObject)) continue;
                     uint guid = CarGuid(e);
                     var label = (e.MasterDefinition ?? e.Object?.OBJ)?.ChunkLabel ?? "";
-                    bool skinnable = IsSkinnable(guid);
+                    bool skinnable = IsSkinnable(guid) || ServiceSkin(e) != 0;
                     if (!skinnable && !label.StartsWith("Car - ", StringComparison.Ordinal)) continue;
                     cars++;
                     try
@@ -433,7 +579,7 @@ namespace FSO.SimAntics.Utils
                         short code = skinnable ? SkinOf(e) : (short)0;
                         int car; bool custom; int paint;
                         bool ok = Decode(code, out car, out custom, out paint);
-                        if (ok) lock (Lock) { if (Files.ContainsKey(CarFolders[car] + (custom ? "_custom" : ""))) haveSkin++; }
+                        if (ok) lock (Lock) { if (FileFor(car, custom) != null) haveSkin++; } // (round 2: the Lite pack draws a missing car as one it has)
                         int parts = 0, fromPack = 0;
                         foreach (var o in e.MultitileGroup.Objects)
                         {
@@ -448,7 +594,7 @@ namespace FSO.SimAntics.Utils
                             ": skin " + (ok ? CarFolders[car] + (custom ? " custom" : "") + " paint " + paint : "none") +
                             (attr > 0 ? "" : skinnable ? (e.GetAttribute(0) == ReduxTraffic.Marker ? " (from id)" : " (carpool)") : "") +
                             ", picture " + e.ObjectData[(int)VMStackObjectVariable.Graphic] +
-                            ", " + fromPack + "/" + parts + " NFSU2" + (fromPack == 0 && why.Length > 0 ? " - " + why : ""));
+                            ", " + fromPack + "/" + parts + " NFSU2" + (fromPack == 0 && why.Length > 0 ? " - " + why : "") + ", wheels step " + StepOf(e));
                     }
                     catch (Exception ex) { lines.Add(label + ": " + ex.Message); }
                 }

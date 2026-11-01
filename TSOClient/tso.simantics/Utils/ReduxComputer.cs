@@ -332,6 +332,7 @@ namespace FSO.SimAntics.Utils
             VMReduxShop.Tick(ava); // (18.8: a Shop Online order goes through after a few minutes typing)
             VMReduxDatingChat.Tick(ava); // (19.4: a Dating App chat - typed for a while, then the relationship changes)
             VMReduxPlayerPause.Tick(ava); // (18.8: free will waits a while after the player's own order)
+            VMReduxCellCall.Tick(ava); // (20.4: on a cellphone call the phone stays out - Utils/ReduxCellCall.cs)
             int genre;
             VMQueuedAction action;
             var kind = Current(ava, out genre, out action);

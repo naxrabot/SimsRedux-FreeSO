@@ -267,6 +267,7 @@ namespace FSO.SimAntics
             FSO.SimAntics.Utils.ReduxBugs.Patch(this); // SimsRedux: "Spray" on bugs
             FSO.SimAntics.Utils.ReduxTV.Patch(this); // SimsRedux 15.7: every TV gets every channel
             FSO.SimAntics.Utils.ReduxBaby.Patch(this); // SimsRedux: the baby's neglect warning after 20 starving minutes, as meant
+            FSO.SimAntics.Utils.VMReduxCellCall.Patch(this); // SimsRedux 20.4: the house phone's calls on the cellphone (made with the Phone Line)
 
             this.Attributes = new List<short>(numAttributes);
             SetFlag(VMEntityFlags.ChairFacing, true);
