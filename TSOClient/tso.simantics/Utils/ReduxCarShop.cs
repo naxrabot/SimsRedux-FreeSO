@@ -13,7 +13,10 @@ using System.Text.Json;
 namespace FSO.SimAntics.Utils
 {
     /// <summary>
-    /// SimsRedux car pack round 3: cars a family can buy (Buy mode > Miscellaneous > Cars: "The Showroom") and drive.
+    /// SimsRedux car pack round 3: cars a family can buy and drive. 21.1: bought like any Buy mode item (Miscellaneous > Cars
+    /// - Simitone's ReduxCars lists them; placed with the object holder anywhere outdoors where there's room: SpotError,
+    /// PlaceOwned through VMNetReduxCarCmd Place; moved with Buy mode's move, MoveOwned; sold like any object). 21.0's
+    /// Showroom window and parking by the street on buying are gone (FindSpot is still how a car parks for a visit).
     ///
     /// WHAT A BOUGHT CAR IS ON THE LOT
     /// The game's own standard car (CarStd, "Car - Standard Carpool", GUID CarGUID - in every player's Sims files), parked:
@@ -150,7 +153,7 @@ namespace FSO.SimAntics.Utils
         private static readonly object Lock = new object();
 
         /// <summary>
-        /// The Showroom's cars: the table above, with what the pack's manifest says on top (prices, paints, parts, and any more
+        /// The cars on sale (21.1: Buy mode's Cars): the table above, with what the pack's manifest says on top (prices, paints, parts, and any more
         /// versions it lists - round 4) when this game has the pack. Read again when the pack folder changes. Never used for a
         /// decision inside the lot's tick: the price is worked out once by the game buying, and travels in the command.
         /// </summary>
@@ -164,7 +167,7 @@ namespace FSO.SimAntics.Utils
                 if (folder.Length > 0)
                 {
                     try { MergeManifest(l, Path.Combine(folder, "carpack.json")); }
-                    catch (Exception e) { Console.WriteLine("[SimsRedux] showroom: couldn't read the pack's prices (" + e.Message + ") - the built-in ones are used"); }
+                    catch (Exception e) { Console.WriteLine("[SimsRedux] cars: couldn't read the pack's prices (" + e.Message + ") - the built-in ones are used"); }
                 }
                 Cached = l; CachedFor = folder;
                 return l;
@@ -299,7 +302,7 @@ namespace FSO.SimAntics.Utils
             if (vm?.Entities == null || family <= 0) return l;
             foreach (var e in vm.Entities)
             {
-                if (e == null || e.Dead || !(e is VMGameObject) || e.MultitileGroup?.BaseObject != e) continue;
+                if (e == null || e.Dead || e.GhostImage || !(e is VMGameObject) || e.MultitileGroup?.BaseObject != e) continue; // (21.1: not Buy mode's held copy)
                 if (e.Position == LotTilePos.OUT_OF_WORLD) continue;
                 if (IsParkedCar(e) && e.GetAttribute(FamilyAttribute) == family) l.Add(e);
             }
@@ -385,30 +388,121 @@ namespace FSO.SimAntics.Utils
         /// <summary>Is every tile of this rectangle free for a parked car (see FindSpot)?</summary>
         public static bool RectFree(VM vm, int x0, int y0, int cw, int ch, List<Point> avatars = null)
         {
+            return RectError(vm, x0, y0, cw, ch, avatars, null) == VMPlacementError.Success;
+        }
+
+        /// <summary>
+        /// 21.1: why this rectangle isn't free for a car (Success: it is) - on the lot's own ground (the area the family may
+        /// build on), level 1, outdoors, flat, no walls or fences through it, not on a road, pool or water, no object (but the
+        /// car itself - ignore - when it's being moved) or Sim on any of its tiles. Read only (the lot's own state).
+        /// </summary>
+        public static VMPlacementError RectError(VM vm, int x0, int y0, int cw, int ch, List<Point> avatars, VMMultitileGroup ignore)
+        {
             var ctx = vm.Context;
             var arch = ctx.Architecture;
             for (int y = y0; y < y0 + ch; y++)
                 for (int x = x0; x < x0 + cw; x++)
                 {
                     var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
-                    if (ctx.IsOutOfBounds(pos) || ctx.IsUserOutOfBounds(pos)) return false;
-                    if (arch.GetTerrainSloped((short)x, (short)y)) return false;
-                    if (arch.GetWall((short)x, (short)y, 1).Segments != 0) return false;
+                    if (x < 0 || y < 0 || x >= arch.Width || y >= arch.Height || ctx.IsOutOfBounds(pos) || ctx.IsUserOutOfBounds(pos)) return VMPlacementError.LocationOutOfBounds;
+                    if (arch.GetTerrainSloped((short)x, (short)y)) return VMPlacementError.CantPlaceOnSlope;
+                    if (arch.GetWall((short)x, (short)y, 1).Segments != 0) return VMPlacementError.CantBeThroughWall;
                     var floor = arch.GetFloor((short)x, (short)y, 1).Pattern;
-                    if (floor == 9 || floor == 10 || floor == 11 || floor >= 65534) return false; // (road, pool, water)
+                    if (floor == 9 || floor == 10 || floor == 11 || floor >= 65534) return VMPlacementError.CantPlaceOnWater; // (road, pool, water)
+                    // (21.1: outdoors only - never inside a room of the house)
+                    var room = ctx.GetRoomAt(pos);
+                    if (room != 0 && ctx.RoomInfo != null && room < ctx.RoomInfo.Length && !ctx.RoomInfo[room].Room.IsOutside) return VMPlacementError.MustBeOutside;
                     var objs = ctx.ObjectQueries.GetObjectsAt(pos);
-                    if (objs != null) foreach (var o in objs) if (o != null && !o.Dead) return false;
-                    if (avatars != null) foreach (var a in avatars) if (a.X == x && a.Y == y) return false;
+                    if (objs != null)
+                        foreach (var o in objs)
+                            if (o != null && !o.Dead && !o.GhostImage && (ignore == null || o.MultitileGroup != ignore)) return VMPlacementError.CantIntersectOtherObjects;
+                    if (avatars != null) foreach (var a in avatars) if (a.X == x && a.Y == y) return VMPlacementError.CantIntersectOtherObjects;
                 }
             // (a wall or fence along the far edges belongs to the next tile over)
             for (int y = y0; y < y0 + ch; y++)
-                if (x0 + cw < arch.Width && (arch.GetWall((short)(x0 + cw), (short)y, 1).Segments & WallSegments.TopLeft) != 0) return false;
+                if (x0 + cw < arch.Width && (arch.GetWall((short)(x0 + cw), (short)y, 1).Segments & WallSegments.TopLeft) != 0) return VMPlacementError.CantBeThroughWall;
             for (int x = x0; x < x0 + cw; x++)
-                if (y0 + ch < arch.Height && (arch.GetWall((short)x, (short)(y0 + ch), 1).Segments & WallSegments.TopRight) != 0) return false;
+                if (y0 + ch < arch.Height && (arch.GetWall((short)x, (short)(y0 + ch), 1).Segments & WallSegments.TopRight) != 0) return VMPlacementError.CantBeThroughWall;
+            return VMPlacementError.Success;
+        }
+
+        /// <summary>
+        /// The tile offsets (1/16 tiles) of a car's corner parts from its base tile when it faces dir (the same turning
+        /// ChangePosition does): min and max over every tile part. False: not a car group.
+        /// </summary>
+        private static bool Extent(VMMultitileGroup group, Direction dir, out int minX, out int minY, out int maxX, out int maxY)
+        {
+            minX = minY = int.MaxValue; maxX = maxY = int.MinValue;
+            var b = group?.BaseObject;
+            if (b == null || group.Objects.Count == 0 || group.Offsets.Count < group.Objects.Count) return false;
+            int rot = dir == Direction.NORTH ? 0 : dir == Direction.EAST ? 2 : dir == Direction.SOUTH ? 4 : 6;
+            var mat = Matrix.CreateRotationZ((float)(rot * Math.PI / 4.0));
+            var bOff = group.Offsets[group.Objects.IndexOf(b)];
+            var lead = new Vector3(bOff.x, bOff.y, 0);
+            for (int i = 0; i < group.Objects.Count; i++)
+            {
+                var off = Vector3.Transform(new Vector3(group.Offsets[i].x, group.Offsets[i].y, 0) - lead, mat);
+                int ox = (int)Math.Round(off.X), oy = (int)Math.Round(off.Y);
+                minX = Math.Min(minX, ox); minY = Math.Min(minY, oy); maxX = Math.Max(maxX, ox); maxY = Math.Max(maxY, oy);
+            }
             return true;
         }
 
-        // ================================================================ changing the lot (VMNetReduxCarCmd only)
+        /// <summary>
+        /// 21.1: the tiles a car covers with its base tile at basePos (a tile's middle), facing dir: the rectangle's top-left
+        /// tile and its size. False: not a car group.
+        /// </summary>
+        public static bool FootprintAt(VMMultitileGroup group, LotTilePos basePos, Direction dir, out int x0, out int y0, out int w, out int h)
+        {
+            x0 = y0 = w = h = 0;
+            int minX, minY, maxX, maxY;
+            if (!Extent(group, dir, out minX, out minY, out maxX, out maxY)) return false;
+            x0 = basePos.TileX + (int)Math.Floor(minX / 16f);
+            y0 = basePos.TileY + (int)Math.Floor(minY / 16f);
+            w = (maxX - minX) / 16 + 1; h = (maxY - minY) / 16 + 1;
+            return true;
+        }
+
+        /// <summary>The four ways a car can face (never a diagonal).</summary>
+        public static bool Square(Direction dir) { return dir == Direction.NORTH || dir == Direction.EAST || dir == Direction.SOUTH || dir == Direction.WEST; }
+
+        /// <summary>
+        /// 21.1 (Buy mode): can this car (group - the one being placed, or moved) go with its base tile at basePos, facing
+        /// dir? Success, or why not (the Buy mode tooltip's words). A family's own car isn't held to the Sims car object's
+        /// own placing rules (they're for the street): anywhere outdoors on the lot's buildable ground with a free spot for
+        /// all its tiles (RectError), level 1, the four ways. ignore: the car itself when it's being moved (its own tiles
+        /// don't count). Sims standing there count. Read only - the same answer on every game of the lot.
+        /// </summary>
+        public static VMPlacementError SpotError(VM vm, VMMultitileGroup group, LotTilePos basePos, Direction dir, VMMultitileGroup ignore)
+        {
+            if (vm?.Context?.Architecture == null || group == null) return VMPlacementError.LocationOutOfBounds;
+            if (basePos == LotTilePos.OUT_OF_WORLD) return VMPlacementError.LocationOutOfBounds;
+            if (basePos.Level != 1) return VMPlacementError.MustBeOnFirstLevel;
+            if (!Square(dir)) return VMPlacementError.MustBeAtTileCenter;
+            int x0, y0, w, h;
+            if (!FootprintAt(group, basePos, dir, out x0, out y0, out w, out h)) return VMPlacementError.LocationOutOfBounds;
+            var avatars = new List<Point>();
+            foreach (var a in vm.Context.ObjectQueries.Avatars)
+                if (a != null && !a.Dead && !a.GhostImage && a.Position != LotTilePos.OUT_OF_WORLD && a.Position.Level == 1) avatars.Add(new Point(a.Position.TileX, a.Position.TileY));
+            return RectError(vm, x0, y0, w, h, avatars, ignore);
+        }
+
+        /// <summary>
+        /// Puts the car's group with its base tile at basePos, facing dir, past the Sims car object's own placing rules (the
+        /// caller has checked the spot - SpotError / RectError). Also used by Buy mode's held car (a copy only this game
+        /// has - drawing). The result's status.
+        /// </summary>
+        public static VMPlacementError PutGroup(VM vm, VMMultitileGroup group, LotTilePos basePos, Direction dir)
+        {
+            VMPlacementResult res;
+            ReduxTraffic.Moving = true; // (our own checks - the car object's own placing rules are for the street)
+            try { res = group.ChangePosition(basePos, dir, vm.Context, VMPlaceRequestFlags.AllowIntersection); }
+            finally { ReduxTraffic.Moving = false; }
+            if (res.Status == VMPlacementError.Success && group.BaseObject?.Position == LotTilePos.OUT_OF_WORLD) return VMPlacementError.LocationOutOfBounds;
+            return res.Status;
+        }
+
+        // ================================================================ changing the lot (VMNetReduxCarCmd and the Buy mode move only)
 
         /// <summary>
         /// Parks a car (the standard car, as an NFSU2 car with this skin) with its tiles on the rectangle FindSpot gave, facing
@@ -418,6 +512,57 @@ namespace FSO.SimAntics.Utils
         public static VMMultitileGroup Park(VM vm, int x0, int y0, Direction dir, short skin, short family, short marker, int price)
         {
             var ctx = vm.Context;
+            var group = Make(vm, dir, skin, family, marker);
+            if (group == null) return null;
+            int minX, minY, maxX, maxY;
+            if (!Extent(group, dir, out minX, out minY, out maxX, out maxY)) { group.Delete(ctx); return null; }
+            int tilesX = (maxX - minX) / 16 + 1, tilesY = (maxY - minY) / 16 + 1;
+            if (!RectFree(vm, x0, y0, tilesX, tilesY)) { group.Delete(ctx); return null; }
+            // where its base tile goes so that its tiles cover the spot
+            var pos = new LotTilePos((short)(x0 * 16 + 8 - minX), (short)(y0 * 16 + 8 - minY), 1);
+            if (PutGroup(vm, group, pos, dir) != VMPlacementError.Success) { group.Delete(ctx); return null; }
+            Finish(group, marker, price);
+            return group;
+        }
+
+        /// <summary>
+        /// 21.1 (Buy mode): a family's own car, bought and put where the player placed it - its base tile at basePos, facing
+        /// dir. Null (and why: the Buy mode tooltip's words) when the spot isn't free (SpotError) or it couldn't be made.
+        /// </summary>
+        public static VMMultitileGroup PlaceOwned(VM vm, LotTilePos basePos, Direction dir, short skin, short family, int price, out VMPlacementError why)
+        {
+            why = VMPlacementError.LocationOutOfBounds;
+            if (!Square(dir)) { why = VMPlacementError.MustBeAtTileCenter; return null; }
+            var ctx = vm.Context;
+            var group = Make(vm, dir, skin, family, OwnedMarker);
+            if (group == null) return null;
+            why = SpotError(vm, group, basePos, dir, null);
+            if (why == VMPlacementError.Success) why = PutGroup(vm, group, basePos, dir);
+            if (why != VMPlacementError.Success) { group.Delete(ctx); return null; }
+            Finish(group, OwnedMarker, price);
+            return group;
+        }
+
+        /// <summary>
+        /// 21.1 (Buy mode, VMNetMoveObjectCmd): a family's own car moved by the player - its base tile to basePos, facing dir,
+        /// if the spot is free for it (its own tiles don't count). The car's other parts follow. False: it stays where it was.
+        /// </summary>
+        public static bool MoveOwned(VM vm, VMEntity car, LotTilePos basePos, Direction dir)
+        {
+            var group = BaseOf(car)?.MultitileGroup;
+            if (group == null || !IsOwnedCar(car)) return false;
+            if (SpotError(vm, group, basePos, dir, group) != VMPlacementError.Success) return false;
+            var oldPos = group.BaseObject.Position;
+            var oldDir = group.BaseObject.Direction;
+            if (PutGroup(vm, group, basePos, dir) == VMPlacementError.Success) return true;
+            PutGroup(vm, group, oldPos, oldDir); // (back where it was)
+            return false;
+        }
+
+        /// <summary>The standard car, out of the world, with its marker (every tile part), skin and family. Null: couldn't be made.</summary>
+        private static VMMultitileGroup Make(VM vm, Direction dir, short skin, short family, short marker)
+        {
+            var ctx = vm.Context;
             VMMultitileGroup group = null;
             try { group = ctx.CreateObjectInstance(CarGUID, LotTilePos.OUT_OF_WORLD, dir); } catch { group = null; }
             if (group == null || group.Objects.Count == 0 || group.BaseObject == null) { group?.Delete(ctx); return null; }
@@ -425,27 +570,11 @@ namespace FSO.SimAntics.Utils
             var b = group.BaseObject;
             b.SetAttribute(ReduxCarSkins.SkinAttribute, skin);
             b.SetAttribute(FamilyAttribute, family);
+            return group;
+        }
 
-            // where its base tile goes so that its tiles cover the spot (the same turning ChangePosition does)
-            int rot = dir == Direction.NORTH ? 0 : dir == Direction.EAST ? 2 : dir == Direction.SOUTH ? 4 : 6;
-            var mat = Matrix.CreateRotationZ((float)(rot * Math.PI / 4.0));
-            var bOff = group.Offsets[group.Objects.IndexOf(b)];
-            var lead = new Vector3(bOff.x, bOff.y, 0);
-            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
-            for (int i = 0; i < group.Objects.Count; i++)
-            {
-                var off = Vector3.Transform(new Vector3(group.Offsets[i].x, group.Offsets[i].y, 0) - lead, mat);
-                int ox = (int)Math.Round(off.X), oy = (int)Math.Round(off.Y);
-                minX = Math.Min(minX, ox); minY = Math.Min(minY, oy); maxX = Math.Max(maxX, ox); maxY = Math.Max(maxY, oy);
-            }
-            int tilesX = (maxX - minX) / 16 + 1, tilesY = (maxY - minY) / 16 + 1;
-            if (!RectFree(vm, x0, y0, tilesX, tilesY)) { group.Delete(ctx); return null; }
-            var pos = new LotTilePos((short)(x0 * 16 + 8 - minX), (short)(y0 * 16 + 8 - minY), 1);
-            VMPlacementResult res;
-            ReduxTraffic.Moving = true; // (our own checks above - the car object's own placing rules are for the street)
-            try { res = group.ChangePosition(pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection); }
-            finally { ReduxTraffic.Moving = false; }
-            if (res.Status != VMPlacementError.Success || b.Position == LotTilePos.OUT_OF_WORLD) { group.Delete(ctx); return null; }
+        private static void Finish(VMMultitileGroup group, short marker, int price)
+        {
             if (marker == OwnedMarker)
             {
                 foreach (var o in group.Objects)
@@ -456,7 +585,6 @@ namespace FSO.SimAntics.Utils
                 group.InitialPrice = Math.Max(0, price);
             }
             ReduxCarSkins.Refresh(group); // (its NFSU2 picture - drawing only)
-            return group;
         }
 
         /// <summary>
@@ -507,7 +635,7 @@ namespace FSO.SimAntics.Utils
         {
             var gone = new List<VMMultitileGroup>();
             foreach (var e in vm.Entities)
-                if (e != null && !e.Dead && e.MultitileGroup?.BaseObject == e && IsVisitCar(e)) gone.Add(e.MultitileGroup);
+                if (e != null && !e.Dead && !e.GhostImage && e.MultitileGroup?.BaseObject == e && IsVisitCar(e)) gone.Add(e.MultitileGroup);
             foreach (var g in gone) g.Delete(vm.Context);
         }
     }

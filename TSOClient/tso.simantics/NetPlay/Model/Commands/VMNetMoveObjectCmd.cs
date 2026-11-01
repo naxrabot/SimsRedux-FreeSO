@@ -23,6 +23,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     return false;
                 if (!vm.PlatformState.Validator.CanMoveObject(caller, obj)) return false;
             } else if (obj == null) return false;
+            // SimsRedux 21.1: a family's own car moves by its own rule (outdoors where there's room - not the Sims car's street rules)
+            if (vm.TS1 && FSO.SimAntics.Utils.ReduxCarShop.IsOwnedCar(obj)) return FSO.SimAntics.Utils.ReduxCarShop.MoveOwned(vm, obj, new LotTilePos(x, y, level), dir);
             var result = obj.SetPosition(new LotTilePos(x, y, level), dir, vm.Context, VMPlaceRequestFlags.UserPlacement);
             if (result.Status == VMPlacementError.Success)
             {

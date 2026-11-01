@@ -46,7 +46,7 @@ namespace FSO.SimAntics.Utils
     ///   * the Lite pack (phones and Lite mode) has fewer cars: a car it doesn't have is drawn as one it does (the same
     ///     kind, picked from the car's number - the same on every game with that pack), a customised car as its stock one.
     ///
-    /// ROUND 3: a family's own car (ReduxCarShop - bought in The Showroom, parked on their lot) keeps its skin on itself the
+    /// ROUND 3: a family's own car (ReduxCarShop - bought in Buy mode, placed on their lot) keeps its skin on itself the
     /// same way. A skin's version is now a number (0 stock, 1 customised, 2..MaxVariant the manifest's other premade versions
     /// - each with its own "id" and file, round 4's Car Customizer), so more versions slot in without changing a car's code.
     /// </summary>
@@ -502,7 +502,7 @@ namespace FSO.SimAntics.Utils
         }
 
         /// <summary>
-        /// Round 3 (The Showroom's picture): the pack's car for this skin, painted - each tile part's SubIndex and its picture
+        /// Round 3 (21.1: Buy mode's catalog picture): the pack's car for this skin, painted - each tile part's SubIndex and its picture
         /// (DGRP, still wheels). Null without the pack, or a car it can't draw (the Lite pack draws a missing car as one it has,
         /// as on the lot). Drawing only.
         /// </summary>

@@ -126,6 +126,7 @@ namespace FSO.SimAntics.Utils
                     foreach (var e in vm.Entities)
                     {
                         if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject) continue;
+                        if (e.GhostImage) continue; // (21.1: Buy mode's held car is a copy only one game has - never traffic or a carpool)
                         if (!IsCar(e)) continue;
                         if (e.GetAttribute(0) == Marker)
                         {
