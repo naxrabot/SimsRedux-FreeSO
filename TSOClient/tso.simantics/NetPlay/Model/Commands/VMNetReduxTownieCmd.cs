@@ -193,17 +193,20 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
 
         private bool StreetWalk(VM vm)
         {
-            if (!vm.TS1 || Kind <= 0 || Kind > Sidewalk.MaxKind) return false;
-            if (vm.Context.ObjectQueries.Avatars.Any(x => x.Object?.OBJ?.GUID == GUID)) return false; // already here
+            // (19.7: every step and every refusal goes in the game log - "street life: walk <GUID> (<kind>) ...")
+            string tag = "[SimsRedux] street life: walk " + GUID.ToString("X8") + " (" + (Sidewalk.Kind)Kind + ")";
+            if (!vm.TS1 || Kind <= 0 || Kind > Sidewalk.MaxKind) { Console.WriteLine(tag + " refused - not a street kind"); return false; }
+            if (vm.Context.ObjectQueries.Avatars.Any(x => x.Object?.OBJ?.GUID == GUID)) { Console.WriteLine(tag + " refused - already on the lot"); return false; }
             var fam = vm.TS1State?.CurrentFamily;
-            if (fam?.FamilyGUIDs != null && fam.FamilyGUIDs.Contains(GUID)) return false; // (never the family playing here)
-            if (!OnLot(vm, FromX, FromY) || !OnLot(vm, ToX, ToY)) return false;
+            if (fam?.FamilyGUIDs != null && fam.FamilyGUIDs.Contains(GUID)) { Console.WriteLine(tag + " refused - the family playing here"); return false; }
+            if (!OnLot(vm, FromX, FromY) || !OnLot(vm, ToX, ToY)) { Console.WriteLine(tag + " refused - tiles " + FromX + "," + FromY + " / " + ToX + "," + ToY + " off the lot"); return false; }
             var ava = vm.Context.CreateObjectInstance(GUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH)?.BaseObject as VMAvatar;
-            if (ava == null) return false;
+            if (ava == null) { Console.WriteLine(tag + " refused - no character to make (no object for that GUID)"); return false; }
             // (a dog only as a dog walker's dog; anyone else is a person)
             bool dog = Kind == (short)Sidewalk.Kind.Dog;
             if (ava.IsPet != dog || (dog && !ava.IsDog))
             {
+                Console.WriteLine(tag + " refused - " + (ava.Name ?? "") + (ava.IsPet ? " is a pet" : " is not a dog"));
                 ava.Delete(true, vm.Context);
                 return false;
             }
@@ -236,14 +239,30 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (lead != null && !lead.Dead && lead.Position != LotTilePos.OUT_OF_WORLD)
                 placed = VMFindLocationFor.FindLocationFor(ava, lead, vm.Context, VMPlaceRequestFlags.Default) && ava.Position != LotTilePos.OUT_OF_WORLD;
             if (!placed) placed = PlaceOnWalk(vm, ava, dir);
-            if (!placed || !WalkTo(vm, ava, ToX, ToY, false))
+            // (19.7: no free spot on the sidewalk - by the lot's street portal instead, as the doorbell walk-bys (Arrive)
+            //  come in, and they walk along the sidewalk from there)
+            var anchor = (!placed && AnchorID != 0) ? vm.GetObjectById(AnchorID) : null;
+            if (anchor != null && !anchor.Dead && anchor.Position != LotTilePos.OUT_OF_WORLD)
+                placed = VMFindLocationFor.FindLocationFor(ava, anchor, vm.Context, VMPlaceRequestFlags.Default) && ava.Position != LotTilePos.OUT_OF_WORLD;
+            if (!placed)
             {
+                Console.WriteLine(tag + " refused - " + (ava.Name ?? "") + ": no free spot on the sidewalk near " + FromX + "," + FromY
+                    + (AnchorID != 0 ? " or by the street portal" : ""));
                 ava.Delete(true, vm.Context);
                 return false;
             }
+            Console.WriteLine(tag + ": " + (ava.Name ?? "") + " made at " + ava.Position.TileX + "," + ava.Position.TileY);
+            bool walking = WalkTo(vm, ava, ToX, ToY, false);
             // (if nothing else takes them off at the end of the sidewalk, Sims 1's own "Leave" does - not the dog: it runs
             //  ahead and waits at the end for its walker, and goes with them)
-            if (!dog) PushLeave(vm, ava);
+            bool leaving = !dog && PushLeave(vm, ava);
+            if (!walking && !leaving)
+            {
+                Console.WriteLine(tag + " - " + (ava.Name ?? "") + " can't walk anywhere - taken off again");
+                ava.Delete(true, vm.Context);
+                return false;
+            }
+            Console.WriteLine(tag + ": " + (ava.Name ?? "") + (walking ? " walking to " + ToX + "," + ToY : " couldn't set off along the sidewalk - leaving the lot (Sims 1's Leave)"));
             vm.Scheduler.RescheduleInterrupt(ava);
             return true;
         }
@@ -273,7 +292,13 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         {
             var group = vm.Context.CreateObjectInstance(Sidewalk.GotoGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH);
             var go = (group != null && group.Objects.Count > 0) ? group.Objects[0] : null;
-            if (go == null) return false;
+            if (go == null)
+            {
+                Console.WriteLine("[SimsRedux] street life: no Go Here object to walk " + (ava.Name ?? "") + " to " + x + "," + y);
+                return false;
+            }
+            // (19.7 fix: the Go Here interaction is TTA index 2 in Sims 1's Destination.iff - asking for 0 always got nothing)
+            int goHere = Sidewalk.GotoInteraction(go);
             bool placed = false;
             for (int r = 0; r <= 2 && !placed; r++)
                 for (int dy = -r; dy <= r && !placed; dy++)
@@ -284,9 +309,11 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                         var pos = LotTilePos.FromBigTile((short)(x + dx), (short)(y + dy), 1);
                         placed = go.SetPosition(pos, Direction.NORTH, vm.Context).Status == VMPlacementError.Success;
                     }
-            VMQueuedAction action = placed ? go.GetAction(0, ava, vm.Context, false, new short[] { 0, 0, 0, 0 }) : null;
+            VMQueuedAction action = (placed && goHere >= 0) ? go.GetAction(goHere, ava, vm.Context, false, new short[] { 0, 0, 0, 0 }) : null;
             if (action == null)
             {
+                Console.WriteLine("[SimsRedux] street life: can't walk " + (ava.Name ?? "") + " to " + x + "," + y + " - "
+                    + (!placed ? "no free spot for the Go Here marker there" : goHere < 0 ? "the Go Here object has no Go Here" : "Go Here refused"));
                 go.Delete(true, vm.Context);
                 return false;
             }
@@ -398,6 +425,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (InUseByOthers(vm, ava)) return false; // (the game that sent this tries again later)
             var markers = ava.Thread.Queue.Select(x => x.Callee)
                 .Where(x => x != null && x != ava && !x.Dead && x.Object?.OBJ?.GUID == Sidewalk.GotoGUID).Distinct().ToList();
+            Console.WriteLine("[SimsRedux] street life: " + (ava.Name ?? "") + " taken off the street at " + ava.Position.TileX + "," + ava.Position.TileY);
             ava.Delete(true, vm.Context);
             foreach (var go in markers) if (!go.Dead) go.Delete(true, vm.Context);
             return true;

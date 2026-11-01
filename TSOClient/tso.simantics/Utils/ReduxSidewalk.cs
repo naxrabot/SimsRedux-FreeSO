@@ -38,6 +38,31 @@ namespace FSO.SimAntics.Utils
         /// <summary>The "Go Here" object (the same one the pie menu's Go Here uses).</summary>
         public const uint GotoGUID = 0x000007C4;
 
+        /// <summary>The Go Here object's own "Go Here" tree (Destination.iff BHAV 0x1000).</summary>
+        private const ushort GotoActionTree = 0x1000;
+
+        /// <summary>
+        /// 19.7 fix: the TTA index of the Go Here object's "Go Here" interaction - what the pie menu sends (its interactions are
+        /// numbered 2 to 7 in Sims 1's Destination.iff: 2 "Go Here", 3 "Move", 4 "Go Here Frantically"...; there is no 0, so
+        /// asking for interaction 0 got nothing and every street Sim was taken off again the moment it was made). Found by the
+        /// English name (tagged strings only) or the action tree - the object's own data, the same on every game. -1: none.
+        /// </summary>
+        public static int GotoInteraction(VMEntity go)
+        {
+            var ttab = go?.TreeTable;
+            if (ttab?.Interactions == null) return -1;
+            var ttas = go.TreeTableStrings;
+            foreach (var ia in ttab.Interactions)
+            {
+                if (ia == null || ttas == null) continue;
+                var n = ttas.TaggedEnglish((int)ia.TTAIndex);
+                if (n != null && n.Trim().Equals("Go Here", StringComparison.OrdinalIgnoreCase)) return (int)ia.TTAIndex;
+            }
+            foreach (var ia in ttab.Interactions)
+                if (ia != null && ia.ActionFunction == GotoActionTree) return (int)ia.TTAIndex;
+            return -1;
+        }
+
         /// <summary>One sidewalk: the line of tiles (x = Line when not AlongX, y = Line when AlongX) from From to To along it.</summary>
         public class Walk
         {
