@@ -427,6 +427,7 @@ namespace FSO.Content
                 // is the same as its players'.
                 try { ReduxTSOAvatarSet = HasTSO ? ReduxTSOAvatars.Load() : ReduxTSOAvatars.Unload(); }
                 catch (System.Exception e) { ReduxTSOAvatarSet = null; System.Console.WriteLine("[SimsRedux] Sims Online clothes: " + e.Message); }
+                FSO.Content.TS1.ReduxOutfitCheck.Forget(); // (SimsRedux 19.9: which outfits can be shown is worked out again for these files)
                 Jobs = new TS1JobProvider(TS1Global);
                 Neighborhood = new TS1NeighborhoodProvider(this);
             } else

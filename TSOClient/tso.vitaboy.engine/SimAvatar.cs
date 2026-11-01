@@ -416,10 +416,16 @@ namespace FSO.Vitaboy
                 var tex = m_Body.TS1TextureID;
                 // SimsRedux: clothes the game can't find (a removed download, a missing uniform) -
                 // something of the same kind instead of an invisible Sim
-                if (Appearance == null && m_Body.TS1AppearanceID != null)
+                // (SimsRedux 19.9: also one whose parts aren't all there - it showed as a floating head and hands -
+                //  or whose texture is missing in every skin tone; the Sim keeps the outfit's name, only what's drawn changes)
+                if (m_Body.TS1AppearanceID != null && (Appearance == null || !ReduxAvatarFallback.Showable(m_Body.TS1AppearanceID, tex)))
                 {
                     var fb = ReduxAvatarFallback.Outfit(m_Body.TS1AppearanceID, tex);
-                    if (fb != null) { Appearance = FSO.Content.Content.Get().AvatarAppearances.Get(new FSO.Common.Content.ContentID(fb.Item1)); tex = fb.Item2; }
+                    if (fb != null)
+                    {
+                        var fbApr = FSO.Content.Content.Get().AvatarAppearances.Get(new FSO.Common.Content.ContentID(fb.Item1));
+                        if (fbApr != null) { Appearance = fbApr; tex = fb.Item2; }
+                    }
                 }
                 if (Appearance != null)
                 {

@@ -18,5 +18,14 @@ namespace FSO.Content.TS1
             if (try1 != null) return try1;
             return base.Get(name.ToLowerInvariant()+".tga");
         }
+
+        /// <summary>SimsRedux 19.9: is this texture there? (from the file lists - nothing is read or decoded)</summary>
+        public bool HasTexture(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            if (ReduxTSOAvatars.IsTSOFile(name) || ReduxTSOAvatars.IsTSOName(name)) return ReduxTSOAvatars.Instance?.HasTexture(name) ?? false;
+            var n = name.ToLowerInvariant();
+            return Has(n + ".bmp") || Has(n + ".tga");
+        }
     }
 }

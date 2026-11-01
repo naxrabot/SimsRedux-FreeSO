@@ -63,15 +63,180 @@ namespace FSO.SimAntics.Utils
             return -1;
         }
 
+        // [swtest-begin] (19.10: this part is copied as-is into the scratchpad harness that checks it on Sims 1's house files)
         /// <summary>One sidewalk: the line of tiles (x = Line when not AlongX, y = Line when AlongX) from From to To along it.</summary>
         public class Walk
         {
             public bool AlongX;
             public int Line;
             public int From, To;
+            /// <summary>19.10: the street's lane next to this sidewalk (a line of road tiles), and the way from it to the lot
+            /// (+1 / -1 across the lines): the sidewalk is on the lot's own side of the street, never across it.</summary>
+            public int RoadEdge, Side;
 
             public short X(int along) { return (short)(AlongX ? along : Line); }
             public short Y(int along) { return (short)(AlongX ? Line : along); }
+            public int Min { get { return Math.Min(From, To); } }
+            public int Max { get { return Math.Max(From, To); } }
+            /// <summary>How far along this sidewalk a tile is, and how far off its line.</summary>
+            public int Along(int x, int y) { return AlongX ? x : y; }
+            public int Off(int x, int y) { return (AlongX ? y : x) - Line; }
+            /// <summary>On the lot's side of the street (across the lines from the road towards the lot).</summary>
+            public bool LotSide(int x, int y) { return ((AlongX ? y : x) - RoadEdge) * Side > 0; }
+            public override string ToString() { return (AlongX ? "y=" : "x=") + Line + " " + From + ".." + To + " (road " + RoadEdge + ", lot " + (Side > 0 ? "+" : "-") + ")"; }
+        }
+
+        /// <summary>Sims 1's sidewalk floor (the grey strip along the street on every lot).</summary>
+        public const int SidewalkPattern = 12;
+
+        /// <summary>
+        /// 19.10: the sidewalks of a lot from its floor alone (the same on every game). For each street (5+ lines of road
+        /// side by side, as ReduxTraffic finds them): the lot's own side of it - the side with the lot's buildable land beyond
+        /// it (19.9 and before took the side with "more lot", counting only 10 lines and the land past the edge of a smaller
+        /// lot); then on that side the line of Sims 1's sidewalk floor between the road and the lot (or, without one, the line
+        /// right next to the road), never road (9-11), water or a pool. From and To are its two ends, at the lot's edges.
+        /// </summary>
+        public static void FindWalks(int w, int ht, Func<int, int, int> pattern, Func<int, int, bool> buildable, List<Walk> result)
+        {
+            Func<int, int, bool> isRoad = (x, y) => { var p = pattern(x, y); return p == 9 || p == 10 || p == 11; };
+            Func<int, int, bool> walkable = (x, y) =>
+            {
+                var p = pattern(x, y);
+                return p >= 0 && p != 9 && p != 10 && p != 11 && p != 65534 && p != 65535; // (not road, water or pool)
+            };
+            for (int axis = 0; axis < 2; axis++)
+            {
+                bool alongX = axis == 0;
+                int lines = alongX ? ht : w, len = alongX ? w : ht;
+                Func<int, int, int> tx = (line, along) => alongX ? along : line;
+                Func<int, int, int> ty = (line, along) => alongX ? line : along;
+                int runStart = -1;
+                for (int l = 0; l <= lines; l++)
+                {
+                    int count = 0;
+                    if (l < lines) for (int i = 0; i < len; i++) if (isRoad(tx(l, i), ty(l, i))) count++;
+                    bool road = count >= Math.Max(12, len / 3);
+                    if (road && runStart < 0) runStart = l;
+                    if (road || runStart < 0) continue;
+                    int first = runStart, last = l - 1;
+                    runStart = -1;
+                    if (last - first + 1 < 5) continue;
+                    int mid = (first + last) / 2;
+                    int s = int.MaxValue, e = -1;
+                    for (int i = 0; i < len; i++) if (isRoad(tx(mid, i), ty(mid, i))) { s = Math.Min(s, i); e = i; }
+                    if (e - s <= 10) continue;
+                    int from = Math.Max(s, 2), to = Math.Min(e, len - 3);
+                    if (to - from < 10) continue;
+
+                    // the lot's side of the street: the one with the lot's buildable land beyond it (all of it, to the lot's edge)
+                    int[] land = new int[2];
+                    for (int k = 0; k < 2; k++)
+                    {
+                        int side = k == 0 ? -1 : 1, edge = side < 0 ? first : last;
+                        for (int line = edge + side; line >= 0 && line < lines; line += side)
+                            for (int i = from; i <= to; i++)
+                                if (buildable(tx(line, i), ty(line, i))) land[k]++;
+                    }
+                    if (land[0] == 0 && land[1] == 0) continue; // (no lot along this street)
+                    int lotSide = land[1] > land[0] ? 1 : -1;
+                    int roadEdge = lotSide < 0 ? first : last;
+
+                    // the sidewalk on that side: the line (up to 4 from the road, before the lot itself) with the most sidewalk
+                    // floor - more than half its length; otherwise the line right next to the road
+                    int range = to - from + 1, bestLine = -1, bestWalk = -1;
+                    for (int d = 1; d <= 4; d++)
+                    {
+                        int line = roadEdge + lotSide * d;
+                        if (line < 1 || line > lines - 2) break;
+                        int walk = 0, ok = 0, lot = 0;
+                        for (int i = from; i <= to; i++)
+                        {
+                            int x = tx(line, i), y = ty(line, i);
+                            if (walkable(x, y)) ok++;
+                            if (pattern(x, y) == SidewalkPattern) walk++;
+                            if (buildable(x, y)) lot++;
+                        }
+                        if (d > 1 && lot * 2 > range) break; // (the lot itself from here)
+                        if (walk * 2 > range && walk > bestWalk && ok * 10 >= range * 8) { bestWalk = walk; bestLine = line; }
+                    }
+                    if (bestLine < 0)
+                    {
+                        int line = roadEdge + lotSide;
+                        if (line < 1 || line > lines - 2) continue;
+                        int ok = 0;
+                        for (int i = from; i <= to; i++) if (walkable(tx(line, i), ty(line, i))) ok++;
+                        if (ok * 10 < range * 8) continue;
+                        bestLine = line;
+                    }
+                    // its ends: the first and last tiles along it that can be walked on
+                    int a = from, b = to;
+                    while (a < b && !walkable(tx(bestLine, a), ty(bestLine, a))) a++;
+                    while (b > a && !walkable(tx(bestLine, b), ty(bestLine, b))) b--;
+                    if (b - a < 10) continue;
+                    result.Add(new Walk { AlongX = alongX, Line = bestLine, From = a, To = b, RoadEdge = roadEdge, Side = lotSide });
+                }
+            }
+        }
+
+        /// <summary>
+        /// 19.10: the stops of a walk along a sidewalk, from along-position cur to end: a tile every few steps, so the Sim walks
+        /// along the sidewalk in short straight goes (a Go Here each) - one long Go Here let the routing cut through the yard
+        /// or behind the house. offLine: the Sim isn't on the sidewalk's line now - the first stop brings them back to it.
+        /// </summary>
+        public static List<int> Hops(int cur, int end, bool offLine)
+        {
+            var res = new List<int>();
+            if (offLine) res.Add(cur);
+            int dist = Math.Abs(end - cur);
+            if (dist == 0) return res;
+            int hop = Math.Max(HopTiles, (dist + MaxHops - 1) / MaxHops);
+            int dir = Math.Sign(end - cur);
+            for (int a = cur + dir * hop; dir > 0 ? a < end - 1 : a > end + 1; a += dir * hop) res.Add(a); // (no stop a tile short of the end)
+            res.Add(end);
+            return res;
+        }
+
+        /// <summary>Tiles between the stops of a walk along the sidewalk, and the most stops (longer sidewalks: longer goes).</summary>
+        public const int HopTiles = 6, MaxHops = 10;
+        // [swtest-end]
+
+        /// <summary>A tile a street Sim may stand on: on the lot, not road, water or a pool (the same on every game).</summary>
+        public static bool IsWalkTile(VMContext ctx, int x, int y)
+        {
+            var arch = ctx?.Architecture;
+            if (arch == null || x < 0 || y < 0 || x >= arch.Width || y >= arch.Height) return false;
+            var p = arch.Floors[0][y * arch.Width + x].Pattern;
+            return p != 9 && p != 10 && p != 11 && p != 65534 && p != 65535;
+        }
+
+        /// <summary>19.10: the sidewalk a tile is on (its line, between its ends give or take two) - null: none.</summary>
+        public static Walk WalkAt(VMContext ctx, int x, int y)
+        {
+            foreach (var wk in Sidewalks(ctx))
+            {
+                if (wk.Off(x, y) != 0) continue;
+                int a = wk.Along(x, y);
+                if (a >= wk.Min - 2 && a <= wk.Max + 2) return wk;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 19.10: a tile next to a sidewalk, on the lot's side of the street and not on the road (or water) - where a street Sim
+        /// may be put when the sidewalk itself has no room (by the street portal): within two lines of the sidewalk.
+        /// </summary>
+        public static bool NearSidewalk(VMContext ctx, Walk wk, int x, int y)
+        {
+            if (wk == null || !IsWalkTile(ctx, x, y) || !wk.LotSide(x, y) || Math.Abs(wk.Off(x, y)) > 2) return false;
+            int a = wk.Along(x, y);
+            return a >= wk.Min - 2 && a <= wk.Max + 2;
+        }
+
+        /// <summary>19.10: the end of the sidewalk nearer this tile (along-position).</summary>
+        public static int NearerEnd(Walk wk, int x, int y)
+        {
+            int a = wk.Along(x, y);
+            return Math.Abs(a - wk.From) <= Math.Abs(a - wk.To) ? wk.From : wk.To;
         }
 
         private static readonly ConditionalWeakTable<VMArchitecture, List<Walk>> Cache = new ConditionalWeakTable<VMArchitecture, List<Walk>>();
@@ -157,65 +322,10 @@ namespace FSO.SimAntics.Utils
             int w = arch.Width, ht = arch.Height;
             var floors = arch.Floors[0];
             Func<int, int, int> pattern = (x, y) => (x < 0 || y < 0 || x >= w || y >= ht) ? -1 : floors[y * w + x].Pattern;
-            Func<int, int, bool> isRoad = (x, y) => { var p = pattern(x, y); return p == 9 || p == 10 || p == 11; };
-            Func<int, int, bool> walkable = (x, y) =>
-            {
-                var p = pattern(x, y);
-                return p >= 0 && p != 9 && p != 10 && p != 11 && p != 65534 && p != 65535; // (not road, water or pool)
-            };
-            for (int axis = 0; axis < 2; axis++)
-            {
-                bool alongX = axis == 0;
-                int lines = alongX ? ht : w, len = alongX ? w : ht;
-                Func<int, int, int> tx = (line, along) => alongX ? along : line;
-                Func<int, int, int> ty = (line, along) => alongX ? line : along;
-                int runStart = -1;
-                for (int l = 0; l <= lines; l++)
-                {
-                    int count = 0;
-                    if (l < lines) for (int i = 0; i < len; i++) if (isRoad(tx(l, i), ty(l, i))) count++;
-                    bool road = count >= Math.Max(12, len / 3);
-                    if (road && runStart < 0) runStart = l;
-                    if (road || runStart < 0) continue;
-                    int first = runStart, last = l - 1;
-                    runStart = -1;
-                    if (last - first + 1 < 5) continue;
-                    int mid = (first + last) / 2;
-                    int s = int.MaxValue, e = -1;
-                    for (int i = 0; i < len; i++) if (isRoad(tx(mid, i), ty(mid, i))) { s = Math.Min(s, i); e = i; }
-                    if (e - s <= 10) continue;
-                    int from = Math.Max(s, 2), to = Math.Min(e, len - 3);
-                    if (to - from < 10) continue;
-
-                    // the lot's side of the road: the one with the buildable lot beyond it
-                    Walk best = null;
-                    int bestLot = -1;
-                    for (int side = -1; side <= 1; side += 2)
-                    {
-                        int edge = side < 0 ? first : last;
-                        Walk found = null;
-                        for (int d = 1; d <= 2 && found == null; d++)
-                        {
-                            int line = edge + side * d;
-                            if (line < 1 || line > lines - 2) break;
-                            int ok = 0;
-                            for (int i = from; i <= to; i++) if (walkable(tx(line, i), ty(line, i))) ok++;
-                            if (ok * 10 >= (to - from + 1) * 8) found = new Walk { AlongX = alongX, Line = line, From = from, To = to };
-                        }
-                        if (found == null) continue;
-                        int lot = 0;
-                        for (int d = 1; d <= 10; d++)
-                        {
-                            int line = found.Line + side * d;
-                            if (line < 0 || line >= lines) break;
-                            for (int i = from; i <= to; i += 2)
-                                if (!ctx.IsUserOutOfBounds(LotTilePos.FromBigTile((short)tx(line, i), (short)ty(line, i), 1))) lot++;
-                        }
-                        if (lot > bestLot) { bestLot = lot; best = found; }
-                    }
-                    if (best != null) result.Add(best);
-                }
-            }
+            // (the lot's buildable land - the property line - as build mode sees it)
+            Func<int, int, bool> buildable = (x, y) => x >= 0 && y >= 0 && x < w && y < ht
+                && !ctx.IsUserOutOfBounds(LotTilePos.FromBigTile((short)x, (short)y, 1));
+            FindWalks(w, ht, pattern, buildable, result);
         }
 
         /// <summary>The street Sim's own nearest sidewalk (for one already out there whose end was lost) - null: none.</summary>

@@ -31,14 +31,16 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             SetPerson = 3,
 
             // ---- 19.6: street life (FSO.SimAntics.Utils.ReduxSidewalk; decided by Simitone.Client.Utils.ReduxStreetPeople) ----
-            /// <summary>Make the Sim (or, Kind Dog, the dog) GUID out on the sidewalk at tile From (OtherID: next to that Sim
-            /// instead - the dog by its walker, the second child), marked with Kind, greet status Greet (-1: 0), walking to
-            /// tile To, then Sims 1's own "Leave".</summary>
+            /// <summary>Make the Sim (or, Kind Dog, the dog) GUID out on the sidewalk at tile From (OtherID: the Sim it goes with
+            /// - the dog's walker, the first child; 19.10: it starts a tile behind them on the sidewalk, no longer anywhere around
+            /// them), marked with Kind, greet status Greet (-1: 0), walking along the sidewalk to tile To (19.10: in short goes,
+            /// and no Sims 1 "Leave" after it - the game deciding takes them off at the end).</summary>
             StreetWalk = 4,
             /// <summary>Street Sim ObjectID stops for a social with OtherID (Kind: 0 a chat, 1 children playing, 2 a wave at
             /// the family; Pick picks among the ones found), then walks on to its end tile.</summary>
             StreetSocial = 5,
-            /// <summary>Street Sim ObjectID sets off for its end tile again (if nothing it was given is still waiting).</summary>
+            /// <summary>Street Sim ObjectID sets off for its end tile again (if nothing it was given is still waiting). 19.10: Kind 1 -
+            /// for the end of the sidewalk at ToX/ToY instead (the nearer one: the walk kept stopping short).</summary>
             StreetGo = 6,
             /// <summary>Street Sim ObjectID is stopped by the family (greeted, talked to): no longer a street Sim - its walk is
             /// called off and it's an ordinary walk-by / visitor from now on.</summary>
@@ -233,96 +235,167 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             // a Sim's pace - trotting, it keeps up with its walker and a little ahead)
             ava.SetValue(VMStackObjectVariable.WalkStyle, (short)(Kind == (short)Sidewalk.Kind.Jogger || dog ? 1 : 0));
 
+            // (19.10: only ever on the lot's own sidewalk - the one both tiles are on, on the lot's side of the street)
+            var wk = Sidewalk.WalkAt(vm.Context, ToX, ToY);
+            if (wk == null || Sidewalk.WalkAt(vm.Context, FromX, FromY) != wk)
+            {
+                Console.WriteLine(tag + " refused - " + FromX + "," + FromY + " / " + ToX + "," + ToY + " aren't on one of this lot's sidewalks");
+                ava.Delete(true, vm.Context);
+                return false;
+            }
             var dir = Facing(FromX, FromY, ToX, ToY);
-            bool placed = false;
-            var lead = (OtherID != 0) ? vm.GetObjectById(OtherID) as VMAvatar : null;
-            if (lead != null && !lead.Dead && lead.Position != LotTilePos.OUT_OF_WORLD)
-                placed = VMFindLocationFor.FindLocationFor(ava, lead, vm.Context, VMPlaceRequestFlags.Default) && ava.Position != LotTilePos.OUT_OF_WORLD;
-            if (!placed) placed = PlaceOnWalk(vm, ava, dir);
+            bool placed = PlaceOnWalk(vm, ava, wk, dir);
             // (19.7: no free spot on the sidewalk - by the lot's street portal instead, as the doorbell walk-bys (Arrive)
-            //  come in, and they walk along the sidewalk from there)
+            //  come in, and they walk along the sidewalk from there. 19.10: only a portal on the lot's side of the street, and
+            //  only a spot right by the sidewalk - many lots have portals across the street, and the spot by one could be on
+            //  the road: there they're refused instead)
             var anchor = (!placed && AnchorID != 0) ? vm.GetObjectById(AnchorID) : null;
-            if (anchor != null && !anchor.Dead && anchor.Position != LotTilePos.OUT_OF_WORLD)
-                placed = VMFindLocationFor.FindLocationFor(ava, anchor, vm.Context, VMPlaceRequestFlags.Default) && ava.Position != LotTilePos.OUT_OF_WORLD;
+            if (anchor != null && !anchor.Dead && anchor.Position != LotTilePos.OUT_OF_WORLD
+                && wk.LotSide(anchor.Position.TileX, anchor.Position.TileY))
+            {
+                placed = VMFindLocationFor.FindLocationFor(ava, anchor, vm.Context, VMPlaceRequestFlags.Default) && ava.Position != LotTilePos.OUT_OF_WORLD
+                    && Sidewalk.NearSidewalk(vm.Context, wk, ava.Position.TileX, ava.Position.TileY) && ava.Position.Level == 1;
+            }
             if (!placed)
             {
                 Console.WriteLine(tag + " refused - " + (ava.Name ?? "") + ": no free spot on the sidewalk near " + FromX + "," + FromY
-                    + (AnchorID != 0 ? " or by the street portal" : ""));
+                    + (AnchorID != 0 ? " (nor by a street portal on this side of the street)" : ""));
                 ava.Delete(true, vm.Context);
                 return false;
             }
-            Console.WriteLine(tag + ": " + (ava.Name ?? "") + " made at " + ava.Position.TileX + "," + ava.Position.TileY);
-            bool walking = WalkTo(vm, ava, ToX, ToY, false);
-            // (if nothing else takes them off at the end of the sidewalk, Sims 1's own "Leave" does - not the dog: it runs
-            //  ahead and waits at the end for its walker, and goes with them)
-            bool leaving = !dog && PushLeave(vm, ava);
-            if (!walking && !leaving)
+            Console.WriteLine(tag + ": " + (ava.Name ?? "") + " made at " + ava.Position.TileX + "," + ava.Position.TileY + " on the sidewalk " + wk);
+            // (19.10: along the sidewalk in short goes, and no Sims 1 "Leave" after it any more - that walked them to a random
+            //  portal, through the yard or across the street; at the end of the sidewalk the game deciding takes them off)
+            if (!WalkAlong(vm, ava, wk, wk.Along(ToX, ToY), false))
             {
-                Console.WriteLine(tag + " - " + (ava.Name ?? "") + " can't walk anywhere - taken off again");
+                Console.WriteLine(tag + " - " + (ava.Name ?? "") + " can't walk along the sidewalk - taken off again");
                 ava.Delete(true, vm.Context);
                 return false;
             }
-            Console.WriteLine(tag + ": " + (ava.Name ?? "") + (walking ? " walking to " + ToX + "," + ToY : " couldn't set off along the sidewalk - leaving the lot (Sims 1's Leave)"));
+            Console.WriteLine(tag + ": " + (ava.Name ?? "") + " walking along the sidewalk to " + ToX + "," + ToY);
             vm.Scheduler.RescheduleInterrupt(ava);
             return true;
         }
 
-        /// <summary>The first free tile from From towards To (and a tile either side), in the same order on every game.</summary>
-        private bool PlaceOnWalk(VM vm, VMAvatar ava, Direction dir)
+        /// <summary>
+        /// The first free sidewalk tile from From (19.10: on the sidewalk's own line only - never a tile to the side, which
+        /// could be the road or the yard): From, then a tile on towards To, one back, two on, two back... up to 6 - the same
+        /// order on every game. (A follower - the dog, the second child - is sent from a tile behind its leader.)
+        /// </summary>
+        private bool PlaceOnWalk(VM vm, VMAvatar ava, Sidewalk.Walk wk, Direction dir)
         {
-            bool alongX = Math.Abs(ToX - FromX) >= Math.Abs(ToY - FromY);
-            int sx = alongX ? Math.Sign(ToX - FromX) : 0, sy = alongX ? 0 : Math.Sign(ToY - FromY);
-            var sides = new[] { 0, 1, -1 };
-            for (int i = 0; i <= 6; i++)
-                foreach (var side in sides)
-                {
-                    int x = FromX + sx * i + (alongX ? 0 : side), y = FromY + sy * i + (alongX ? side : 0);
-                    var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
-                    if (!OnLot(vm, x, y) || vm.Context.IsOutOfBounds(pos)) continue;
-                    if (ava.SetPosition(pos, dir, vm.Context).Status == VMPlacementError.Success) return true;
-                }
+            int start = wk.Along(FromX, FromY), sign = Math.Sign(wk.Along(ToX, ToY) - start);
+            if (sign == 0) sign = 1;
+            for (int i = 0; i <= 12; i++)
+            {
+                int a = start + ((i & 1) == 1 ? sign * ((i + 1) / 2) : -sign * (i / 2));
+                if (a < wk.Min - 2 || a > wk.Max + 2) continue;
+                int x = wk.X(a), y = wk.Y(a);
+                if (!Sidewalk.IsWalkTile(vm.Context, x, y)) continue;
+                var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
+                if (vm.Context.IsOutOfBounds(pos)) continue;
+                if (ava.SetPosition(pos, dir, vm.Context).Status == VMPlacementError.Success) return true;
+            }
             return false;
         }
 
         /// <summary>
-        /// Queues a walk to tile (x, y) - Sims 1's own Go Here, as the pie menu gives it (the marker by the tile, or the nearest
-        /// free spot within 2 tiles). head: right after what the Sim is doing now, ahead of anything else waiting.
+        /// 19.10: queues the walk along sidewalk wk to along-position end: a Go Here every few tiles (Sidewalk.Hops), each to a
+        /// tile on the sidewalk's line, so the routing never has a reason to leave it (one long Go Here cut through the yard
+        /// or behind the house). A stop whose tile is taken moves to the nearest free sidewalk tile beside it (2 either way);
+        /// none: that stop is skipped. head: right after what the Sim is doing now, ahead of anything else waiting. False:
+        /// nothing queued (already there, or no stop could be placed).
         /// </summary>
-        private static bool WalkTo(VM vm, VMAvatar ava, short x, short y, bool head)
+        private static bool WalkAlong(VM vm, VMAvatar ava, Sidewalk.Walk wk, int end, bool head)
+        {
+            var p = ava.Position;
+            int cur = Math.Max(wk.Min, Math.Min(wk.Max, wk.Along(p.TileX, p.TileY)));
+            end = Math.Max(wk.Min, Math.Min(wk.Max, end));
+            var hops = Sidewalk.Hops(cur, end, wk.Off(p.TileX, p.TileY) != 0);
+            int dir = Math.Sign(end - cur);
+            var actions = new List<VMQueuedAction>();
+            for (int h = 0; h < hops.Count; h++)
+            {
+                var act = HopTo(vm, ava, wk, hops[h], dir, h == hops.Count - 1);
+                if (act != null) actions.Add(act);
+            }
+            if (actions.Count == 0) return false;
+            // (pushed to the head they go in backwards, so they come out in order)
+            if (head) actions.Reverse();
+            foreach (var act in actions)
+            {
+                if (head) act.Flags |= TTABFlags.FSOPushHead;
+                ava.Thread.EnqueueAction(act);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// One stop of a walk along the sidewalk: Sims 1's own Go Here (as the pie menu gives it), its marker on a sidewalk tile
+        /// at along-position a, or the nearest free one beside it on the line (back towards the start first, so a stop never
+        /// overshoots; the last stop looks further back, up to a hop) - null: none free.
+        /// </summary>
+        private static VMQueuedAction HopTo(VM vm, VMAvatar ava, Sidewalk.Walk wk, int a, int dir, bool last)
         {
             var group = vm.Context.CreateObjectInstance(Sidewalk.GotoGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH);
             var go = (group != null && group.Objects.Count > 0) ? group.Objects[0] : null;
             if (go == null)
             {
-                Console.WriteLine("[SimsRedux] street life: no Go Here object to walk " + (ava.Name ?? "") + " to " + x + "," + y);
-                return false;
+                Console.WriteLine("[SimsRedux] street life: no Go Here object to walk " + (ava.Name ?? "") + " along the sidewalk");
+                return null;
             }
             // (19.7 fix: the Go Here interaction is TTA index 2 in Sims 1's Destination.iff - asking for 0 always got nothing)
             int goHere = Sidewalk.GotoInteraction(go);
+            if (dir == 0) dir = 1;
             bool placed = false;
-            for (int r = 0; r <= 2 && !placed; r++)
-                for (int dy = -r; dy <= r && !placed; dy++)
-                    for (int dx = -r; dx <= r && !placed; dx++)
-                    {
-                        if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != r) continue;
-                        if (!OnLot(vm, x + dx, y + dy)) continue;
-                        var pos = LotTilePos.FromBigTile((short)(x + dx), (short)(y + dy), 1);
-                        placed = go.SetPosition(pos, Direction.NORTH, vm.Context).Status == VMPlacementError.Success;
-                    }
+            int reach = last ? Sidewalk.HopTiles : 2;
+            for (int i = 0; i <= reach * 2 && !placed; i++)
+            {
+                // a, one back, one on, two back, two on... (the last stop: only back - never past the end)
+                int off = (i == 0) ? 0 : ((i & 1) == 1 ? -dir * ((i + 1) / 2) : dir * (i / 2));
+                if (last && off * dir > 0) continue;
+                if (!last && Math.Abs(off) > 2) continue;
+                int at = a + off;
+                if (at < wk.Min - 2 || at > wk.Max + 2) continue;
+                int x = wk.X(at), y = wk.Y(at);
+                if (!Sidewalk.IsWalkTile(vm.Context, x, y)) continue;
+                var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
+                if (vm.Context.IsOutOfBounds(pos)) continue;
+                placed = go.SetPosition(pos, Direction.NORTH, vm.Context).Status == VMPlacementError.Success;
+            }
             VMQueuedAction action = (placed && goHere >= 0) ? go.GetAction(goHere, ava, vm.Context, false, new short[] { 0, 0, 0, 0 }) : null;
             if (action == null)
             {
-                Console.WriteLine("[SimsRedux] street life: can't walk " + (ava.Name ?? "") + " to " + x + "," + y + " - "
-                    + (!placed ? "no free spot for the Go Here marker there" : goHere < 0 ? "the Go Here object has no Go Here" : "Go Here refused"));
+                Console.WriteLine("[SimsRedux] street life: can't walk " + (ava.Name ?? "") + " to " + wk.X(a) + "," + wk.Y(a) + " - "
+                    + (!placed ? "no free sidewalk tile for the Go Here marker there" : goHere < 0 ? "the Go Here object has no Go Here" : "Go Here refused"));
                 go.Delete(true, vm.Context);
-                return false;
+                return null;
             }
             // (a passer-by is a visitor, the dog a pet: Go Here is the player's, so its permissions are skipped)
             action.Flags |= TTABFlags.FSOSkipPermissions;
-            if (head) action.Flags |= TTABFlags.FSOPushHead;
             action.Priority = (short)VMQueuePriority.UserDriven;
-            ava.Thread.EnqueueAction(action);
-            return true;
+            return action;
+        }
+
+        /// <summary>
+        /// 19.10: calls off the street walk queued for a Sim (its Go Here stops, and any Sims 1 "Leave"): the ones not started
+        /// yet are taken out of the queue and their Go Here markers off the lot (a stopped walk used to leave its marker behind);
+        /// the one running is cancelled as before and tidies up after itself.
+        /// </summary>
+        private static void CancelWalk(VM vm, VMAvatar ava, bool alsoLeave)
+        {
+            var th = ava.Thread;
+            if (th == null) return;
+            var mine = th.Queue.Where(x => x.Callee?.Object?.OBJ?.GUID == Sidewalk.GotoGUID || (alsoLeave && x.ActionRoutine?.ID == LeaveRoutine)).ToList();
+            var markers = new List<VMEntity>();
+            foreach (var a in mine)
+            {
+                bool started = th.Queue.IndexOf(a) <= th.ActiveQueueBlock;
+                if (!started && a.Callee != null && a.Callee != ava && a.Callee.Object?.OBJ?.GUID == Sidewalk.GotoGUID) markers.Add(a.Callee);
+                th.CancelAction(a.UID);
+            }
+            foreach (var go in markers)
+                if (!go.Dead && !th.Queue.Any(x => x.Callee == go)) go.Delete(true, vm.Context);
         }
 
         private static readonly string[][] SocialWords =
@@ -379,12 +452,13 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             social.Priority = (short)VMQueuePriority.UserDriven;
             short ex, ey;
             Sidewalk.EndOf(me, out ex, out ey);
-            var th = me.Thread;
-            // the walk they were on stops; after the social they set off again for the same end
-            var old = th.Queue.Where(x => x.Callee?.Object?.OBJ?.GUID == Sidewalk.GotoGUID).Select(x => x.UID).ToList();
-            if (!WalkTo(vm, me, ex, ey, true)) return false;
-            th.EnqueueAction(social); // (ahead of the new walk: both go right after what's running now)
-            foreach (var uid in old) th.CancelAction(uid);
+            var wk = Sidewalk.WalkAt(vm.Context, ex, ey);
+            if (wk == null) return false;
+            // the walk they were on stops (where they are, on the sidewalk); after the social they set off again for the same
+            // end, along the sidewalk (19.10)
+            CancelWalk(vm, me, false);
+            if (!WalkAlong(vm, me, wk, wk.Along(ex, ey), true)) return false;
+            me.Thread.EnqueueAction(social); // (ahead of the new walk: both go right after what's running now)
             return true;
         }
 
@@ -397,12 +471,18 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (!OnLot(vm, ex, ey)) return false;
             var th = ava.Thread;
             if (th.Queue.Any(x => x.Callee?.Object?.OBJ?.GUID == Sidewalk.GotoGUID)) return false; // (still walking)
-            // (the walk first, then the Leave)
+            var wk = Sidewalk.WalkAt(vm.Context, ex, ey) ?? Sidewalk.Nearest(vm.Context, ava.Position);
+            if (wk == null) return false;
+            // (19.10: Kind 1 - the walk keeps stopping short: they turn for the nearer end of the sidewalk instead, and leave
+            //  the lot there - never through the yard)
+            //  (the end the game deciding picked is in ToX/ToY - so it knows where they'll be; else the nearer one from here)
+            int end = wk.Along(ex, ey);
+            if (Kind == 1) end = (Sidewalk.WalkAt(vm.Context, ToX, ToY) == wk) ? wk.Along(ToX, ToY) : Sidewalk.NearerEnd(wk, ava.Position.TileX, ava.Position.TileY);
+            if (Kind == 1) ava.SetAttribute(Sidewalk.EndAttr, Sidewalk.Pack(wk.X(end), wk.Y(end)));
+            // (a Sims 1 "Leave" queued before 19.10 is called off: it walked them to a random portal - the walk is all now)
             foreach (var a in th.Queue.Where(x => x.ActionRoutine?.ID == LeaveRoutine && th.Queue.IndexOf(x) > th.ActiveQueueBlock).ToList())
                 th.CancelAction(a.UID);
-            if (!WalkTo(vm, ava, ex, ey, true)) return false;
-            if (!ava.IsPet) PushLeave(vm, ava);
-            return true;
+            return WalkAlong(vm, ava, wk, end, true);
         }
 
         private bool StreetStay(VM vm)
@@ -412,7 +492,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             ava.SetAttribute(Sidewalk.StreetAttr, 0);
             ava.SetAttribute(Sidewalk.EndAttr, 0);
             ava.SetValue(VMStackObjectVariable.WalkStyle, 0);
-            foreach (var a in ava.Thread.Queue.Where(IsStreetAction).ToList()) ava.Thread.CancelAction(a.UID);
+            CancelWalk(vm, ava, true); // (19.10: and the Go Here markers of the stops not reached yet)
             return true;
         }
 

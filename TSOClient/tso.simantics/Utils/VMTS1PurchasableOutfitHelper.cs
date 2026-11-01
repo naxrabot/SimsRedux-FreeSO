@@ -57,6 +57,9 @@ namespace FSO.SimAntics.Utils
             var result = new List<Tuple<string, string>>();
             for (int i = 0; i < bodies.Count; i++)
             {
+                // (SimsRedux 19.9: and only one that can be shown - all its parts and its texture there, as in Create-a-Sim.
+                //  Worked out from the game's file lists only, so every game with the same content builds the same list.)
+                if (bodyTex[i] != null && !ReduxOutfitCheck.CanShow(bodies[i], bodyTex[i])) bodyTex[i] = null;
                 if (bodyTex[i] == null)
                 {
                     bodyTex.RemoveAt(i);
@@ -81,7 +84,8 @@ namespace FSO.SimAntics.Utils
             {
                 var tsoSkin = (ReduxTSOAvatars.SkinIndex(skin) >= 0) ? skin.ToLowerInvariant() : "lgt";
                 foreach (var o in tso.ForDresser(type[0], type.Substring(2), OutfitTypes[outfitType][0]))
-                    result.Add(new Tuple<string, string>(o.Name + ",BODY=" + o.TextureName(tsoSkin), tsoSkin));
+                    if (ReduxOutfitCheck.CanShow(o.Name, o.TextureName(tsoSkin))) // (SimsRedux 19.9)
+                        result.Add(new Tuple<string, string>(o.Name + ",BODY=" + o.TextureName(tsoSkin), tsoSkin));
             }
 
             // SimsRedux 15.7: the outfit the Sim has for this now (picked in Create-a-Sim - which offers more than the

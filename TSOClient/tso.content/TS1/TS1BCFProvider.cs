@@ -23,6 +23,18 @@ namespace FSO.Content.TS1
         public Dictionary<string, string> SkelHostBCF = new Dictionary<string, string>();
         public Content ContentManager;
         public Dictionary<string, TS1ClothingCollection> CollectionsByName = new Dictionary<string, TS1ClothingCollection>();
+        /// <summary>SimsRedux 19.9: each appearance's mesh names (lower-case appearance name, no ".apr"), from loading.</summary>
+        public Dictionary<string, string[]> AppearanceMeshes = new Dictionary<string, string[]>();
+
+        /// <summary>SimsRedux 19.9: the mesh names of a Sims 1 appearance (no ".apr"), or null when the game doesn't have it.</summary>
+        public string[] MeshesOf(string appearance)
+        {
+            if (string.IsNullOrEmpty(appearance)) return null;
+            var name = appearance.ToLowerInvariant();
+            if (name.EndsWith(".apr")) name = name.Substring(0, name.Length - 4);
+            string[] meshes;
+            return AppearanceMeshes.TryGetValue(name, out meshes) ? meshes : null;
+        }
 
         public TS1BCFProvider(Content contentManager, TS1Provider provider)
         {
@@ -55,6 +67,8 @@ namespace FSO.Content.TS1
                 foreach (var skin in file.Appearances)
                 {
                     SkinHostBCF[skin.Name.ToLowerInvariant()] = Path.GetFileName(bcf.ToString().ToLowerInvariant().Replace('\\', '/'));
+                    // SimsRedux 19.9: the meshes it's made of (so an outfit with a missing part can be left out without reading it again)
+                    AppearanceMeshes[skin.Name.ToLowerInvariant()] = (skin.Bindings ?? new AppearanceBinding[0]).Select(b => b?.RealBinding?.MeshName).ToArray();
                 }
                 foreach (var skel in file.Skeletons)
                 {

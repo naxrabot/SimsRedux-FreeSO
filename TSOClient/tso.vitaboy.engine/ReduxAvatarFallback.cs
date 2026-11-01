@@ -180,6 +180,23 @@ namespace FSO.Vitaboy
         }
 
         /// <summary>
+        /// SimsRedux 19.9: can this outfit be drawn properly? All its parts are there, and its texture is - or another
+        /// texture made for it is (another skin tone's, which Texture finds when it's drawn). False: give the Sim a
+        /// stand-in (Outfit) instead of a floating head and hands or a plain-coloured body.
+        /// </summary>
+        public static bool Showable(string appearance, string texture)
+        {
+            try
+            {
+                if (!FSO.Content.TS1.ReduxOutfitCheck.MeshesOk(appearance)) return false;
+                if (string.IsNullOrEmpty(texture) || FSO.Content.TS1.ReduxOutfitCheck.CanShow(appearance, texture)) return true;
+                if (FSO.Content.TS1.ReduxTSOAvatars.IsTSOName(appearance)) return false;
+                return Texture(texture, appearance, null) != null;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>
         /// An outfit (appearance name, texture) that exists, for one that doesn't: one of the same kind ("c"
         /// heads, or bodies for the same occasion - same gender/age/build), in the same skin tone.
         /// </summary>
@@ -206,34 +223,40 @@ namespace FSO.Vitaboy
                 //  Online's outfits are named the same way, their costumes with a "b" - see ReduxTSOAvatars)
                 var kind = (name.Length > 0 && "cbfslwh".IndexOf(name[0]) >= 0) ? name[0].ToString() : "b";
                 FSO.Content.TS1.TS1ClothingCollection col = null;
-                List<string> list = null;
+                var skin = SkinOf(texture);
+                var names = AllTextures();
+                // (SimsRedux 19.9: only one that can itself be shown - all its parts and a texture there - and never
+                //  the missing one again; when none of its exact kind can, one of the same gender and age: an odd
+                //  download's "b300faj01" body gets a grown-up woman's everyday outfit)
+                var types = new List<string> { type };
+                if (type.Length >= 2) types.Add(type.Substring(0, 2));
+                if (type.Length >= 2 && kind == "b" && type.Length > 2 && !type.EndsWith("chd")) types.Add(type.Substring(0, 2) + "fit");
                 if (type.Length >= 2 && content.BCFGlobal != null)
                     foreach (var occasion in (kind == "c" || kind == "b") ? new[] { kind } : new[] { kind, "b" })
                     {
+                        if (found != null) break;
                         if (!content.BCFGlobal.CollectionsByName.TryGetValue(occasion, out col) || col == null) continue;
-                        list = col.GeneralAvatarType(type);
-                        if (list.Count == 0) list = col.GeneralAvatarType(type.Substring(0, 2));
-                        if (list.Count > 0) break;
+                        foreach (var t in types)
+                        {
+                            if (found != null) break;
+                            var list = col.GeneralAvatarType(t);
+                            if (list.Count == 0) continue;
+                            // (each missing outfit gets its own stand-in, picked by its name - the first one in the list
+                            //  for everyone made every Sim with a missing head look like the same old lady)
+                            uint h = 2166136261; foreach (var ch in name) h = (h ^ ch) * 16777619;
+                            int start = (int)(h % (uint)list.Count);
+                            for (int k = 0; k < list.Count; k++)
+                            {
+                                var apr = list[(start + k) % list.Count];
+                                if (string.Equals(apr, name, StringComparison.OrdinalIgnoreCase)) continue;
+                                var tex = FSO.Content.TS1.ReduxOutfitCheck.SkinTexture(apr, skin, names);
+                                if (tex == null || !FSO.Content.TS1.ReduxOutfitCheck.CanShow(apr, tex)) continue;
+                                if (content.AvatarAppearances.Get(new ContentID(apr + ".apr")) == null) continue;
+                                found = new Tuple<string, string>(apr + ".apr", tex);
+                                break;
+                            }
+                        }
                     }
-                if (list != null && list.Count > 0)
-                {
-                    var skin = SkinOf(texture);
-                    var names = AllTextures();
-                    // (each missing outfit gets its own stand-in, picked by its name - the first one in the list
-                    //  for everyone made every Sim with a missing head look like the same old lady)
-                    int start = 0;
-                    if (list.Count > 0) { uint h = 2166136261; foreach (var ch in name) h = (h ^ ch) * 16777619; start = (int)(h % (uint)list.Count); }
-                    for (int k = 0; k < list.Count; k++)
-                    {
-                        var apr = list[(start + k) % list.Count];
-                        if (content.AvatarAppearances.Get(new ContentID(apr + ".apr")) == null) continue;
-                        var stem = Stem(apr);
-                        var tex = names.FirstOrDefault(n => n.StartsWith(stem + skin)) ?? names.FirstOrDefault(n => n.StartsWith(stem));
-                        if (tex == null) continue;
-                        found = new Tuple<string, string>(apr + ".apr", tex);
-                        break;
-                    }
-                }
                 Note("outfit " + appearance + " -> " + (found?.Item1 ?? "(none)"));
             }
             catch { }

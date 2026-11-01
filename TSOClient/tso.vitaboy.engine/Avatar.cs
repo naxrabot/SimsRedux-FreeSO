@@ -169,6 +169,23 @@ namespace FSO.Vitaboy
                     realBindings[replaced] = realBindings[replaced].TS1Copy();
                     realBindings[replaced].TextureName = texOverride;
                 }
+
+                // SimsRedux 19.9: an outfit made of more than one part - every part with no texture of its own ("x")
+                // wears the outfit's texture, as in the original game. Only the last one got it, and the others were
+                // drawn pitch black.
+                if (texOverride != null)
+                {
+                    for (int j = 0; j < realBindings.Count; j++)
+                    {
+                        var b = realBindings[j];
+                        if (j == replaced || b == null || b.MeshName == null || b.TextureName != null) continue;
+                        Mesh partMesh;
+                        try { partMesh = Content.Content.Get().AvatarMeshes.Get(b.MeshName); } catch { partMesh = null; }
+                        if (partMesh?.TextureName == null || partMesh.TextureName.ToLowerInvariant() != "x") continue;
+                        realBindings[j] = b.TS1Copy();
+                        realBindings[j].TextureName = texOverride;
+                    }
+                }
             }
 
             foreach (var binding in realBindings)
@@ -522,7 +539,8 @@ namespace FSO.Vitaboy
         /// </summary>
         public Texture2D SafeTexture(GraphicsDevice device)
         {
-            if (Texture == null && (TexName == null || TexName == "x")) return null;
+            // (SimsRedux 19.9: a part with no texture at all is drawn in a plain colour, not pitch black)
+            if (Texture == null && (TexName == null || TexName == "x")) return ReduxAvatarFallback.Plain(device, TexName, MeshName);
             if (RetryIn > 0) { RetryIn--; return ReduxAvatarFallback.Plain(device, TexName, MeshName); }
             if (UsePlain) return ReduxAvatarFallback.Plain(device, TexName, MeshName);
             Texture2D tex = null;

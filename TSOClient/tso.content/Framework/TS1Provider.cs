@@ -162,6 +162,12 @@ namespace FSO.Content.Framework
             return Entries.Keys;
         }
 
+        /// <summary>SimsRedux: is there a file of this name (lower case, with its extension)? Nothing is read.</summary>
+        public bool Has(string name)
+        {
+            return name != null && Entries != null && Entries.ContainsKey(name);
+        }
+
         public virtual void Init()
         {
             Entries = BaseProvider.BuildDictionary(Extensions[0], "globals");

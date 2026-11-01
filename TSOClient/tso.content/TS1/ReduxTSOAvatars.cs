@@ -246,6 +246,65 @@ namespace FSO.Content.TS1
             return set.AppearanceFor(o, Math.Max(0, SkinOfTexture(texture)));
         }
 
+        // SimsRedux 19.9: what Create-a-Sim and the dressers check (ReduxOutfitCheck) - only the archives' file lists,
+        // nothing read, so it's the same on every game with the same files (a read that failed this time isn't counted)
+
+        private static string FileKey(string name, string ext)
+        {
+            name = NoExt(name, ext);
+            var dot = name.LastIndexOf('.');
+            if (dot > name.IndexOf('~')) name = name.Substring(0, dot);
+            return name;
+        }
+
+        /// <summary>Is this in-memory mesh name in the archives?</summary>
+        public bool HasMesh(string name)
+        {
+            return name != null && MeshEntries.ContainsKey(NoExt(name, ".mesh"));
+        }
+
+        /// <summary>Is this texture there: an in-memory name, or an outfit's texture name (its main part's, in that skin tone)?</summary>
+        public bool HasTexture(string name)
+        {
+            if (name == null) return false;
+            var n = Lower(name);
+            if (IsTSOName(n) && !IsTSOFile(n))
+            {
+                var us = n.IndexOf('_');
+                var skin = SkinOfTexture(n);
+                if (skin < 0) return false;
+                var o = Find(n.Remove(us - 3, 3));
+                if (o == null || o.Parts[skin] == null || o.Parts[skin].Length == 0) return false;
+                n = o.Parts[skin][Math.Min(o.Primary, o.Parts[skin].Length - 1)].Texture;
+            }
+            return n != null && TexEntries.ContainsKey(FileKey(n, null));
+        }
+
+        /// <summary>Is the outfit known, with every part's mesh there in every skin tone?</summary>
+        public bool MeshesOk(string name)
+        {
+            var o = Find(name);
+            if (o == null) return false;
+            for (int s = 0; s < 3; s++)
+            {
+                var parts = o.Parts[s];
+                if (parts == null || parts.Length == 0) return false;
+                foreach (var p in parts) if (p == null || !HasMesh(p.Mesh)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Is every part's texture there, in the skin tone this texture name says (as Avatar.AddAppearance picks it)?</summary>
+        public bool TexturesOk(string name, string texture)
+        {
+            var o = Find(name);
+            if (o == null) return false;
+            var parts = o.Parts[Math.Max(0, SkinOfTexture(texture))];
+            if (parts == null || parts.Length == 0) return false;
+            foreach (var p in parts) if (p == null || !HasTexture(p.Texture)) return false;
+            return true;
+        }
+
         /// <summary>A mesh by its in-memory name ("xtsob~fabb001fafit_01-pelvis-body"). Null: missing or left out.</summary>
         public Mesh GetMesh(string name)
         {

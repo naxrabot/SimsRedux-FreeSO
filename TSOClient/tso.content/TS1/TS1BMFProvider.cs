@@ -21,5 +21,14 @@ namespace FSO.Content.TS1
             var s = name.Replace(".mesh", "").ToLowerInvariant();
             return base.Get(s + ".bmf") ?? base.Get(s + ".skn");
         }
+
+        /// <summary>SimsRedux 19.9: is this mesh there? (from the file lists - nothing is read)</summary>
+        public bool HasMesh(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            if (ReduxTSOAvatars.IsTSOFile(name)) return ReduxTSOAvatars.Instance?.HasMesh(name) ?? false;
+            var s = name.Replace(".mesh", "").ToLowerInvariant();
+            return Has(s + ".bmf") || Has(s + ".skn");
+        }
     }
 }
