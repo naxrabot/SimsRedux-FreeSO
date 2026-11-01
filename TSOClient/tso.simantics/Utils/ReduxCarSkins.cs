@@ -90,6 +90,19 @@ namespace FSO.SimAntics.Utils
         };
         public static bool IsSkinnable(uint baseGuid) { return Skinnable.Contains(baseGuid); }
 
+        /// <summary>
+        /// 20.3: the car an object is part of (its GUID as the catalog knows it). A Maxis car is a multi-tile object: the
+        /// lot only gets its 18 tile parts (never the lead object), each with its own GUID ("Car - Limo - Row 0 Tile 0"),
+        /// and the group's BaseObject is the tile at (0,0) - so the list above (the cars' own GUIDs) must be matched
+        /// against the tile's master. (20.0-20.2 matched the tile's GUID: no car was ever skinnable.)
+        /// </summary>
+        public static uint CarGuid(VMEntity e)
+        {
+            if (e == null) return 0;
+            return (e.MasterDefinition ?? e.Object?.OBJ)?.GUID ?? 0;
+        }
+        public static bool IsSkinnableCar(VMEntity e) { return IsSkinnable(CarGuid(e)); }
+
         private static uint Hash(uint x)
         {
             x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16;
@@ -189,6 +202,8 @@ namespace FSO.SimAntics.Utils
         /// <summary>20.2: what reading the manifest found ("" = fine) - the "carpack" cheat.</summary>
         private static string IndexProblem = "";
         private static bool ManifestSeen;
+        /// <summary>20.3: the last car file that couldn't be read, and why ("" = none) - the "carpack" cheat.</summary>
+        private static string LoadProblem = "";
         /// <summary>The IFFs read from the pack (to tell a car drawn from the pack from one drawn as the Sims car).</summary>
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IffFile, object> PackIffs
             = new System.Runtime.CompilerServices.ConditionalWeakTable<IffFile, object>();
@@ -257,7 +272,7 @@ namespace FSO.SimAntics.Utils
                 using (var ms = new MemoryStream(file.Bytes)) iff.Read(ms);
                 var main = iff.Get<PALT>(1);
                 var want = iff.Get<PALT>((ushort)(101 + paint));
-                if (main == null || want == null) return null;
+                if (main == null || want == null) { LoadProblem = Path.GetFileName(file.Path) + " has no paint " + (101 + paint); return null; }
                 Array.Copy(want.Colors, main.Colors, Math.Min(want.Colors.Length, main.Colors.Length));
                 if (file.DgrpBySub == null)
                 {
@@ -270,7 +285,13 @@ namespace FSO.SimAntics.Utils
                 while (LoadOrder.Count > MaxLoaded) Loaded.Remove(LoadOrder.Dequeue());
                 return iff;
             }
-            catch (Exception e) { Console.WriteLine("[SimsRedux] car pack: " + file.Path + ": " + e.Message); return null; }
+            catch (Exception e)
+            {
+                // (the browser can say a file is "still loading": the next look - a game minute later - tries again)
+                LoadProblem = Path.GetFileName(file.Path) + ": " + e.Message;
+                Console.WriteLine("[SimsRedux] car pack: " + file.Path + ": " + e.Message);
+                return null;
+            }
         }
 
         /// <summary>The skin a car is drawn with, or 0. Read only.</summary>
@@ -279,7 +300,7 @@ namespace FSO.SimAntics.Utils
             if (baseObj == null) return 0;
             short code = baseObj.GetAttribute(SkinAttribute);
             if (code > 0) return code;
-            var guid = baseObj.Object?.OBJ?.GUID ?? 0;
+            var guid = CarGuid(baseObj);
             if (baseObj.GetAttribute(0) == ReduxTraffic.Marker) return FromId(baseObj.ObjectID, guid);
             // a carpool (or a visitor's car): the job's car, worked out once for this car
             object cached;
@@ -298,46 +319,70 @@ namespace FSO.SimAntics.Utils
         /// </summary>
         public static DGRP Swap(VMGameObject obj)
         {
+            string why;
+            var d = Want(obj, out why);
+            if (d != null && Swapped++ == 0) Console.WriteLine("[SimsRedux] car pack: the first car part is drawn from the pack");
+            return d;
+        }
+
+        /// <summary>20.3: the pack's picture for this tile part, or null and why not (plain words). Drawing only.</summary>
+        private static DGRP Want(VMGameObject obj, out string why)
+        {
+            why = "";
             try
             {
-                if (!Enabled || string.IsNullOrEmpty(PackFolder) || obj?.MultitileGroup == null) return null;
-                if (obj.ObjectData[(int)VMStackObjectVariable.Graphic] != 0) return null;
+                if (!Enabled) { why = "switched off on this device"; return null; }
+                if (string.IsNullOrEmpty(PackFolder)) { why = "no pack here"; return null; }
+                if (obj?.MultitileGroup == null) { why = "still loading"; return null; }
                 var b = obj.MultitileGroup.BaseObject;
-                if (b == null || !IsSkinnable(b.Object?.OBJ?.GUID ?? 0)) return null;
+                if (b == null || !IsSkinnableCar(b)) { why = "not a car the pack covers"; return null; }
+                if (obj.ObjectData[(int)VMStackObjectVariable.Graphic] != 0) { why = "car picture " + obj.ObjectData[(int)VMStackObjectVariable.Graphic] + " (not 0)"; return null; }
                 short code = SkinOf(b);
-                if (code <= 0) return null;
+                int car; bool custom; int paint;
+                if (code <= 0 || !Decode(code, out car, out custom, out paint)) { why = "no NFSU2 car picked (skin " + code + ")"; return null; }
                 lock (Lock)
                 {
                     PackFile file;
                     var iff = Load(code, out file);
+                    if (file == null) { why = "the pack has no " + CarFolders[car] + (custom ? " (customised)" : ""); return null; }
+                    if (iff == null) { why = "couldn't read " + Path.GetFileName(file.Path) + (LoadProblem.Length > 0 ? " (" + LoadProblem + ")" : ""); return null; }
                     ushort id;
-                    if (iff == null || file.DgrpBySub == null || !file.DgrpBySub.TryGetValue(obj.Object.OBJ.SubIndex, out id)) return null;
+                    if (file.DgrpBySub == null || !file.DgrpBySub.TryGetValue(obj.Object.OBJ.SubIndex, out id)) { why = "no tile part " + obj.Object.OBJ.SubIndex + " in " + Path.GetFileName(file.Path); return null; }
                     var d = iff.Get<DGRP>(id);
-                    if (d != null && Swapped++ == 0) Console.WriteLine("[SimsRedux] car pack: the first car part is drawn from the pack (" + CarFolders[code > 0 ? ((code - 1) / 16) % 64 : 0] + ")");
+                    if (d == null) why = "no picture " + id + " in " + Path.GetFileName(file.Path);
                     return d;
                 }
             }
-            catch (Exception e) { Console.WriteLine("[SimsRedux] car pack: " + e.Message); return null; }
+            catch (Exception e) { why = e.Message; Console.WriteLine("[SimsRedux] car pack: " + e.Message); return null; }
         }
 
-        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMEntity, object> Drawn
-            = new System.Runtime.CompilerServices.ConditionalWeakTable<VMEntity, object>();
+        private static bool FromPack(DGRP d)
+        {
+            object x;
+            return d?.ChunkParent != null && PackIffs.TryGetValue(d.ChunkParent, out x);
+        }
 
         /// <summary>
-        /// A carpool car seen by ReduxTraffic's once-a-minute look round: its pictures are worked out again once its job
-        /// can be known (it may have been drawn while the lot was still loading). Drawing only.
+        /// 20.3: ReduxTraffic's once-a-game-minute look round, for every car on the lot (passing traffic and carpools):
+        /// each tile part is drawn with the picture it should have now - the pack's, once it can be (a car loaded with
+        /// the lot or a game joined part way is drawn before its group is there; a file the browser was still fetching;
+        /// a carpool whose job is known once the lot's Sims are in), or the Sims car's again (the pack switched off).
+        /// Drawing only - it never changes the lot.
         /// </summary>
         public static void EnsureDrawn(VMEntity baseObj)
         {
             try
             {
-                if (!Enabled || string.IsNullOrEmpty(PackFolder) || baseObj == null || !IsSkinnable(baseObj.Object?.OBJ?.GUID ?? 0)) return;
-                object x;
-                if (Drawn.TryGetValue(baseObj, out x)) return;
-                SkinOf(baseObj); // (settles the car's job once the lot's Sims are in)
-                if (!CarpoolSkins.TryGetValue(baseObj, out x)) return;
-                Drawn.Add(baseObj, true);
-                Refresh(baseObj.MultitileGroup);
+                if (baseObj?.MultitileGroup == null || !IsSkinnableCar(baseObj)) return;
+                foreach (var e in baseObj.MultitileGroup.Objects)
+                {
+                    var o = e as VMGameObject;
+                    var oc = o?.WorldUI as FSO.LotView.Components.ObjectComponent;
+                    if (oc == null) continue;
+                    string why;
+                    var want = Want(o, out why);
+                    if (want != null ? oc.DGRP != want : FromPack(oc.DGRP)) o.RefreshGraphic();
+                }
             }
             catch { }
         }
@@ -350,7 +395,7 @@ namespace FSO.SimAntics.Utils
             Reset();
             if (vm?.Entities == null) return;
             foreach (var g in vm.Entities.Where(e => e != null && e.MultitileGroup != null && e.MultitileGroup.BaseObject == e
-                && IsSkinnable(e.Object?.OBJ?.GUID ?? 0)).Select(e => e.MultitileGroup).ToList())
+                && IsSkinnableCar(e)).Select(e => e.MultitileGroup).ToList())
                 Refresh(g);
         }
 
@@ -363,35 +408,64 @@ namespace FSO.SimAntics.Utils
         {
             working = false;
             int indexed, cars = 0, haveSkin = 0, drawn = 0;
-            bool manifest; string problem;
+            bool manifest; string problem, loadProblem;
+            var lines = new List<string>();
             lock (Lock)
             {
                 EnsureIndex();
                 indexed = Files.Count; manifest = ManifestSeen; problem = IndexProblem;
-                if (vm?.Entities != null)
+            }
+            if (vm?.Entities != null)
+            {
+                // 20.3: every car on the lot (anything car-like: the game's "Car - " objects too, so one the pack doesn't
+                // cover still shows up), one line each: which car, skinnable?, its skin, its picture number, parts drawn
+                foreach (var e in vm.Entities.ToList())
                 {
-                    foreach (var e in vm.Entities.ToList())
+                    if (e == null || e.MultitileGroup == null || e.MultitileGroup.BaseObject != e || !(e is VMGameObject)) continue;
+                    uint guid = CarGuid(e);
+                    var label = (e.MasterDefinition ?? e.Object?.OBJ)?.ChunkLabel ?? "";
+                    bool skinnable = IsSkinnable(guid);
+                    if (!skinnable && !label.StartsWith("Car - ", StringComparison.Ordinal)) continue;
+                    cars++;
+                    try
                     {
-                        if (e == null || e.MultitileGroup == null || e.MultitileGroup.BaseObject != e || !IsSkinnable(e.Object?.OBJ?.GUID ?? 0)) continue;
-                        cars++;
-                        try
+                        short attr = e.GetAttribute(SkinAttribute);
+                        short code = skinnable ? SkinOf(e) : (short)0;
+                        int car; bool custom; int paint;
+                        bool ok = Decode(code, out car, out custom, out paint);
+                        if (ok) lock (Lock) { if (Files.ContainsKey(CarFolders[car] + (custom ? "_custom" : ""))) haveSkin++; }
+                        int parts = 0, fromPack = 0;
+                        foreach (var o in e.MultitileGroup.Objects)
                         {
-                            short code = SkinOf(e);
-                            if (Decode(code, out int car, out bool custom, out _) && Files.ContainsKey(CarFolders[car] + (custom ? "_custom" : ""))) haveSkin++;
-                            object x;
-                            if (e.MultitileGroup.Objects.Any(o => (o as VMGameObject)?.WorldUI is FSO.LotView.Components.ObjectComponent oc
-                                && oc.DGRP?.ChunkParent != null && PackIffs.TryGetValue(oc.DGRP.ChunkParent, out x))) drawn++;
+                            parts++;
+                            if (FromPack(((o as VMGameObject)?.WorldUI as FSO.LotView.Components.ObjectComponent)?.DGRP)) fromPack++;
                         }
-                        catch { }
+                        if (fromPack > 0) drawn++;
+                        string why;
+                        Want(e as VMGameObject, out why);
+                        var name = label.StartsWith("Car - ", StringComparison.Ordinal) ? label.Substring(6) : label;
+                        lines.Add(name + " " + guid.ToString("X8") + (skinnable ? "" : " (not covered)") +
+                            ": skin " + (ok ? CarFolders[car] + (custom ? " custom" : "") + " paint " + paint : "none") +
+                            (attr > 0 ? "" : skinnable ? (e.GetAttribute(0) == ReduxTraffic.Marker ? " (from id)" : " (carpool)") : "") +
+                            ", picture " + e.ObjectData[(int)VMStackObjectVariable.Graphic] +
+                            ", " + fromPack + "/" + parts + " NFSU2" + (fromPack == 0 && why.Length > 0 ? " - " + why : ""));
                     }
+                    catch (Exception ex) { lines.Add(label + ": " + ex.Message); }
                 }
             }
+            lock (Lock) loadProblem = LoadProblem;
             working = Enabled && indexed > 0 && (cars == 0 || drawn > 0);
             var folder = string.IsNullOrEmpty(PackFolder) ? "(none)" : PackFolder;
-            return "Pack: " + Source + "\n" +
-                "Folder: " + folder + "\n" +
+            // (a notice holds 8 lines: 4 here, then up to 4 cars - the rest in the game log)
+            var head = "Pack: " + Source + ", folder " + folder + "\n" +
                 "carpack.json " + (manifest ? "found" : "NOT found") + ", " + indexed + " car files" + (problem.Length > 0 ? " (" + problem + ")" : "") + "\n" +
-                "This lot: " + cars + " cars, " + haveSkin + " in the pack, " + drawn + " drawn as NFSU2 cars (" + Swapped + " parts so far)" + (Enabled ? "" : " - switched off on this device");
+                "This lot: " + cars + " cars, " + haveSkin + " in the pack, " + drawn + " drawn as NFSU2 cars (" + Swapped + " parts so far)" + (Enabled ? "" : " - switched off on this device") + "\n" +
+                (loadProblem.Length > 0 ? "Last file problem: " + loadProblem : "No file problems");
+            foreach (var l in lines) Console.WriteLine("[SimsRedux] car pack: " + l);
+            int show = lines.Count > 4 ? 3 : lines.Count;
+            for (int i = 0; i < show; i++) head += "\n" + lines[i];
+            if (lines.Count > show) head += "\n+" + (lines.Count - show) + " more cars (in the game log)";
+            return head;
         }
 
         /// <summary>After a car's skin is set: its pictures again (drawing only).</summary>

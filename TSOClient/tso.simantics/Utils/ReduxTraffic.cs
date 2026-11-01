@@ -128,6 +128,7 @@ namespace FSO.SimAntics.Utils
                         {
                             st.Traffic.Add(e.MultitileGroup);
                             MarkMoving(e.MultitileGroup); // (one saved with the lot, or just made)
+                            ReduxCarSkins.EnsureDrawn(e); // (20.3: its NFSU2 picture, if it isn't drawn with it yet - drawing only)
                         }
                         else { st.OtherCar = true; ReduxCarSkins.EnsureDrawn(e); } // (a carpool: its NFSU2 picture once the lot's Sims are in)
                     }
@@ -184,7 +185,8 @@ namespace FSO.SimAntics.Utils
                         foreach (var g in MoreCars) AllCarGUIDs.Add(g);
                         AllCarGUIDs.Add(SchoolBusGUID);
                     }
-            var guid = e.Object?.OBJ?.GUID ?? 0;
+            // (20.3: the car's own GUID - a car's parts on the lot are its tiles, each with a GUID of its own)
+            var guid = ReduxCarSkins.CarGuid(e);
             if (AllCarGUIDs.Contains(guid)) return true;
             // any other carpool car (the game's carpools and visitors' cars) - by its name
             var label = e.Object?.OBJ?.ChunkLabel ?? "";
@@ -376,7 +378,8 @@ namespace FSO.SimAntics.Utils
             if (group == null) return false;
             foreach (var o in group.Objects) o.SetAttribute(0, Marker); // (not a carpool: its main just waits)
             // 20.x: its NFSU2 car (picked without looking at the pack, so every game keeps the same lot), then its pictures
-            if (skin > 0 && group.BaseObject != null && ReduxCarSkins.IsSkinnable(group.BaseObject.Object?.OBJ?.GUID ?? 0))
+            // (20.3: by the car's own GUID - 20.0-20.2 looked at the (0,0) tile's GUID, so no car ever got its skin)
+            if (skin > 0 && group.BaseObject != null && ReduxCarSkins.IsSkinnableCar(group.BaseObject))
             {
                 group.BaseObject.SetAttribute(ReduxCarSkins.SkinAttribute, skin);
                 ReduxCarSkins.Refresh(group);
