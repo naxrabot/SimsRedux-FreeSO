@@ -473,6 +473,51 @@ namespace FSO.SimAntics.Utils
             return p != 9 && p != 10 && p != 11 && p != 65534 && p != 65535;
         }
 
+        /// <summary>21.2: tile x,y is inside the lot's outermost row (1 .. width-2 / height-2 - where Sims 1's street portals and
+        /// the sidewalks' open ends are): row 0 and the last row are off the lot's ground - a Sim put there can't route.</summary>
+        public static bool InsideEdge(VMContext ctx, int x, int y)
+        {
+            var arch = ctx?.Architecture;
+            return arch != null && x >= 1 && y >= 1 && x <= arch.Width - 2 && y <= arch.Height - 2;
+        }
+
+        /// <summary>
+        /// 21.2: tile x,y is by the street, where nobody should stand about: on the road's side of a sidewalk (the grass strip by
+        /// the kerb, the road itself), within 2 tiles of an open end of the sidewalks (the edge of the lot where street Sims come
+        /// and go - the street portals are there), or on the lot's outermost row. From the lot's floor only.
+        /// </summary>
+        public static bool ByTheStreet(VMContext ctx, int x, int y)
+        {
+            var arch = ctx?.Architecture;
+            if (arch == null) return false;
+            if (!InsideEdge(ctx, x, y)) return true;
+            foreach (var wk in Sidewalks(ctx))
+            {
+                int a = wk.Along(x, y);
+                if (a < wk.Min - 2 || a > wk.Max + 2) continue;
+                if (wk.Off(x, y) * wk.Side < 0) return true;
+            }
+            return NearExit(ctx, x, y, 2);
+        }
+
+        /// <summary>21.2: within dist tiles of an open end of the lot's sidewalks (where street Sims come on and go off).</summary>
+        public static bool NearExit(VMContext ctx, int x, int y, int dist)
+        {
+            foreach (var r in Routes(ctx))
+                if ((Math.Abs(r.StartX - x) <= dist && Math.Abs(r.StartY - y) <= dist) || (Math.Abs(r.EndX - x) <= dist && Math.Abs(r.EndY - y) <= dist)) return true;
+            return false;
+        }
+
+        /// <summary>21.2: tile x,y is one street Sims route on (RouteTiles - the sidewalks' lines and their corners). True when the
+        /// lot has no ways at all (no limit there).</summary>
+        public static bool OnRouteTile(VMContext ctx, int x, int y)
+        {
+            var t = RouteTiles(ctx);
+            if (t == null) return true;
+            var arch = ctx.Architecture;
+            return x >= 0 && y >= 0 && x < arch.Width && y < arch.Height && t[y * arch.Width + x];
+        }
+
         /// <summary>20.1: a tile a street Sim may stand on along sidewalk wk: a walk tile, and on a sidewalk-floor line (Paved) a
         /// sidewalk tile - never the grass strip by the kerb (the same on every game).</summary>
         public static bool IsStopTile(VMContext ctx, Walk wk, int x, int y)

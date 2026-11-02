@@ -296,8 +296,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             for (int i = 0; i <= 12; i++)
             {
                 int a = start + ((i & 1) == 1 ? sign * ((i + 1) / 2) : -sign * (i / 2));
-                if (a < wk.Min - 2 || a > wk.Max + 2) continue;
+                // (21.2: only between the sidewalk's own ends, and never on the lot's outermost row - a follower (the dog, the
+                //  second child) was sent from "a tile behind" the start, which at the edge of the lot is that row: off the
+                //  lot's ground, where a Sim can't route and stood at the very edge for good)
+                if (a < wk.Min || a > wk.Max) continue;
                 int x = wk.X(a), y = wk.Y(a);
+                if (!Sidewalk.InsideEdge(vm.Context, x, y)) continue;
                 if (!Sidewalk.IsStopTile(vm.Context, wk, x, y)) continue; // (20.1: a sidewalk tile, on a sidewalk)
                 var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
                 if (vm.Context.IsOutOfBounds(pos)) continue;
@@ -402,6 +406,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 int at = a + off;
                 if (at < wk.Min - 2 || at > wk.Max + 2) continue;
                 int x = wk.X(at), y = wk.Y(at);
+                if (!Sidewalk.InsideEdge(vm.Context, x, y)) continue; // (21.2: never the lot's outermost row)
                 if (!Sidewalk.IsStopTile(vm.Context, wk, x, y)) continue; // (20.1: a sidewalk tile, on a sidewalk)
                 var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
                 if (vm.Context.IsOutOfBounds(pos)) continue;
@@ -550,13 +555,30 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (ava == null || ava.Dead || !Sidewalk.IsStreet(ava)) return false;
             var fam = vm.TS1State?.CurrentFamily;
             if (fam?.FamilyGUIDs != null && fam.FamilyGUIDs.Contains(ava.Object.OBJ.GUID)) return false; // (adopted meanwhile: stays)
-            if (InUseByOthers(vm, ava)) return false; // (the game that sent this tries again later)
+            if (InUseByOthers(vm, ava))
+            {
+                // (the game that sent this tries again next minute. 21.2: Kind 1 - it has been refused for a while: what the
+                //  others have queued with this Sim is called off (their scripts end on their own), so the next try goes through)
+                if (Kind == 1) CancelOthers(vm, ava);
+                return false;
+            }
             var markers = ava.Thread.Queue.Select(x => x.Callee)
                 .Where(x => x != null && x != ava && !x.Dead && x.Object?.OBJ?.GUID == Sidewalk.GotoGUID).Distinct().ToList();
             Console.WriteLine("[SimsRedux] street life: " + (ava.Name ?? "") + " taken off the street at " + ava.Position.TileX + "," + ava.Position.TileY);
             ava.Delete(true, vm.Context);
             foreach (var go in markers) if (!go.Dead) go.Delete(true, vm.Context);
             return true;
+        }
+
+        /// <summary>21.2: the other Sims' interactions with this one (queued or running) are cancelled, in object order.</summary>
+        private static void CancelOthers(VM vm, VMAvatar ava)
+        {
+            foreach (var o in vm.Context.ObjectQueries.Avatars.OrderBy(x => x.ObjectID).ToList())
+            {
+                if (o == ava || o.Dead || o.Thread == null) continue;
+                foreach (var a in o.Thread.Queue.Where(x => x.Callee == ava || x.StackObject == ava).ToList())
+                    o.Thread.CancelAction(a.UID);
+            }
         }
 
         /// <summary>Queues Sims 1's own global "Leave" for this Sim (they walk off the lot and go).</summary>
