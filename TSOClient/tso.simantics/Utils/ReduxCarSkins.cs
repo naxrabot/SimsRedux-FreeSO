@@ -368,7 +368,10 @@ namespace FSO.SimAntics.Utils
                 iff = new IffFile();
                 using (var ms = new MemoryStream(file.Bytes)) iff.Read(ms);
                 var main = iff.Get<PALT>(1);
-                var want = iff.Get<PALT>((ushort)(101 + paint));
+                // round 4: a version drawn from another file (its own isn't in the pack) takes one of that file's paints
+                int filePaint = paint;
+                if (variant > 1 && iff.Get<PALT>((ushort)(101 + filePaint)) == null) filePaint = paint % NormalPaints; // (stock files have the ten)
+                var want = iff.Get<PALT>((ushort)(101 + filePaint));
                 if (main == null || want == null) { LoadProblem = Path.GetFileName(file.Path) + " has no paint " + (101 + paint); return null; }
                 Array.Copy(want.Colors, main.Colors, Math.Min(want.Colors.Length, main.Colors.Length));
                 if (file.DgrpBySub == null)
@@ -407,7 +410,9 @@ namespace FSO.SimAntics.Utils
             PackFile f;
             string key;
             if (variant > 1 && VariantKeys.TryGetValue(car * 64 + variant, out key) && Files.TryGetValue(key, out f)) return f;
-            bool custom = variant != 0;
+            // round 4: a Customizer version the pack doesn't have (deleted in the panel, or not downloaded yet) is drawn as the
+            // car's stock version - not the rare customised one
+            bool custom = variant == 1;
             if (custom && Files.TryGetValue(CarFolders[car] + "_custom", out f)) return f;
             if (Files.TryGetValue(CarFolders[car], out f)) return f;
             if (car >= FirstService) return null;
