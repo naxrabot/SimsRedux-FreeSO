@@ -136,12 +136,25 @@ namespace FSO.SimAntics.Utils
             var def = e == null ? null : (e.MasterDefinition ?? e.Object?.OBJ);
             if (def == null) return 0;
             if (def.GUID == SchoolBusGUID) return Code(Bus, false, 0);
+            // (21.6: worked out once per object kind - this is asked for every tile of every car, every tick its wheels turn,
+            //  and the name match was a regular expression each time)
+            object known;
+            lock (ServiceKnown)
+                if (ServiceKnown.TryGetValue(def, out known)) return (short)known;
+            short code = 0;
             var label = def.ChunkLabel ?? "";
             if (label.StartsWith("Car - ", StringComparison.Ordinal)
                 && (label.IndexOf("taxi", StringComparison.OrdinalIgnoreCase) >= 0 || Regex.IsMatch(label, @"\bcab\b", RegexOptions.IgnoreCase)))
-                return Code(Taxi, false, 0);
-            return 0;
+                code = Code(Taxi, false, 0);
+            lock (ServiceKnown)
+            {
+                try { ServiceKnown.Add(def, code); } catch (ArgumentException) { }
+            }
+            return code;
         }
+        /// <summary>21.6: ServiceSkin's answer for each object definition (its name never changes while it's loaded).</summary>
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<OBJD, object> ServiceKnown
+            = new System.Runtime.CompilerServices.ConditionalWeakTable<OBJD, object>();
 
         /// <summary>
         /// 20.3: the car an object is part of (its GUID as the catalog knows it). A Maxis car is a multi-tile object: the
@@ -271,7 +284,9 @@ namespace FSO.SimAntics.Utils
             = new System.Runtime.CompilerServices.ConditionalWeakTable<IffFile, object>();
         private static readonly object Lock = new object();
         private static readonly Dictionary<short, IffFile> Loaded = new Dictionary<short, IffFile>(); // skin code -> its IFF (with its paint)
-        private static readonly Queue<short> LoadOrder = new Queue<short>();
+        /// <summary>21.6: the skins in Loaded, least recently used first (was first-loaded first: a car still on the lot was
+        /// dropped once 12 others had been loaded, and read and drawn again from scratch - a hitch - the next time it was looked at).</summary>
+        private static readonly List<short> LoadOrder = new List<short>();
         private const int MaxLoaded = 12;
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMEntity, object> CarpoolSkins
             = new System.Runtime.CompilerServices.ConditionalWeakTable<VMEntity, object>();
@@ -361,7 +376,13 @@ namespace FSO.SimAntics.Utils
             file = FileFor(car, variant);
             if (file == null) return null;
             IffFile iff;
-            if (Loaded.TryGetValue(code, out iff)) return iff;
+            if (Loaded.TryGetValue(code, out iff))
+            {
+                // (21.6: used now - kept over the ones not looked at for longest; the car being looked at is nearly always last)
+                int at = LoadOrder.Count - 1;
+                if (at < 0 || LoadOrder[at] != code) { LoadOrder.Remove(code); LoadOrder.Add(code); }
+                return iff;
+            }
             try
             {
                 if (file.Bytes == null) file.Bytes = FSOFile.ReadAllBytes(file.Path);
@@ -385,8 +406,9 @@ namespace FSO.SimAntics.Utils
                 }
                 Loaded[code] = iff;
                 try { PackIffs.Add(iff, null); } catch { }
-                LoadOrder.Enqueue(code);
-                while (LoadOrder.Count > MaxLoaded) Loaded.Remove(LoadOrder.Dequeue());
+                LoadOrder.Remove(code);
+                LoadOrder.Add(code);
+                while (LoadOrder.Count > MaxLoaded) { Loaded.Remove(LoadOrder[0]); LoadOrder.RemoveAt(0); }
                 return iff;
             }
             catch (Exception e)

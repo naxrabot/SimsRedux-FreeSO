@@ -248,17 +248,27 @@ namespace FSO.SimAntics.Utils
             return null;
         }
 
-        /// <summary>Every tick, for every Sim (ReduxComputer.Tick): on a cellphone call, the phone stays out by their head.</summary>
+        /// <summary>
+        /// Every tick, for every Sim (ReduxComputer.Tick): on a cellphone call, the phone stays out by their head; 21.6: when
+        /// the call ends (answered and done, hung up, cancelled) it's put away at once, and any phone that's been out its
+        /// minute is put away for good (it used to come back each time the tick count wrapped). Lot state only - every game.
+        /// </summary>
         public static void Tick(VMAvatar ava)
         {
-            var a = ava?.Thread?.ActiveAction;
-            if (a == null || !IsCellAction(a)) return;
-            var vm = ava.Thread.Context?.VM;
+            var vm = ava?.Thread?.Context?.VM;
             if (vm == null) return;
             int v = ava.GetAttribute(VMReduxPhone.OutAttr);
-            int now = (int)(vm.Scheduler.CurrentTickID % VMReduxPhone.TickWrap);
-            int since = v <= 0 ? int.MaxValue : ((now - (v - 1)) % VMReduxPhone.TickWrap + VMReduxPhone.TickWrap) % VMReduxPhone.TickWrap;
-            if (since >= VMReduxPhone.ShowTicks - 300) VMReduxPhone.Set(vm, ava, true);
+            var a = ava.Thread.ActiveAction;
+            if (a != null && IsCellAction(a))
+            {
+                // (the call's stamp is kept negative - "out for a call" - so the end of the call can put it away)
+                int since = VMReduxPhone.Since(vm, v);
+                if (since >= VMReduxPhone.ShowTicks - 300) ava.SetAttribute(VMReduxPhone.OutAttr, (short)-(vm.Scheduler.CurrentTickID % VMReduxPhone.TickWrap + 1));
+                else if (v > 0) ava.SetAttribute(VMReduxPhone.OutAttr, (short)-v);
+                return;
+            }
+            if (v < 0) { ava.SetAttribute(VMReduxPhone.OutAttr, 0); return; } // (the call's over: the phone goes away)
+            if (v > 0) VMReduxPhone.Expire(vm, ava);
         }
 
         private static bool IsAnswer(GameObject phone, TTABInteraction ia, TTAs ttas)

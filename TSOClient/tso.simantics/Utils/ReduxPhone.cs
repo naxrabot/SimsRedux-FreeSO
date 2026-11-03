@@ -76,11 +76,30 @@ namespace FSO.SimAntics.Utils
         public static bool IsOut(VM vm, VMAvatar ava)
         {
             if (vm == null || ava == null || ava.Dead) return false;
-            int v = ava.GetAttribute(OutAttr);
-            if (v <= 0) return false;
+            return Since(vm, ava.GetAttribute(OutAttr)) < ShowTicks;
+        }
+
+        /// <summary>
+        /// 21.6: ticks since the phone came out (int.MaxValue: put away). A negative value is the same stamp, put out by a
+        /// cellphone call (VMReduxCellCall.Tick - it's put away the moment the call ends).
+        /// </summary>
+        public static int Since(VM vm, int v)
+        {
+            if (v < 0) v = -v;
+            if (v == 0 || vm?.Scheduler == null) return int.MaxValue;
             int now = (int)(vm.Scheduler.CurrentTickID % TickWrap);
-            int since = ((now - (v - 1)) % TickWrap + TickWrap) % TickWrap;
-            return since < ShowTicks;
+            return ((now - (v - 1)) % TickWrap + TickWrap) % TickWrap;
+        }
+
+        /// <summary>
+        /// 21.6: every tick, for every Sim (VMReduxCellCall.Tick - lot state only, the same on every game): a phone that's
+        /// been out its minute is put away for good. (Before, the stamp stayed, and as the tick count wrapped round every
+        /// 30000 ticks it showed again for a minute - "the cellphone icon next to the Sim never goes away".)
+        /// </summary>
+        public static void Expire(VM vm, VMAvatar ava)
+        {
+            int v = ava.GetAttribute(OutAttr);
+            if (v != 0 && Since(vm, v) >= ShowTicks) ava.SetAttribute(OutAttr, 0);
         }
 
         /// <summary>Takes the phone out (or puts it away). Run by the command, the same on every game.</summary>

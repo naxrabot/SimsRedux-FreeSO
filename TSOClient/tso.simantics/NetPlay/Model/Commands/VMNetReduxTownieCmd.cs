@@ -231,8 +231,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 (short)(ava.GetValue(VMStackObjectVariable.MovementFlags) | (short)VMMovementFlags.FSOExcludeUserSave));
             ava.SetAttribute(Sidewalk.StreetAttr, Kind);
             ava.SetAttribute(Sidewalk.EndAttr, Sidewalk.Pack(ToX, ToY));
-            // joggers run (Sims 1's running walk style, as when a Sim hurries to a fire); so does the dog (pets walk at half
-            // a Sim's pace - trotting, it keeps up with its walker and a little ahead); everyone else walks
+            // everyone walks (21.6: joggers too - none are sent any more); only the dog trots (pets walk at half a Sim's pace -
+            // trotting, it keeps up with its walker and a little ahead)
             ava.SetValue(VMStackObjectVariable.WalkStyle, StreetWalkStyle(ava));
 
             // (19.10: only ever on the lot's own sidewalk. 20.1: along one of the lot's ways from edge to edge - From at an open
@@ -266,6 +266,15 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             {
                 Console.WriteLine(tag + " refused - " + (ava.Name ?? "") + ": no free spot on the sidewalk near " + FromX + "," + FromY
                     + (AnchorID != 0 ? " (nor by a street portal on this side of the street)" : ""));
+                ava.Delete(true, vm.Context);
+                return false;
+            }
+            // (21.6: the router keeps them on the sidewalk - a way that's blocked from the start (a parked car, a tree, a fence
+            //  across it) would only leave them stuck, and before 20.2 sent them round it over the grass or the road: not begun)
+            var blocked = Sidewalk.RouteBlocked(vm.Context, ava, route);
+            if (blocked != null)
+            {
+                Console.WriteLine(tag + " refused - the way along the sidewalk " + route + " is blocked at " + blocked);
                 ava.Delete(true, vm.Context);
                 return false;
             }
@@ -310,10 +319,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             return false;
         }
 
-        /// <summary>20.1: a street Sim's walk style: joggers run and dogs trot (Sims 1's running style); everyone else walks.</summary>
+        /// <summary>20.1: a street Sim's walk style: dogs trot (Sims 1's running style); everyone else walks (21.6: joggers too).</summary>
         private static short StreetWalkStyle(VMAvatar ava)
         {
-            return (short)((ava.IsPet || ava.GetAttribute(Sidewalk.StreetAttr) == (short)Sidewalk.Kind.Jogger) ? 1 : 0);
+            return (short)(ava.IsPet ? 1 : 0);
         }
 
         private enum StopKind { Mid, Corner, End }
@@ -408,6 +417,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                 int x = wk.X(at), y = wk.Y(at);
                 if (!Sidewalk.InsideEdge(vm.Context, x, y)) continue; // (21.2: never the lot's outermost row)
                 if (!Sidewalk.IsStopTile(vm.Context, wk, x, y)) continue; // (20.1: a sidewalk tile, on a sidewalk)
+                if (!Sidewalk.OnRouteTile(vm.Context, x, y)) continue; // (21.6: on the path they may walk - past a sidewalk's end it isn't)
                 var pos = LotTilePos.FromBigTile((short)x, (short)y, 1);
                 if (vm.Context.IsOutOfBounds(pos)) continue;
                 placed = go.SetPosition(pos, Direction.NORTH, vm.Context).Status == VMPlacementError.Success;
@@ -451,7 +461,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         private static readonly string[][] SocialWords =
         {
             new[] { "talk", "chat", "compliment", "joke" },                     // 0: neighbours chatting
-            new[] { "tag", "rock", "hand slap", "tickle", "play", "talk" },     // 1: children playing
+            new[] { "rock", "hand slap", "tickle", "play", "talk" },            // 1: children playing (21.6: no "tag" - they ran)
             new[] { "wave" },                                                   // 2: a wave at the family
         };
         /// <summary>Never on the street: nothing romantic, rude or that invites itself in.</summary>
@@ -460,6 +470,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             "kiss", "flirt", "hug", "romance", "romantic", "woohoo", "propose", "proposition", "rub", "massage", "dance", "insult",
             "tease", "fight", "attack", "poke", "goose", "nuzzle", "cuddle", "serenade", "date", "love", "bite", "brag",
             "scare", "ask", "move in", "marry", "invite", "leave", "goodbye", "suggest",
+            "tag", "chase", "race", // (21.6: nothing that has them running about on the street)
         };
 
         /// <summary>The social on target's own menu for this kind, by its English name (the same on every game) - null: none.</summary>

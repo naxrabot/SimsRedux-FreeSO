@@ -16,7 +16,8 @@ namespace FSO.SimAntics.Utils
     /// SimsRedux car pack round 3: cars a family can buy and drive. 21.1: bought like any Buy mode item (Miscellaneous > Cars
     /// - Simitone's ReduxCars lists them; placed with the object holder anywhere outdoors where there's room: SpotError,
     /// PlaceOwned through VMNetReduxCarCmd Place; moved with Buy mode's move, MoveOwned; sold like any object). 21.0's
-    /// Showroom window and parking by the street on buying are gone (FindSpot is still how a car parks for a visit).
+    /// Showroom window and parking by the street on buying are gone. 21.6: a car parked for a trip (and a visiting player's
+    /// car) parks in the street at the kerb (ParkAtKerb), never on the lot's lawn.
     ///
     /// WHAT A BOUGHT CAR IS ON THE LOT
     /// The game's own standard car (CarStd, "Car - Standard Carpool", GUID CarGUID - in every player's Sims files), parked:
@@ -30,6 +31,7 @@ namespace FSO.SimAntics.Utils
     /// A game without the car pack draws it as the Sims car; one with the pack as that NFSU2 car (ReduxCarSkins.Swap - drawing
     /// only). Nothing on the lot ever depends on the pack, and the save format is unchanged (attributes only).
     /// A car parked for a trip (VisitMarker, 97) is the same, on the lot the family drove to - it isn't theirs to sell there.
+    /// 21.6: a visiting player's car (VisitMarker, family 0) has attribute 22 (TagAttribute) set to GuestTag of their Sim.
     ///
     /// PRICES live in the pack's manifest (carpack.json: each car's versions with their price and parts' prices - what the
     /// panel's Car Customizer will edit in round 4) and, for a game without the pack, in the table below (the same numbers
@@ -341,14 +343,8 @@ namespace FSO.SimAntics.Utils
             if (arch == null) return false;
             int w = arch.Width, h = arch.Height;
             // the lot's own part (where the family may build): its middle
-            int bx0 = int.MaxValue, by0 = int.MaxValue, bx1 = -1, by1 = -1;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    if (ctx.IsUserOutOfBounds(LotTilePos.FromBigTile((short)x, (short)y, 1))) continue;
-                    if (x < bx0) bx0 = x; if (y < by0) by0 = y; if (x > bx1) bx1 = x; if (y > by1) by1 = y;
-                }
-            if (bx1 < 0) return false;
+            int bx0, by0, bx1, by1;
+            if (!BuildArea(vm, out bx0, out by0, out bx1, out by1)) return false;
             int cx2 = bx0 + bx1 + 1, cy2 = by0 + by1 + 1; // (twice the middle)
 
             bool haveRoad = ReduxTraffic.NearestRoad(arch, cx2 / 2, cy2 / 2, out bool roadAlongX, out int middle);
@@ -383,6 +379,179 @@ namespace FSO.SimAntics.Utils
                     }
             }
             return found;
+        }
+
+        /// <summary>The lot's own part (the area the family may build on): its first and last tiles. False: none.</summary>
+        private static bool BuildArea(VM vm, out int bx0, out int by0, out int bx1, out int by1)
+        {
+            bx0 = by0 = int.MaxValue; bx1 = by1 = -1;
+            var ctx = vm?.Context;
+            var arch = ctx?.Architecture;
+            if (arch == null) return false;
+            for (int y = 0; y < arch.Height; y++)
+                for (int x = 0; x < arch.Width; x++)
+                {
+                    if (ctx.IsUserOutOfBounds(LotTilePos.FromBigTile((short)x, (short)y, 1))) continue;
+                    if (x < bx0) bx0 = x; if (y < by0) by0 = y; if (x > bx1) bx1 = x; if (y > by1) by1 = y;
+                }
+            return bx1 >= 0;
+        }
+
+        // ================================================================ 21.6: parking at the kerb (a trip's car, a visiting player's car)
+
+        /// <summary>The mailboxes (Sims 1's two) - one stands by the street at the front of every lot.</summary>
+        private static readonly uint[] MailboxGUIDs = { 0xEF121974, 0x1D95C9B0 };
+        /// <summary>A visiting player's Sim's id starts here (the game's ReduxOnlineInfo.FirstGuestID).</summary>
+        public const uint FirstGuestID = 100001;
+
+        /// <summary>The number a visiting player's car is marked with (TagAttribute): from their Sim's id, never 0.</summary>
+        public static short GuestTag(uint persistID) { return (short)(1 + (int)(persistID % 30000u)); }
+
+        /// <summary>The lot's mailbox (the lowest object id, so every game picks the same one), or null.</summary>
+        private static VMEntity Mailbox(VM vm)
+        {
+            VMEntity best = null;
+            foreach (var e in vm.Entities)
+            {
+                if (e == null || e.Dead || e.GhostImage || e.Object?.OBJ == null || e.Position == LotTilePos.OUT_OF_WORLD) continue;
+                if (Array.IndexOf(MailboxGUIDs, e.Object.OBJ.GUID) < 0) continue;
+                if (best == null || e.ObjectID < best.ObjectID) best = e;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// 21.6: a car parked for a trip (VisitMarker) - in the street, at the kerb in front of the lot: in the lane on the
+        /// lot's side of the front street (the one nearest the mailbox), lying along it and facing the way that lane drives,
+        /// as near the middle of the lot's front as there's room - but not right by the mailbox, where the carpool and the
+        /// taxi stop, unless there's nowhere else. Never on the lot's own ground (Joey: the car was parked on the lawn). No
+        /// street, or no room along it: null (the car isn't shown - never put on the grass instead). tag: TagAttribute (a
+        /// visiting player's car - GuestTag; 0 for the family's own trip). Only the lot's own state, a fixed search order:
+        /// the same on every game.
+        /// </summary>
+        public static VMMultitileGroup ParkAtKerb(VM vm, short skin, short family, short tag)
+        {
+            var ctx = vm?.Context;
+            var arch = ctx?.Architecture;
+            if (arch == null) return null;
+            int bx0, by0, bx1, by1;
+            if (!BuildArea(vm, out bx0, out by0, out bx1, out by1)) return null;
+            int cx2 = bx0 + bx1 + 1, cy2 = by0 + by1 + 1; // (twice the lot's middle)
+            var mailbox = Mailbox(vm);
+            int ax = mailbox != null ? mailbox.Position.TileX : cx2 / 2, ay = mailbox != null ? mailbox.Position.TileY : cy2 / 2;
+            bool alongX; int lane, start, end; Direction dir;
+            if (!ReduxTraffic.KerbLane(arch, ax, ay, out alongX, out lane, out start, out end, out dir)) return null;
+            int mailAlong = mailbox != null ? (alongX ? ax : ay) : int.MinValue;
+
+            var group = Make(vm, dir, skin, family, VisitMarker);
+            if (group == null) return null;
+            int minX, minY, maxX, maxY;
+            if (!Extent(group, dir, out minX, out minY, out maxX, out maxY)) { group.Delete(ctx); return null; }
+            int tilesX = (maxX - minX) / 16 + 1, tilesY = (maxY - minY) / 16 + 1;
+            int len = alongX ? tilesX : tilesY, wid = alongX ? tilesY : tilesX;
+            if (len < wid) { group.Delete(ctx); return null; } // (it wouldn't lie along the street)
+            int across0 = lane - (wid - 1) / 2; // (its middle on the lane's middle, as the passing cars drive)
+            int want2 = alongX ? cx2 : cy2;
+            var avatars = new List<Point>();
+            foreach (var a in ctx.ObjectQueries.Avatars)
+                if (a != null && !a.Dead && a.Position != LotTilePos.OUT_OF_WORLD && a.Position.Level == 1) avatars.Add(new Point(a.Position.TileX, a.Position.TileY));
+
+            int found = int.MinValue;
+            long best = long.MaxValue;
+            for (int pass = 0; pass < 2 && found == int.MinValue; pass++)
+                for (int a0 = start + 2; a0 + len - 1 <= end - 2; a0++)
+                {
+                    // (first try: clear of the carpool's and taxi's stop by the mailbox)
+                    if (pass == 0 && mailAlong != int.MinValue && a0 <= mailAlong + 4 && a0 + len - 1 >= mailAlong - 4) continue;
+                    long score = Math.Abs((2 * a0 + len) - want2);
+                    if (score >= best) continue;
+                    int x0 = alongX ? a0 : across0, y0 = alongX ? across0 : a0;
+                    if (!KerbFree(vm, x0, y0, alongX ? len : wid, alongX ? wid : len, avatars)) continue;
+                    best = score; found = a0;
+                }
+            if (found == int.MinValue) { group.Delete(ctx); return null; }
+            int px = alongX ? found : across0, py = alongX ? across0 : found;
+            var pos = new LotTilePos((short)(px * 16 + 8 - minX), (short)(py * 16 + 8 - minY), 1);
+            if (PutGroup(vm, group, pos, dir) != VMPlacementError.Success) { group.Delete(ctx); return null; }
+            if (tag != 0) group.BaseObject.SetAttribute(TagAttribute, tag);
+            Finish(group, VisitMarker, 0);
+            return group;
+        }
+
+        /// <summary>
+        /// 21.6: is every tile of this rectangle street a car can stand on - road (not the sidewalk, never the lot's ground),
+        /// no walls, nothing standing there (a passing car is fine: it drives on), no Sim? Read only.
+        /// </summary>
+        private static bool KerbFree(VM vm, int x0, int y0, int cw, int ch, List<Point> avatars)
+        {
+            var ctx = vm.Context;
+            var arch = ctx.Architecture;
+            for (int y = y0; y < y0 + ch; y++)
+                for (int x = x0; x < x0 + cw; x++)
+                {
+                    if (x < 1 || y < 1 || x >= arch.Width - 1 || y >= arch.Height - 1) return false;
+                    var floor = arch.GetFloor((short)x, (short)y, 1).Pattern;
+                    if (floor != 9 && floor != 10 && floor != 11) return false; // (road only)
+                    if (arch.GetWall((short)x, (short)y, 1).Segments != 0) return false;
+                    var objs = ctx.ObjectQueries.GetObjectsAt(LotTilePos.FromBigTile((short)x, (short)y, 1));
+                    if (objs != null)
+                        foreach (var o in objs)
+                            if (o != null && !o.Dead && !o.GhostImage && o.GetAttribute(0) != ReduxTraffic.Marker) return false;
+                    foreach (var a in avatars) if (a.X == x && a.Y == y) return false;
+                }
+            return true;
+        }
+
+        /// <summary>21.6: the car a visiting player parked here (GuestTag), or null.</summary>
+        public static VMEntity GuestCar(VM vm, short tag)
+        {
+            if (tag <= 0) return null;
+            foreach (var e in vm.Entities)
+                if (e != null && !e.Dead && !e.GhostImage && e.MultitileGroup?.BaseObject == e && IsVisitCar(e) && e.GetAttribute(TagAttribute) == tag) return e;
+            return null;
+        }
+
+        /// <summary>
+        /// 21.6 (ReduxTraffic, once a game minute - the same tick on every game): a visiting player's car whose Sim has left
+        /// the lot drives off (a passing car with its look pulls out) and is gone. True: something changed.
+        /// </summary>
+        public static bool TidyGuestCars(VM vm, List<VMEntity> parked)
+        {
+            if (vm == null || parked == null || parked.Count == 0) return false;
+            bool changed = false;
+            foreach (var e in parked)
+            {
+                if (e == null || e.Dead || !IsVisitCar(e)) continue;
+                var tag = e.GetAttribute(TagAttribute);
+                if (tag <= 0) continue;
+                bool here = false;
+                foreach (var a in vm.Context.ObjectQueries.Avatars)
+                {
+                    var ava = a as VMAvatar;
+                    if (ava != null && !ava.Dead && ava.PersistID >= FirstGuestID && GuestTag(ava.PersistID) == tag) { here = true; break; }
+                }
+                if (here) continue;
+                try { ReduxTraffic.DriveAway(vm, e, e.GetAttribute(ReduxCarSkins.SkinAttribute), 0); } catch { }
+                e.MultitileGroup?.Delete(vm.Context);
+                changed = true;
+            }
+            return changed;
+        }
+
+        // ================================================================ 21.6: walking (not running) to the car
+
+        /// <summary>The Go Here marker of a walk to the car (its attribute WalkAttribute is WalkMark) - so the Sim walks.</summary>
+        public const int WalkAttribute = 21;
+        public const short WalkMark = 98;
+
+        /// <summary>
+        /// 21.6 (ReduxSidewalk.WalkStyleOf - the router's walk style): is this Sim on its way to the car (Walk)? Then it walks,
+        /// however far it is (Joey: "the sim runs to the car, make them walk instead"). Only the lot's own state.
+        /// </summary>
+        public static bool WalkingToCar(VMAvatar ava)
+        {
+            var c = ava?.Thread?.ActiveAction?.Callee;
+            return c != null && !c.Dead && c.Object?.OBJ?.GUID == ReduxSidewalk.GotoGUID && c.GetAttribute(WalkAttribute) == WalkMark;
         }
 
         /// <summary>Is every tile of this rectangle free for a parked car (see FindSpot)?</summary>
@@ -624,18 +793,22 @@ namespace FSO.SimAntics.Utils
             }
             var action = (placed && goHere >= 0) ? go.GetAction(goHere, sim, ctx, false, new short[] { 0, 0, 0, 0 }) : null;
             if (action == null) { go.Delete(true, ctx); return false; }
+            go.SetAttribute(WalkAttribute, WalkMark); // (21.6: the Sim walks there - WalkingToCar)
             action.Flags |= FSO.Files.Formats.IFF.Chunks.TTABFlags.FSOSkipPermissions;
             action.Priority = (short)VMQueuePriority.UserDriven;
             sim.Thread.EnqueueAction(action);
             return true;
         }
 
-        /// <summary>The car parked for a trip on this lot - any left from before (a lot saved with one) - go.</summary>
+        /// <summary>
+        /// The car parked for a trip on this lot - any left from before (a lot saved with one) - go. (21.6: not a visiting
+        /// player's car - it goes when they leave, TidyGuestCars.)
+        /// </summary>
         public static void ClearVisitCars(VM vm)
         {
             var gone = new List<VMMultitileGroup>();
             foreach (var e in vm.Entities)
-                if (e != null && !e.Dead && !e.GhostImage && e.MultitileGroup?.BaseObject == e && IsVisitCar(e)) gone.Add(e.MultitileGroup);
+                if (e != null && !e.Dead && !e.GhostImage && e.MultitileGroup?.BaseObject == e && IsVisitCar(e) && e.GetAttribute(TagAttribute) <= 0) gone.Add(e.MultitileGroup);
             foreach (var g in gone) g.Delete(vm.Context);
         }
     }

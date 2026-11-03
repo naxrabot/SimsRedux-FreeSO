@@ -560,7 +560,9 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>A lot's sidewalks and the routes along them (20.1: worked out together, kept together). 20.2: and the tiles
         /// street Sims may route on (worked out the first time a street Sim routes).</summary>
-        private class Found { public List<Walk> Walks = new List<Walk>(); public List<Route> Routes = new List<Route>(); public bool[] Tiles; }
+        private class Found { public List<Walk> Walks = new List<Walk>(); public List<Route> Routes = new List<Route>(); public bool[] Tiles;
+            /// <summary>21.6: the no-go rectangles for a street Sim on the sidewalk (LimitRoute), kept.</summary>
+            public List<VMObstacle> Rects; }
 
         // ------------------------------------------------------------------
         // 20.2: street Sims walk, and only on the sidewalk - decided in the router itself (VMRoutingFrame), from the lot's
@@ -569,22 +571,28 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>
         /// 20.2: the walk style the router really uses for this Sim (VMRoutingFrame.WalkStyle, VMAnimateSim): a Sim out on the
-        /// street never runs (1) - whatever Sims 1's Go Here (Destination.iff tree 0x1000 sets "run" for a far spot) or anything
-        /// else put in its walk style - except joggers, and a dog (it trots to keep up with its walker).
+        /// street never runs (1) - whatever Sims 1's Go Here (Destination.iff tree 0x1000 sets "run" for a far spot), a go cut
+        /// short, a shoo, a social or anything else put in its walk style - only a dog trots (to keep up with its walker).
+        /// 21.6: joggers too (Joey: "absolutely no npc sims jogging" - none are sent any more; one still out there from an
+        /// older game, or a Jogger sent by an older host, walks).
         /// </summary>
         public static short WalkStyleOf(VMEntity ent, short style)
         {
             if (style != 1) return style;
             var ava = ent as VMAvatar;
             if (ava == null || ava.Dead || ava.IsPet) return style;
-            var k = ava.GetAttribute(StreetAttr);
-            return (k > 0 && k != (short)Kind.Jogger) ? (short)0 : style;
+            if (ReduxCarShop.WalkingToCar(ava)) return 0; // (21.6: a Sim on the way to the family car walks to it)
+            return ava.GetAttribute(StreetAttr) > 0 ? (short)0 : style;
         }
 
         /// <summary>
         /// 20.2: the tiles of the lot a street Sim may route on (index y * width + x): every tile along the legs of the lot's
-        /// ways (each sidewalk's own line, end to end - a driveway it crosses too; never water or a pool) and the tiles right
-        /// round each corner where a way turns. Null: no ways on this lot (no limit). Worked out once per lot.
+        /// ways (each sidewalk's own line, end to end - a driveway it crosses too; never water or a pool). Null: no ways on
+        /// this lot (no limit). Worked out once per lot.
+        /// 21.6: no longer the 3x3 tiles round each corner too - those were the grass strip by the kerb and the corner of the
+        /// yard, right next to the road of both streets: a chat or a wave could end a Sim there, and from there (off this
+        /// path) it routed with no limit at all - Joey's corner lot screenshot, people in the road at the corner. The corner
+        /// tile itself is on both sidewalks' lines (the end of one leg and the start of the next), so the path still joins.
         /// </summary>
         public static bool[] RouteTiles(VMContext ctx)
         {
@@ -609,12 +617,6 @@ namespace FSO.SimAntics.Utils
                         int x = l.W.X(a), y = l.W.Y(a);
                         if (ok(x, y)) t[y * w + x] = true;
                     }
-                    if (k == 0 || l.W == r.Legs[k - 1].W) continue;
-                    // (a corner: a tile's give either way round it)
-                    int cx = l.W.X(l.From), cy = l.W.Y(l.From);
-                    for (int dy = -1; dy <= 1; dy++)
-                        for (int dx = -1; dx <= 1; dx++)
-                            if (IsWalkTile(ctx, cx + dx, cy + dy)) t[(cy + dy) * w + cx + dx] = true;
                 }
             f.Tiles = t;
             return t;
@@ -623,10 +625,14 @@ namespace FSO.SimAntics.Utils
         /// <summary>
         /// 20.2: VMRoutingFrame.AttemptWalk, for a street Sim on the ground floor: every tile it may not route on goes into the
         /// route's obstacles (as few rectangles as rows allow), so the route runs along the sidewalk and nowhere else - never
-        /// the grass strip by the kerb or the yard. From a tile on the sidewalk: to a tile on it (a stop of its walk), or for
-        /// anything else (a chat, a wave) to a spot right beside it - a Go Here to a spot off the sidewalk is refused (false:
-        /// the router tries its next spot). A Sim not on the sidewalk now (moved off it, a chat) routes as usual - its walk
-        /// takes it back onto the sidewalk.
+        /// the grass strip by the kerb or the yard. Every route of a street Sim ends on the sidewalk: a stop of its walk, a
+        /// chat, a game, a wave, a shoo - a spot off it is refused (false: the router tries its next spot; none left, that go
+        /// or social fails and the walk goes on - the game deciding takes them off if it can't).
+        /// 21.6 (Joey still saw them on the grass and in the road, the corner lot worst): before, (1) anything but a Go Here
+        /// could end a step off the sidewalk (the end tile was always let through - the grass strip, or right by the road, or
+        /// the road itself where the sidewalk meets the kerb), and (2) a Sim whose step started off the sidewalk routed with no
+        /// limit at all - across the grass and the road. Now a Sim off the sidewalk (only ever by being put there) may only
+        /// step back onto it from where it stands: its own tile and the walk tiles right round it (never road or water).
         /// </summary>
         public static bool LimitRoute(VMContext ctx, LotTilePos start, LotTilePos end, bool goHere, VMObstacleSet obstacles)
         {
@@ -636,10 +642,36 @@ namespace FSO.SimAntics.Utils
             var arch = ctx.Architecture;
             int w = arch.Width, h = arch.Height;
             int si = TileIndex(start, w, h), ei = TileIndex(end, w, h);
-            if (si < 0 || !tiles[si]) return true;
-            if (ei < 0) return false;
-            if (!tiles[ei] && goHere) return false;
-            // the tiles not to be walked on, row by row; a row's runs joined with the same runs of the rows below
+            if (si < 0 || ei < 0) return false;
+            if (!tiles[ei] && ei != si) return false;
+            // (off the sidewalk now: the way back onto it - the tiles round them that can be walked on, never the road)
+            var back = new HashSet<int>();
+            if (!tiles[si])
+            {
+                int sx = si % w, sy = si / w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        if (IsWalkTile(ctx, sx + dx, sy + dy)) back.Add((sy + dy) * w + sx + dx);
+            }
+            List<VMObstacle> rects;
+            if (tiles[si])
+            {
+                // (21.6: on the sidewalk - the tiles not to be walked on are the same for every step on this lot: worked out
+                //  once and kept, the same rectangles in the same order as before, so every path is as it was)
+                var f = Get(ctx);
+                if (f.Rects == null) f.Rects = NoGoRects(w, h, i => tiles[i]);
+                rects = f.Rects;
+            }
+            else rects = NoGoRects(w, h, i => tiles[i] || i == si || back.Contains(i));
+            foreach (var o in rects) obstacles.Add(new VMObstacle(o.x1, o.y1, o.x2, o.y2));
+            return true;
+        }
+
+        /// <summary>20.2: the tiles not to be walked on (walkable false), as rectangles: row by row, a row's runs joined with
+        /// the same runs of the rows below (21.6: out of LimitRoute, so the sidewalk's list can be kept).</summary>
+        private static List<VMObstacle> NoGoRects(int w, int h, Func<int, bool> walkable)
+        {
+            var result = new List<VMObstacle>();
             var open = new Dictionary<long, int>(); // (x0 | x1 << 16 -> first row of a rectangle still growing)
             for (int y = 0; y <= h; y++)
             {
@@ -649,10 +681,9 @@ namespace FSO.SimAntics.Utils
                     int x = 0;
                     while (x < w)
                     {
-                        int i = y * w + x;
-                        if (tiles[i] || i == si || i == ei) { x++; continue; }
+                        if (walkable(y * w + x)) { x++; continue; }
                         int x0 = x;
-                        while (x < w && !tiles[y * w + x] && y * w + x != si && y * w + x != ei) x++;
+                        while (x < w && !walkable(y * w + x)) x++;
                         runs.Add((long)x0 | ((long)x << 16));
                     }
                 }
@@ -663,12 +694,68 @@ namespace FSO.SimAntics.Utils
                 {
                     if (runs.Contains(key)) continue;
                     int x0 = (int)(key & 0xFFFF), x1 = (int)(key >> 16);
-                    obstacles.Add(new VMObstacle(x0 << 4, open[key] << 4, x1 << 4, y << 4));
+                    result.Add(new VMObstacle(x0 << 4, open[key] << 4, x1 << 4, y << 4));
                     open.Remove(key);
                 }
                 foreach (var run in runs) if (!open.ContainsKey(run)) open[run] = y;
             }
-            return true;
+            return result;
+        }
+
+        /// <summary>
+        /// 21.6: where the way r along the sidewalk is blocked for street Sim ava (just put at its start) - a wall or fence
+        /// across it, a change of room, or a thing in the way (a parked car, a tree, a bin... - the same test the router makes:
+        /// its flags, then the object's and the Sim's own "may walk through" trees, entry point 5). Null: clear. The router
+        /// keeps street Sims on the sidewalk, so a way blocked from the start can only end with them stuck - such a walk is
+        /// never begun (VMNetReduxTownieCmd.StreetWalk). From the lot itself only (the same on every game).
+        /// </summary>
+        public static string RouteBlocked(VMContext ctx, VMAvatar ava, Route r)
+        {
+            var arch = ctx?.Architecture;
+            if (arch == null || r == null || ctx.VM == null || ctx.RoomInfo == null) return null;
+            var blockers = new List<VMEntity>();
+            foreach (var obj in ctx.VM.Entities)
+            {
+                if (!(obj is VMGameObject) || obj.Dead || obj.Footprint == null) continue;
+                if (obj.Position == LotTilePos.OUT_OF_WORLD || obj.Position.Level != 1) continue;
+                if (obj.Object?.OBJ?.GUID == GotoGUID) continue; // (the walk's own Go Here markers)
+                var flags = (VMEntityFlags)obj.GetValue(VMStackObjectVariable.Flags);
+                if ((flags & VMEntityFlags.DisallowPersonIntersection) == 0 && (flags & VMEntityFlags.AllowPersonIntersection) != 0) continue;
+                blockers.Add(obj);
+            }
+            int px = -1, py = -1;
+            foreach (var l in r.Legs)
+            {
+                int dir = l.To >= l.From ? 1 : -1;
+                for (int a = l.From; ; a += dir)
+                {
+                    int x = l.W.X(a), y = l.W.Y(a);
+                    if (px >= 0 && (px != x || py != y))
+                    {
+                        var box = new VMObstacle(Math.Min(px, x) * 16 + 7, Math.Min(py, y) * 16 + 7, Math.Max(px, x) * 16 + 9, Math.Max(py, y) * 16 + 9);
+                        var pr = ctx.GetRoomAt(LotTilePos.FromBigTile((short)px, (short)py, 1));
+                        var room = ctx.GetRoomAt(LotTilePos.FromBigTile((short)x, (short)y, 1));
+                        if (pr != room) return x + "," + y + " (into another room - a fence or wall)";
+                        if (room < ctx.RoomInfo.Length && ctx.RoomInfo[room].Room.RoutingObstacles != null
+                            && ctx.RoomInfo[room].Room.RoutingObstacles.SearchForIntersect(box)) return x + "," + y + " (a wall or fence)";
+                        // (not within 2 tiles of the edge of the lot where they come and go - the street portals stand there,
+                        //  and the walk's end is reached 2 tiles short anyway)
+                        bool edge = Math.Max(Math.Abs(x - r.StartX), Math.Abs(y - r.StartY)) <= 2 || Math.Max(Math.Abs(x - r.EndX), Math.Abs(y - r.EndY)) <= 2
+                            || Math.Max(Math.Abs(px - r.StartX), Math.Abs(py - r.StartY)) <= 2 || Math.Max(Math.Abs(px - r.EndX), Math.Abs(py - r.EndY)) <= 2;
+                        if (!edge) foreach (var b in blockers)
+                        {
+                            var ft = b.Footprint;
+                            if (ft.x1 - 3 > box.x2 || ft.x2 + 3 < box.x1 || ft.y1 - 3 > box.y2 || ft.y2 + 3 < box.y1) continue;
+                            if (ava != null && (ava.ExecuteEntryPoint(5, ctx, true, b, new short[] { b.ObjectID, 1, 0, 0 })
+                                || b.ExecuteEntryPoint(5, ctx, true, ava, new short[] { ava.ObjectID, 1, 0, 0 }))) continue;
+                            return x + "," + y + " (" + (b.ToString() ?? "something") + ")";
+                        }
+                    }
+                    px = x; py = y;
+                    if (a == l.To) break;
+                }
+            }
+            return null;
         }
 
         private static int TileIndex(LotTilePos p, int w, int h)
