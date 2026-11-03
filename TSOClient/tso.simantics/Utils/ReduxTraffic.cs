@@ -99,7 +99,7 @@ namespace FSO.SimAntics.Utils
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>> RoadCache
             = new System.Runtime.CompilerServices.ConditionalWeakTable<VMArchitecture, List<Road>>();
 
-        private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; public List<VMEntity> Others = new List<VMEntity>(); }
+        private class LotCars { public List<VMMultitileGroup> Traffic; public bool OtherCar; public List<VMEntity> Others = new List<VMEntity>(); public List<VMEntity> Parked = new List<VMEntity>(); }
         // (car pack round 3: a family's own car, or one parked for a trip - ReduxCarShop - is neither traffic nor a carpool:
         //  it's left where it is, and it doesn't stop the street's traffic the way a carpool waiting at the kerb does)
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars> Seen = new System.Runtime.CompilerServices.ConditionalWeakTable<VM, LotCars>();
@@ -123,6 +123,7 @@ namespace FSO.SimAntics.Utils
                     st.Traffic = new List<VMMultitileGroup>();
                     st.OtherCar = false;
                     st.Others.Clear();
+                    st.Parked.Clear();
                     foreach (var e in vm.Entities)
                     {
                         if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject) continue;
@@ -134,9 +135,11 @@ namespace FSO.SimAntics.Utils
                             MarkMoving(e.MultitileGroup); // (one saved with the lot, or just made)
                             ReduxCarSkins.EnsureDrawn(e); // (20.3: its NFSU2 picture, if it isn't drawn with it yet - drawing only)
                         }
-                        else if (ReduxCarShop.IsParkedCar(e)) ReduxCarSkins.EnsureDrawn(e); // (round 3: a parked car - its NFSU2 picture, nothing else)
+                        else if (ReduxCarShop.IsParkedCar(e)) { ReduxCarSkins.EnsureDrawn(e); st.Parked.Add(e); } // (round 3: a parked car - its NFSU2 picture, nothing else)
                         else { st.OtherCar = true; st.Others.Add(e); ReduxCarSkins.EnsureDrawn(e); } // (a carpool: its NFSU2 picture once the lot's Sims are in)
                     }
+                    // 21.6: a visiting player's car whose Sim has gone drives off (only on the minute - the same tick on every game)
+                    if (clock.Ticks % 30 == 0 && ReduxCarShop.TidyGuestCars(vm, st.Parked)) { st.Traffic = null; return; }
                 }
                 st.Traffic.RemoveAll(g => g.BaseObject == null || g.BaseObject.Dead);
                 // (no copy each tick: driving a car only ever deletes lot objects, never touches this list)
@@ -170,10 +173,11 @@ namespace FSO.SimAntics.Utils
                 if (roads.Count == 0) return;
                 var road = roads[(int)((h >> 8) % (uint)roads.Count)];
                 bool forward = ((h >> 16) & 1) == 0;
-                if (extra && !LaneFree(traffic, road, forward))
+                // (21.6: never down a lane with a car parked at the kerb in it)
+                if ((extra && !LaneFree(traffic, road, forward)) || KerbTaken(st.Parked, road, forward))
                 {
                     forward = !forward; // (the other way, if that lane's clear)
-                    if (!LaneFree(traffic, road, forward)) return;
+                    if ((extra && !LaneFree(traffic, road, forward)) || KerbTaken(st.Parked, road, forward)) return;
                 }
                 uint guid = bus ? SchoolBusGUID
                     : extra ? MoreCars[(h >> 20) % (uint)MoreCars.Length]
@@ -241,17 +245,19 @@ namespace FSO.SimAntics.Utils
             if (roads.Count == 0) return false;
             var st = Seen.GetValue(vm, _ => new LotCars());
             var traffic = new List<VMMultitileGroup>();
+            var parked = new List<VMEntity>();
             foreach (var e in vm.Entities)
             {
                 if (!(e is VMGameObject) || e.MultitileGroup == null || e != e.MultitileGroup.BaseObject || e.Dead) continue;
                 if (IsCar(e) && e.GetAttribute(0) == Marker) traffic.Add(e.MultitileGroup);
+                else if (!e.GhostImage && ReduxCarShop.IsParkedCar(e)) parked.Add(e);
             }
             uint h = Hash((uint)vm.Context.Clock.Ticks * 2654435761u ^ 0x51u);
             for (int i = 0; i < roads.Count * 2; i++)
             {
                 var road = roads[(int)((h + (uint)(i / 2)) % (uint)roads.Count)];
                 bool forward = (((h >> 16) & 1) == 0) ^ (i % 2 == 1);
-                if (!LaneFree(traffic, road, forward)) continue;
+                if (!LaneFree(traffic, road, forward) || KerbTaken(parked, road, forward)) continue;
                 if (Spawn(vm, road, forward, MoreCars[(h >> 20) % (uint)MoreCars.Length], ReduxCarSkins.PickTraffic(vm, h, traffic)))
                 {
                     st.Traffic = null; // (picked up on the next tick)
@@ -382,6 +388,52 @@ namespace FSO.SimAntics.Utils
                 if (d < best) { best = d; alongX = r.AlongX; middle = r.Middle; }
             }
             return best != int.MaxValue;
+        }
+
+        /// <summary>
+        /// 21.6: the kerb lane in front of a spot on the lot (x, y - its mailbox): the street nearest it, the lane on its side
+        /// (lane: the tile line down the lane's middle - where the passing cars' middles drive), how far the street goes along
+        /// (start, end) and the way that lane drives (dir: a car parked there faces it, so it pulls straight out). False: no
+        /// street on this lot. Read only (the lot's own floors).
+        /// </summary>
+        public static bool KerbLane(VMArchitecture arch, int x, int y, out bool alongX, out int lane, out int start, out int end, out Direction dir)
+        {
+            alongX = true; lane = start = end = 0; dir = Direction.EAST;
+            if (arch == null) return false;
+            Road road = null;
+            int best = int.MaxValue;
+            foreach (var r in Roads(arch))
+            {
+                int d = Math.Abs((r.AlongX ? y : x) - r.Middle);
+                if (d < best) { best = d; road = r; }
+            }
+            if (road == null) return false;
+            // (right-hand traffic, as Spawn: heading +x the lane is on the +y side, heading +y it's on the -x side)
+            bool forward = road.AlongX ? y >= road.Middle : x < road.Middle;
+            alongX = road.AlongX;
+            lane = road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
+            start = road.Start; end = road.End;
+            dir = DirFor(road.AlongX, forward);
+            return true;
+        }
+
+        /// <summary>21.6: is a car parked at the kerb in this lane of this street (no new passing car comes down it)?</summary>
+        private static bool KerbTaken(List<VMEntity> parked, Road road, bool forward)
+        {
+            if (parked == null || parked.Count == 0) return false;
+            int lane = road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
+            for (int i = 0; i < parked.Count; i++)
+            {
+                var e = parked[i];
+                if (e == null || e.Dead) continue;
+                var tiles = ReduxCarShop.TilesOf(e);
+                if (tiles.Count == 0) continue;
+                int sAcross = 0, sAlong = 0;
+                foreach (var t in tiles) { sAcross += road.AlongX ? t.Y : t.X; sAlong += road.AlongX ? t.X : t.Y; }
+                int across = sAcross / tiles.Count, along = sAlong / tiles.Count;
+                if (Math.Abs(across - lane) <= 1 && along >= road.Start && along <= road.End) return true;
+            }
+            return false;
         }
 
         /// <summary>

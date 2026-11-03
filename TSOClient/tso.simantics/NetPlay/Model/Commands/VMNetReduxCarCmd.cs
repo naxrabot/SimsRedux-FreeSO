@@ -17,17 +17,21 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
     ///              (X, Y and Facing travel in CarID, SimID and Skin, so the command's bytes are the same as 21.0's.)
     ///   Buy      - 21.0's Showroom (no longer sent - kept so a 21.0 game's command still does what it did): bought as Place,
     ///              parked in the free 3 x 6 spot nearest the street (ReduxCarShop.FindSpot).
-    ///   Park     - a car parked for a trip: the family (Family) drove here in their car (Skin) - parked by the street if
-    ///              there's room, else not shown. Any car left from an earlier trip goes first. Never on their own home lot.
+    ///   Park     - a car parked for a trip: the family (Family) drove here in their car (Skin) - 21.6: parked in the street
+    ///              at the kerb in front of the lot if there's room (ReduxCarShop.ParkAtKerb), else not shown (never on the
+    ///              lawn). Any car left from an earlier trip goes first. Never on their own home lot.
     ///   Walk     - Sim SimID walks to car CarID (Sims 1's own Go Here), to get in and drive.
     ///   DriveOff - car CarID drives off with its driver: a passing car with its look pulls out of the spot into the street
     ///              (ReduxTraffic.DriveAway). The parked car stays on the lot (the family's game hides it while they leave).
-    /// Only the game running the lot sends these (single player, or a visit's host) - never a visiting player's game - and
-    /// everything here looks only at the lot, so every game of the lot does the same. Done tells each game what happened.
+    ///   Guest    - 21.6 "Drive to Player": a visiting player's Sim (the command's sender) came in their family's car (Skin):
+    ///              parked at the kerb like Park, marked with their Sim (ReduxCarShop.GuestTag) - once; it drives off when their
+    ///              Sim leaves the lot (ReduxCarShop.TidyGuestCars). The only one a visiting player's game may send.
+    /// The others only the game running the lot sends (single player, or a visit's host) - never a visiting player's game -
+    /// and everything here looks only at the lot, so every game of the lot does the same. Done tells each game what happened.
     /// </summary>
     public class VMNetReduxCarCmd : VMNetCommandBodyAbstract
     {
-        public enum CarMode : byte { Buy = 0, Park = 1, Walk = 2, DriveOff = 3, Place = 4 }
+        public enum CarMode : byte { Buy = 0, Park = 1, Walk = 2, DriveOff = 3, Place = 4, Guest = 5 }
 
         public CarMode Mode;
         public short Car, Variant, Paint;
@@ -53,6 +57,7 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     case CarMode.Buy: return Buy(vm);
                     case CarMode.Place: return Place(vm);
                     case CarMode.Park: return Park(vm);
+                    case CarMode.Guest: return GuestPark(vm, caller);
                     case CarMode.Walk:
                         {
                             var sim = vm.GetObjectById(SimID) as VMAvatar;
@@ -118,11 +123,29 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             var fam = vm.TS1State?.CurrentFamily;
             if (fam != null && fam.HouseNumber > 0 && vm.GetGlobalValue(10) == fam.HouseNumber) return Tell(vm, "", true); // (their own car is at home)
             if (!ReduxCarSkins.Decode(Skin, out int _, out int _, out int _)) return Tell(vm, "", true);
-            int x0, y0; Direction dir;
-            if (!ReduxCarShop.FindSpot(vm, out x0, out y0, out dir)) return Tell(vm, "", true);
-            var group = ReduxCarShop.Park(vm, x0, y0, dir, Skin, Family, ReduxCarShop.VisitMarker, 0);
+            // (21.6: at the kerb in the street, or not at all - never on the lawn)
+            var group = ReduxCarShop.ParkAtKerb(vm, Skin, Family, 0);
             if (group != null) CarID = group.BaseObject.ObjectID;
             return Tell(vm, group == null ? "" : null, true);
+        }
+
+        /// <summary>21.6: a visiting player's own car, parked at the kerb when their Sim arrives (once per Sim).</summary>
+        private bool GuestPark(VM vm, VMAvatar caller)
+        {
+            if (caller == null || caller.Dead || caller.IsPet || caller.PersistID < ReduxCarShop.FirstGuestID) return Tell(vm, "");
+            if (!GuestSkinOk(Skin)) return Tell(vm, "");
+            var tag = ReduxCarShop.GuestTag(caller.PersistID);
+            if (ReduxCarShop.GuestCar(vm, tag) != null) return Tell(vm, "", true); // (already parked)
+            var group = ReduxCarShop.ParkAtKerb(vm, Skin, 0, tag);
+            if (group != null) CarID = group.BaseObject.ObjectID;
+            return Tell(vm, group == null ? "" : null, true);
+        }
+
+        /// <summary>A family car's look (an everyday or traffic car - never a service vehicle).</summary>
+        private static bool GuestSkinOk(short skin)
+        {
+            int car;
+            return skin > 0 && ReduxCarSkins.Decode(skin, out car, out int _, out int _) && car >= 0 && car < ReduxCarSkins.FirstService;
         }
 
         private bool Tell(VM vm, string why, bool result = false)
@@ -134,7 +157,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         public override bool Verify(VM vm, VMAvatar caller)
         {
             // only the lot's own game - never a visiting player's (a visitor never spends the host's money or moves their car)
-            return !FromNet && Mode <= CarMode.Place;
+            if (!FromNet) return Mode <= CarMode.Guest;
+            // 21.6: a visiting player's game - only their own Sim's car, parked when they arrive (Guest)
+            return Mode == CarMode.Guest && caller != null && !caller.Dead && !caller.IsPet && caller.PersistID >= ReduxCarShop.FirstGuestID
+                && GuestSkinOk(Skin);
         }
 
         public override void SerializeInto(BinaryWriter writer)

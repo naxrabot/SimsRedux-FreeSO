@@ -387,7 +387,9 @@ namespace FSO.SimAntics.Engine
             var parent = ParentRoute ?? this;
             var inDir = (parent.State == VMRoutingFrameState.ROOM_PORTAL || parent.PortalTurns > 0) ? Caller.RadianDirection : (float?)null;
             router.OptimizeLines(rectRoute, endPoint, inDir);
-            var useBezier = (VM.Tuning?.GetTuning("feature", 0, 1) ?? 0) == 0;
+            // (SimsRedux 21.6: a street Sim walks the straight lines of its route - the curves rounded its corners over the
+            //  grass beside the one-tile sidewalk)
+            var useBezier = (VM.Tuning?.GetTuning("feature", 0, 1) ?? 0) == 0 && !reduxStreet;
             if (useBezier)
             {
                 WalkTo = VMPathBezierSegment.GeneratePath(rectRoute, endPoint,

@@ -220,6 +220,8 @@ namespace FSO.SimAntics.Engine
         private static List<string>[] Events;
         private static string[] TSOFound;
         private static readonly List<Playing> Active = new List<Playing>();
+        /// <summary>21.6: The Sims Online's ambience loops, unpacked once (a couple, at most).</summary>
+        private static readonly Dictionary<string, Microsoft.Xna.Framework.Audio.SoundEffect> XaLoops = new Dictionary<string, Microsoft.Xna.Framework.Audio.SoundEffect>();
         private static readonly float[] Wait = new float[KindCount];
         private static VM LastVM;
         private static readonly Random Rand = new Random();
@@ -375,10 +377,17 @@ namespace FSO.SimAntics.Engine
                 }
                 else
                 {
-                    byte[] data = new FSO.Files.XA.XAFile(path).DecompressedData;
-                    using (var stream = new System.IO.MemoryStream(data))
-                        p.Sfx = Microsoft.Xna.Framework.Audio.SoundEffect.FromStream(stream);
-                    p.Loop = p.Sfx.CreateInstance();
+                    // (21.6: the loop is read and unpacked once, then kept - it was each time it started, on the game's
+                    //  frame: a hitch every minute or so in the rush hours)
+                    Microsoft.Xna.Framework.Audio.SoundEffect sfx;
+                    if (!XaLoops.TryGetValue(path, out sfx) || sfx == null || sfx.IsDisposed)
+                    {
+                        byte[] data = new FSO.Files.XA.XAFile(path).DecompressedData;
+                        using (var stream = new System.IO.MemoryStream(data))
+                            sfx = Microsoft.Xna.Framework.Audio.SoundEffect.FromStream(stream);
+                        XaLoops[path] = sfx;
+                    }
+                    p.Loop = sfx.CreateInstance();
                     p.Loop.IsLooped = true;
                     p.Loop.Volume = 0f;
                     p.Loop.Play();
