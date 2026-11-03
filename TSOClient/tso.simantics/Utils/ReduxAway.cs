@@ -209,13 +209,15 @@ namespace FSO.SimAntics.Utils
         /// The car portal's At Work / At School ended (VMThread.EndCurrentInteraction) with the Sim still off the lot -
         /// it only does that when it went wrong (e.g. the carpool came for a Sim already stranded off the lot and the walk
         /// to the car failed). They're put back on the lot; their script carries on as it is (back to their own loop).
+        /// 21.9: the same when a ride ended off the lot because the vehicle itself is gone (VehicleGone).
         /// </summary>
         public static void InteractionEnded(VMEntity entity, VMQueuedAction interaction)
         {
             var sim = entity as VMAvatar;
             var vm = sim?.Thread?.Context?.VM;
             if (vm == null || !vm.TS1 || interaction?.Callee?.Object?.OBJ == null) return;
-            if (interaction.Callee.Object.OBJ.GUID != CarPortalGUID || !OffLot(sim)) return;
+            if (!OffLot(sim)) return;
+            if (interaction.Callee.Object.OBJ.GUID != CarPortalGUID && !VehicleGone(vm, sim, interaction)) return;
             try
             {
                 bool placed = Place(vm, sim);
@@ -223,6 +225,58 @@ namespace FSO.SimAntics.Utils
                     + (placed ? "back on the lot" : "no room on the lot for them"));
             }
             catch (Exception e) { Console.WriteLine("[SimsRedux] away: couldn't bring " + sim.Name + " back: " + e.Message); }
+        }
+
+        /// <summary>
+        /// 21.9: a family Sim off the lot whose ride (the Magic Wagon, a tour bus, a carpool... - IsAwayObject) has been
+        /// deleted - nothing is left to put them back. Headless Test #16: Betty's "Caller Get In Wagon" deleted the Magic
+        /// Wagon (VMRemoveObjectInstance, line 67) while Bob was still in "Follower Get In Wagon"; Bob was left out of the
+        /// world and stayed nowhere for the rest of the day (until the house was loaded again - RepairStranded - which the
+        /// save check reported as "SAVE:object:32AA2056:Position"). Visitors are left as they are (the game's own scripts
+        /// and ReduxVisitors see them off). Lot state only.
+        /// </summary>
+        public static bool RideGone(VM vm, VMAvatar sim, VMQueuedAction ride)
+        {
+            if (vm == null || !vm.TS1 || sim == null || ride == null || !OffLot(sim)) return false;
+            var vehicle = ride.Callee;
+            if (vehicle == null || !vehicle.Dead || vehicle.Object?.OBJ == null || !IsAwayObject(vehicle)) return false;
+            var fam = vm.TS1State?.CurrentFamily;
+            if (fam == null || sim.GetPersonData(VMPersonDataVariable.TS1FamilyNumber) != fam.ChunkID) return false;
+            if (sim.GetPersonData(VMPersonDataVariable.PersonType) == 1) return false; // (a visitor)
+            return true;
+        }
+
+        /// <summary>
+        /// 21.9: VMThread resets a Sim whose running interaction's object is gone ("interaction owner is dead") - for a
+        /// ride that left them off the lot (RideGone, checked before the reset), the reset cleared the only script that
+        /// could have brought them back, so they're put back on the lot here, as a reset at work/school is (AfterReset).
+        /// </summary>
+        public static void AfterRideGone(VM vm, VMAvatar sim, VMQueuedAction ride)
+        {
+            if (vm == null || sim == null || sim.Dead || !OffLot(sim)) return; // (AfterReset may have done it already)
+            try { BringBack(vm, sim, "was left off the lot when \"" + (ride?.Name ?? "their ride") + "\" lost its vehicle"); }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] away: couldn't bring " + sim.Name + " back: " + e.Message); }
+        }
+
+        /// <summary>
+        /// 21.9: the ride ended (EndCurrentInteraction) off the lot with its vehicle gone (RideGone), and nothing else still
+        /// running for them is a ride (a vehicle that's still here brings them back itself).
+        /// </summary>
+        private static bool VehicleGone(VM vm, VMAvatar sim, VMQueuedAction interaction)
+        {
+            if (!RideGone(vm, sim, interaction)) return false;
+            var thread = sim.Thread;
+            if (thread?.Queue != null)
+            {
+                // (EndCurrentInteraction has taken the ended one out; what's left below the active block still runs)
+                int last = Math.Min(thread.ActiveQueueBlock - 1, thread.Queue.Count - 1);
+                for (int i = 0; i <= last; i++)
+                {
+                    var q = thread.Queue[i];
+                    if (q != null && q != interaction && q.Callee != null && !q.Callee.Dead && IsAwayObject(q.Callee)) return false;
+                }
+            }
+            return true;
         }
 
         /// <summary>

@@ -109,9 +109,20 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             return false;
         }
 
-        /// <summary>Another Sim's running script has this one as its object (or is running one of its interactions) right now.</summary>
+        /// <summary>
+        /// Another Sim's running script has this one as its object (or is running one of its interactions) right now - or
+        /// (21.9) is in a conversation with them. A Sims 1 social runs on a conversation object of its own ("Social - Child
+        /// 1.5", "Social Interactions"...: Person A runs "Tease Taunt - Person A" on it, Person B "... - Person B"), which
+        /// holds the two Sims' object ids in its attributes - so the other Sim's script never names this one directly, and
+        /// a visitor taken off mid-tease made the conversation object delete itself under the Sim still teasing (Headless
+        /// Test #16: "MISSINGSO ... Decision - Tease Taunt / route to Person B / Verify Person B exists" on Bob, right after
+        /// "Pete has stood at 31,21 for 6 minutes trying to leave - taken off the lot"). Now also busy: another Sim running
+        /// something on an object this one is running an interaction on too, or on a conversation object that names this one.
+        /// (Refused, the game that sent the removal tries again a minute later - the chat is over in seconds.)
+        /// </summary>
         private static bool InUseByOthers(VM vm, VMEntity ent)
         {
+            var shared = SharedObjects(ent);
             foreach (var o in vm.Context.ObjectQueries.Avatars)
             {
                 if (o == ent || o.Dead || o.Thread == null) continue;
@@ -121,8 +132,46 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
                     var f = st[i];
                     if (f == null) continue;
                     if (f.Callee == ent || f.StackObject == ent) return true;
+                    if (WithThem(f.Callee, ent, shared) || WithThem(f.StackObject, ent, shared)) return true;
                 }
             }
+            return false;
+        }
+
+        /// <summary>
+        /// 21.9: the objects (not Sims) this Sim is running an interaction on right now (the running block of its queue -
+        /// not what's only queued: a visitor's queued "Sit" on the sofa must never hold up their removal, or call off the
+        /// family's own use of it).
+        /// </summary>
+        private static HashSet<VMEntity> SharedObjects(VMEntity ent)
+        {
+            var set = new HashSet<VMEntity>();
+            var th = ent?.Thread;
+            var q = th?.Queue;
+            if (q == null) return set;
+            int last = Math.Min(th.ActiveQueueBlock, q.Count - 1);
+            for (int i = 0; i <= last; i++)
+            {
+                var a = q[i];
+                if (a == null) continue;
+                if (a.Callee != null && a.Callee != ent && !(a.Callee is VMAvatar) && !a.Callee.Dead) set.Add(a.Callee);
+                if (a.StackObject != null && a.StackObject != ent && !(a.StackObject is VMAvatar) && !a.StackObject.Dead) set.Add(a.StackObject);
+            }
+            return set;
+        }
+
+        /// <summary>
+        /// 21.9: obj (what another Sim's script is running on) ties that Sim to ent: ent has an interaction on it too, or it's
+        /// a Sims 1 conversation object (its semi-globals are the social ones) whose attributes name ent.
+        /// </summary>
+        private static bool WithThem(VMEntity obj, VMEntity ent, HashSet<VMEntity> shared)
+        {
+            if (obj == null || obj == ent || obj is VMAvatar || obj.Dead) return false;
+            if (shared.Contains(obj)) return true;
+            var file = obj.SemiGlobal?.MainIff?.Filename;
+            if (file == null || file.IndexOf("social", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            for (int i = 0; i < 16; i++)
+                if (obj.GetAttribute(i) == ent.ObjectID) return true;
             return false;
         }
 
@@ -587,10 +636,12 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
         /// <summary>21.2: the other Sims' interactions with this one (queued or running) are cancelled, in object order.</summary>
         private static void CancelOthers(VM vm, VMAvatar ava)
         {
+            var shared = SharedObjects(ava); // (21.9: and a conversation with them - see InUseByOthers)
             foreach (var o in vm.Context.ObjectQueries.Avatars.OrderBy(x => x.ObjectID).ToList())
             {
                 if (o == ava || o.Dead || o.Thread == null) continue;
-                foreach (var a in o.Thread.Queue.Where(x => x.Callee == ava || x.StackObject == ava).ToList())
+                foreach (var a in o.Thread.Queue.Where(x => x.Callee == ava || x.StackObject == ava
+                    || WithThem(x.Callee, ava, shared) || WithThem(x.StackObject, ava, shared)).ToList())
                     o.Thread.CancelAction(a.UID);
             }
         }

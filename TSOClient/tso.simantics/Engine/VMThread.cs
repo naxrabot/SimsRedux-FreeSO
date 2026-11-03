@@ -501,7 +501,12 @@ namespace FSO.SimAntics.Engine
                     }
                     else //interaction owner is dead, rip
                     {
+                        // SimsRedux 21.9: a Sim left off the lot by a ride whose vehicle was deleted comes back onto the lot
+                        // (the reset clears the only script that could have brought them back - ReduxAway.RideGone)
+                        var ride = (Entity is VMAvatar && Queue.Count > 0
+                            && FSO.SimAntics.Utils.ReduxAway.RideGone(Context.VM, (VMAvatar)Entity, Queue[0])) ? Queue[0] : null;
                         Entity.Reset(Context);
+                        if (ride != null) FSO.SimAntics.Utils.ReduxAway.AfterRideGone(Context.VM, (VMAvatar)Entity, ride);
                     }
                 }
 

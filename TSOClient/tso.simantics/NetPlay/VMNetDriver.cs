@@ -28,6 +28,8 @@ namespace FSO.SimAntics.NetPlay
         public static System.Action<VMNetDriver, VM, uint, ulong, ulong> ReduxOnDesync;
         /// <summary>A tick ran (driver, lot, tick id, how long it took in Stopwatch ticks).</summary>
         public static System.Action<VMNetDriver, VM, uint, long> ReduxOnTicked;
+        /// <summary>SimsRedux 21.9 (soak test): a tick is about to run (lot) - only while ReduxOnTicked is set. It only looks.</summary>
+        public static System.Action<VM> ReduxOnTickStart;
 
         public IVMTSOGlobalLink GlobalLink;
         public abstract void SendCommand(VMNetCommandBodyAbstract cmd);
@@ -132,6 +134,8 @@ namespace FSO.SimAntics.NetPlay
                 if (onTicked == null) vm.InternalTick(tick.TickID);
                 else
                 {
+                    var onStart = ReduxOnTickStart;
+                    if (onStart != null) { try { onStart(vm); } catch { } }
                     long started = System.Diagnostics.Stopwatch.GetTimestamp();
                     vm.InternalTick(tick.TickID);
                     try { onTicked(this, vm, tick.TickID, System.Diagnostics.Stopwatch.GetTimestamp() - started); } catch { }
