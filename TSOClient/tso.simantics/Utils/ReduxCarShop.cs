@@ -16,8 +16,8 @@ namespace FSO.SimAntics.Utils
     /// SimsRedux car pack round 3: cars a family can buy and drive. 21.1: bought like any Buy mode item (Miscellaneous > Cars
     /// - Simitone's ReduxCars lists them; placed with the object holder anywhere outdoors where there's room: SpotError,
     /// PlaceOwned through VMNetReduxCarCmd Place; moved with Buy mode's move, MoveOwned; sold like any object). 21.0's
-    /// Showroom window and parking by the street on buying are gone. 21.6: a car parked for a trip (and a visiting player's
-    /// car) parks in the street at the kerb (ParkAtKerb), never on the lot's lawn.
+    /// Showroom window and parking by the street on buying are gone. 21.7: a car never stays on a lot it drove to - it drops
+    /// the family off at the kerb and drives on (DropOff), and "Drive Home" brings it back up to the kerb (Pickup).
     ///
     /// WHAT A BOUGHT CAR IS ON THE LOT
     /// The game's own standard car (CarStd, "Car - Standard Carpool", GUID CarGUID - in every player's Sims files), parked:
@@ -31,7 +31,7 @@ namespace FSO.SimAntics.Utils
     /// A game without the car pack draws it as the Sims car; one with the pack as that NFSU2 car (ReduxCarSkins.Swap - drawing
     /// only). Nothing on the lot ever depends on the pack, and the save format is unchanged (attributes only).
     /// A car parked for a trip (VisitMarker, 97) is the same, on the lot the family drove to - it isn't theirs to sell there.
-    /// 21.6: a visiting player's car (VisitMarker, family 0) has attribute 22 (TagAttribute) set to GuestTag of their Sim.
+    /// 21.7: a car that pulled up to pick a Sim up (VisitMarker) has attribute 22 (TagAttribute) set to PickupTag of that Sim.
     ///
     /// PRICES live in the pack's manifest (carpack.json: each car's versions with their price and parts' prices - what the
     /// panel's Car Customizer will edit in round 4) and, for a game without the pack, in the table below (the same numbers
@@ -397,7 +397,7 @@ namespace FSO.SimAntics.Utils
             return bx1 >= 0;
         }
 
-        // ================================================================ 21.6: parking at the kerb (a trip's car, a visiting player's car)
+        // ================================================================ 21.7: dropped off, picked up at the kerb (no car left on the street)
 
         /// <summary>The mailboxes (Sims 1's two) - one stands by the street at the front of every lot.</summary>
         private static readonly uint[] MailboxGUIDs = { 0xEF121974, 0x1D95C9B0 };
@@ -406,6 +406,16 @@ namespace FSO.SimAntics.Utils
 
         /// <summary>The number a visiting player's car is marked with (TagAttribute): from their Sim's id, never 0.</summary>
         public static short GuestTag(uint persistID) { return (short)(1 + (int)(persistID % 30000u)); }
+
+        /// <summary>
+        /// 21.7: the number a car picking this Sim up is marked with (TagAttribute once it has pulled up): a visiting player's
+        /// Sim - GuestTag (1..30000); the lot's own Sims - 30001.. from their object id. Never 0, the same on every game.
+        /// </summary>
+        public static short PickupTag(VMAvatar sim)
+        {
+            if (sim == null) return 0;
+            return sim.PersistID >= FirstGuestID ? GuestTag(sim.PersistID) : (short)(30001 + (sim.ObjectID & 0x7FF));
+        }
 
         /// <summary>The lot's mailbox (the lowest object id, so every game picks the same one), or null.</summary>
         private static VMEntity Mailbox(VM vm)
@@ -421,99 +431,87 @@ namespace FSO.SimAntics.Utils
         }
 
         /// <summary>
-        /// 21.6: a car parked for a trip (VisitMarker) - in the street, at the kerb in front of the lot: in the lane on the
-        /// lot's side of the front street (the one nearest the mailbox), lying along it and facing the way that lane drives,
-        /// as near the middle of the lot's front as there's room - but not right by the mailbox, where the carpool and the
-        /// taxi stop, unless there's nowhere else. Never on the lot's own ground (Joey: the car was parked on the lawn). No
-        /// street, or no room along it: null (the car isn't shown - never put on the grass instead). tag: TagAttribute (a
-        /// visiting player's car - GuestTag; 0 for the family's own trip). Only the lot's own state, a fixed search order:
-        /// the same on every game.
+        /// 21.7: the lot's front, by the street: its mailbox (it stands by the street), else the middle of the lot's own ground.
+        /// False: neither.
         /// </summary>
-        public static VMMultitileGroup ParkAtKerb(VM vm, short skin, short family, short tag)
+        public static bool FrontAnchor(VM vm, out int x, out int y)
         {
-            var ctx = vm?.Context;
-            var arch = ctx?.Architecture;
-            if (arch == null) return null;
-            int bx0, by0, bx1, by1;
-            if (!BuildArea(vm, out bx0, out by0, out bx1, out by1)) return null;
-            int cx2 = bx0 + bx1 + 1, cy2 = by0 + by1 + 1; // (twice the lot's middle)
+            x = y = 0;
             var mailbox = Mailbox(vm);
-            int ax = mailbox != null ? mailbox.Position.TileX : cx2 / 2, ay = mailbox != null ? mailbox.Position.TileY : cy2 / 2;
-            bool alongX; int lane, start, end; Direction dir;
-            if (!ReduxTraffic.KerbLane(arch, ax, ay, out alongX, out lane, out start, out end, out dir)) return null;
-            int mailAlong = mailbox != null ? (alongX ? ax : ay) : int.MinValue;
-
-            var group = Make(vm, dir, skin, family, VisitMarker);
-            if (group == null) return null;
-            int minX, minY, maxX, maxY;
-            if (!Extent(group, dir, out minX, out minY, out maxX, out maxY)) { group.Delete(ctx); return null; }
-            int tilesX = (maxX - minX) / 16 + 1, tilesY = (maxY - minY) / 16 + 1;
-            int len = alongX ? tilesX : tilesY, wid = alongX ? tilesY : tilesX;
-            if (len < wid) { group.Delete(ctx); return null; } // (it wouldn't lie along the street)
-            int across0 = lane - (wid - 1) / 2; // (its middle on the lane's middle, as the passing cars drive)
-            int want2 = alongX ? cx2 : cy2;
-            var avatars = new List<Point>();
-            foreach (var a in ctx.ObjectQueries.Avatars)
-                if (a != null && !a.Dead && a.Position != LotTilePos.OUT_OF_WORLD && a.Position.Level == 1) avatars.Add(new Point(a.Position.TileX, a.Position.TileY));
-
-            int found = int.MinValue;
-            long best = long.MaxValue;
-            for (int pass = 0; pass < 2 && found == int.MinValue; pass++)
-                for (int a0 = start + 2; a0 + len - 1 <= end - 2; a0++)
-                {
-                    // (first try: clear of the carpool's and taxi's stop by the mailbox)
-                    if (pass == 0 && mailAlong != int.MinValue && a0 <= mailAlong + 4 && a0 + len - 1 >= mailAlong - 4) continue;
-                    long score = Math.Abs((2 * a0 + len) - want2);
-                    if (score >= best) continue;
-                    int x0 = alongX ? a0 : across0, y0 = alongX ? across0 : a0;
-                    if (!KerbFree(vm, x0, y0, alongX ? len : wid, alongX ? wid : len, avatars)) continue;
-                    best = score; found = a0;
-                }
-            if (found == int.MinValue) { group.Delete(ctx); return null; }
-            int px = alongX ? found : across0, py = alongX ? across0 : found;
-            var pos = new LotTilePos((short)(px * 16 + 8 - minX), (short)(py * 16 + 8 - minY), 1);
-            if (PutGroup(vm, group, pos, dir) != VMPlacementError.Success) { group.Delete(ctx); return null; }
-            if (tag != 0) group.BaseObject.SetAttribute(TagAttribute, tag);
-            Finish(group, VisitMarker, 0);
-            return group;
-        }
-
-        /// <summary>
-        /// 21.6: is every tile of this rectangle street a car can stand on - road (not the sidewalk, never the lot's ground),
-        /// no walls, nothing standing there (a passing car is fine: it drives on), no Sim? Read only.
-        /// </summary>
-        private static bool KerbFree(VM vm, int x0, int y0, int cw, int ch, List<Point> avatars)
-        {
-            var ctx = vm.Context;
-            var arch = ctx.Architecture;
-            for (int y = y0; y < y0 + ch; y++)
-                for (int x = x0; x < x0 + cw; x++)
-                {
-                    if (x < 1 || y < 1 || x >= arch.Width - 1 || y >= arch.Height - 1) return false;
-                    var floor = arch.GetFloor((short)x, (short)y, 1).Pattern;
-                    if (floor != 9 && floor != 10 && floor != 11) return false; // (road only)
-                    if (arch.GetWall((short)x, (short)y, 1).Segments != 0) return false;
-                    var objs = ctx.ObjectQueries.GetObjectsAt(LotTilePos.FromBigTile((short)x, (short)y, 1));
-                    if (objs != null)
-                        foreach (var o in objs)
-                            if (o != null && !o.Dead && !o.GhostImage && o.GetAttribute(0) != ReduxTraffic.Marker) return false;
-                    foreach (var a in avatars) if (a.X == x && a.Y == y) return false;
-                }
+            if (mailbox != null) { x = mailbox.Position.TileX; y = mailbox.Position.TileY; return true; }
+            int bx0, by0, bx1, by1;
+            if (!BuildArea(vm, out bx0, out by0, out bx1, out by1)) return false;
+            x = (bx0 + bx1) / 2; y = (by0 + by1) / 2;
             return true;
         }
 
-        /// <summary>21.6: the car a visiting player parked here (GuestTag), or null.</summary>
-        public static VMEntity GuestCar(VM vm, short tag)
+        /// <summary>
+        /// 21.7 (Joey: "lets not have the car stay on the street ... cause it causes traffic"): the family's car drops them off
+        /// at the kerb in front of the lot and drives on - a passing car with its look, in the lane on the lot's side, level
+        /// with the front of the lot (ReduxTraffic.DropOff). Nothing is left parked. False: no street.
+        /// </summary>
+        public static bool DropOff(VM vm, short skin)
         {
-            if (tag <= 0) return null;
+            int x, y;
+            if (vm?.Context?.Architecture == null || skin <= 0 || !FrontAnchor(vm, out x, out y)) return false;
+            return ReduxTraffic.DropOff(vm, x, y, skin);
+        }
+
+        /// <summary>
+        /// 21.7 "Drive Home": the Sim walks (never runs) to the sidewalk at the kerb in front of the lot (by the mailbox - where
+        /// the carpool and the taxi stop): the nearest free spot there for Sims 1's own Go Here. False: no street, or no spot.
+        /// </summary>
+        public static bool WalkToKerb(VM vm, VMAvatar sim)
+        {
+            var arch = vm?.Context?.Architecture;
+            if (arch == null || sim == null || sim.Position == LotTilePos.OUT_OF_WORLD) return false;
+            int ax, ay;
+            if (!FrontAnchor(vm, out ax, out ay)) return false;
+            bool alongX; int lane, start, end; Direction dir;
+            if (!ReduxTraffic.KerbLane(arch, ax, ay, out alongX, out lane, out start, out end, out dir)) return false;
+            int across = alongX ? ay : ax, along = alongX ? ax : ay;
+            int side = across >= lane ? 1 : -1; // (the lot's side of the lane)
+            var spots = new List<Point>();
+            for (int d = 0; d <= 6; d++)
+                foreach (var off in d == 0 ? new[] { 0 } : new[] { d, -d })
+                {
+                    int al = Math.Max(start + 2, Math.Min(end - 2, along + off));
+                    foreach (var k in new[] { 2, 3 }) // (the first tiles past the road's edge: the sidewalk by the kerb)
+                    {
+                        int ac = lane + side * k;
+                        var p = alongX ? new Point(al, ac) : new Point(ac, al);
+                        if (!spots.Contains(p)) spots.Add(p);
+                    }
+                }
+            return GoHere(vm, sim, spots);
+        }
+
+        /// <summary>
+        /// 21.7 "Drive Home": the family's car (skin) drives up the lane on this Sim's side of the street and stops level with
+        /// them (ReduxTraffic.DriveUp - then it's a car parked for the pick-up, VisitMarker, tag PickupTag(sim)). One at a
+        /// time per Sim (true if theirs is already here or on its way). False: no street, or the Sim isn't by it.
+        /// </summary>
+        public static bool Pickup(VM vm, VMAvatar sim, short skin, short family)
+        {
+            if (vm?.Context?.Architecture == null || sim == null || sim.Dead || sim.Position == LotTilePos.OUT_OF_WORLD || skin <= 0) return false;
+            var tag = PickupTag(sim);
+            if (PickupCar(vm, tag) != null || ReduxTraffic.DrivingUp(vm, tag)) return true;
+            return ReduxTraffic.DriveUp(vm, sim.Position.TileX, sim.Position.TileY, skin, family, tag);
+        }
+
+        /// <summary>21.7: the car that pulled up for this pick-up (PickupTag), or null.</summary>
+        public static VMEntity PickupCar(VM vm, short tag)
+        {
+            if (tag <= 0 || vm == null) return null;
             foreach (var e in vm.Entities)
                 if (e != null && !e.Dead && !e.GhostImage && e.MultitileGroup?.BaseObject == e && IsVisitCar(e) && e.GetAttribute(TagAttribute) == tag) return e;
             return null;
         }
 
         /// <summary>
-        /// 21.6 (ReduxTraffic, once a game minute - the same tick on every game): a visiting player's car whose Sim has left
-        /// the lot drives off (a passing car with its look pulls out) and is gone. True: something changed.
+        /// (ReduxTraffic, once a game minute - the same tick on every game): a car that pulled up for a Sim who isn't on the
+        /// lot any more (a visiting player who went home, or a 21.6 visitor's parked car) drives off and is gone. True:
+        /// something changed.
         /// </summary>
         public static bool TidyGuestCars(VM vm, List<VMEntity> parked)
         {
@@ -528,7 +526,7 @@ namespace FSO.SimAntics.Utils
                 foreach (var a in vm.Context.ObjectQueries.Avatars)
                 {
                     var ava = a as VMAvatar;
-                    if (ava != null && !ava.Dead && ava.PersistID >= FirstGuestID && GuestTag(ava.PersistID) == tag) { here = true; break; }
+                    if (ava != null && !ava.Dead && ava.Position != LotTilePos.OUT_OF_WORLD && PickupTag(ava) == tag) { here = true; break; }
                 }
                 if (here) continue;
                 try { ReduxTraffic.DriveAway(vm, e, e.GetAttribute(ReduxCarSkins.SkinAttribute), 0); } catch { }
@@ -536,6 +534,19 @@ namespace FSO.SimAntics.Utils
                 changed = true;
             }
             return changed;
+        }
+
+        /// <summary>
+        /// 21.7: a passing car pulled up where it should stop (ReduxTraffic.Drive): it's a car parked for the pick-up now
+        /// (VisitMarker on every tile - it never moves again by itself), its family and tag on it.
+        /// </summary>
+        public static void PulledUp(VMMultitileGroup group, short family, short tag)
+        {
+            if (group?.BaseObject == null) return;
+            foreach (var o in group.Objects) o.SetAttribute(0, VisitMarker);
+            var b = group.BaseObject;
+            b.SetAttribute(FamilyAttribute, family);
+            b.SetAttribute(TagAttribute, tag);
         }
 
         // ================================================================ 21.6: walking (not running) to the car
@@ -762,7 +773,6 @@ namespace FSO.SimAntics.Utils
         /// </summary>
         public static bool WalkTo(VM vm, VMAvatar sim, VMEntity car)
         {
-            var ctx = vm.Context;
             var tiles = TilesOf(car);
             if (tiles.Count == 0 || sim == null || sim.Position == LotTilePos.OUT_OF_WORLD) return false;
             var around = new List<Point>();
@@ -779,13 +789,23 @@ namespace FSO.SimAntics.Utils
                 if (da != db) return da.CompareTo(db);
                 return a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X.CompareTo(b.X);
             });
+            return GoHere(vm, sim, around);
+        }
+
+        /// <summary>
+        /// Sims 1's own Go Here (the pie menu's) to the first of these tiles it can be put on, the Sim walking (WalkMark - 21.6).
+        /// False: none of them, or no Go Here object.
+        /// </summary>
+        private static bool GoHere(VM vm, VMAvatar sim, List<Point> spots)
+        {
+            var ctx = vm.Context;
             VMMultitileGroup group = null;
             try { group = ctx.CreateObjectInstance(ReduxSidewalk.GotoGUID, LotTilePos.OUT_OF_WORLD, Direction.NORTH); } catch { group = null; }
             var go = (group != null && group.Objects.Count > 0) ? group.Objects[0] : null;
             if (go == null) return false;
             int goHere = ReduxSidewalk.GotoInteraction(go);
             bool placed = false;
-            foreach (var p in around)
+            foreach (var p in spots)
             {
                 var pos = LotTilePos.FromBigTile((short)p.X, (short)p.Y, 1);
                 if (ctx.IsOutOfBounds(pos)) continue;

@@ -399,7 +399,20 @@ namespace FSO.SimAntics.Utils
         public static bool KerbLane(VMArchitecture arch, int x, int y, out bool alongX, out int lane, out int start, out int end, out Direction dir)
         {
             alongX = true; lane = start = end = 0; dir = Direction.EAST;
-            if (arch == null) return false;
+            var road = NearestRoadTo(arch, x, y);
+            if (road == null) return false;
+            bool forward = SideForward(road, x, y);
+            alongX = road.AlongX;
+            lane = LaneOf(road, forward);
+            start = road.Start; end = road.End;
+            dir = DirFor(road.AlongX, forward);
+            return true;
+        }
+
+        /// <summary>The street nearest a tile (null: no street on this lot).</summary>
+        private static Road NearestRoadTo(VMArchitecture arch, int x, int y)
+        {
+            if (arch == null) return null;
             Road road = null;
             int best = int.MaxValue;
             foreach (var r in Roads(arch))
@@ -407,17 +420,86 @@ namespace FSO.SimAntics.Utils
                 int d = Math.Abs((r.AlongX ? y : x) - r.Middle);
                 if (d < best) { best = d; road = r; }
             }
+            return road;
+        }
+
+        /// <summary>Which way the lane on this tile's side of the street drives (right-hand traffic, as Spawn: heading +x the
+        /// lane is on the +y side, heading +y it's on the -x side).</summary>
+        private static bool SideForward(Road road, int x, int y) { return road.AlongX ? y >= road.Middle : x < road.Middle; }
+        private static int LaneOf(Road road, bool forward)
+        {
+            return road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
+        }
+
+        /// <summary>21.7: base attribute of a car driving up for a pick-up: where it stops (its base's 1/16-tile position along the street, + 1).</summary>
+        public const int StopAttribute = 23;
+        /// <summary>21.7: base attribute of a car driving up for a pick-up: the Sim's PickupTag (TagAttribute once it has stopped).</summary>
+        public const int PickupAttribute = 24;
+
+        /// <summary>
+        /// 21.7: the family's car drops them off - a passing car with its look (skin) in the lane on this spot's side of the
+        /// street, level with it (the lot's front), driving on and off the lot like any other. Nothing stays parked. False: no
+        /// street. Called by VMNetReduxCarCmd only (Park / Guest).
+        /// </summary>
+        public static bool DropOff(VM vm, int x, int y, short skin)
+        {
+            var road = NearestRoadTo(vm?.Context?.Architecture, x, y);
             if (road == null) return false;
-            // (right-hand traffic, as Spawn: heading +x the lane is on the +y side, heading +y it's on the -x side)
-            bool forward = road.AlongX ? y >= road.Middle : x < road.Middle;
-            alongX = road.AlongX;
-            lane = road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
-            start = road.Start; end = road.End;
-            dir = DirFor(road.AlongX, forward);
+            bool forward = SideForward(road, x, y);
+            int along = (road.AlongX ? x : y) + (forward ? -3 : 3); // (its middle level with the spot)
+            bool ok = Spawn(vm, road, forward, ReduxCarShop.CarGUID, skin, along, 0);
+            LotCars st;
+            if (ok && Seen.TryGetValue(vm, out st)) st.Traffic = null; // (picked up on the next tick)
+            return ok;
+        }
+
+        /// <summary>
+        /// 21.7 "Drive Home": the family's car (skin) drives up the lane on the Sim's side of the street (the Sim stands on the
+        /// sidewalk at x, y) from about 12 tiles back and stops with its middle level with them (Drive: StopAttribute), then
+        /// it's a parked car marked with tag (ReduxCarShop.PulledUp). False: no street, or the Sim isn't by it. Called by
+        /// VMNetReduxCarCmd only.
+        /// </summary>
+        public static bool DriveUp(VM vm, int x, int y, short skin, short family, short tag)
+        {
+            var road = NearestRoadTo(vm?.Context?.Architecture, x, y);
+            if (road == null || tag <= 0) return false;
+            bool forward = SideForward(road, x, y);
+            int lane = LaneOf(road, forward);
+            if (Math.Abs((road.AlongX ? y : x) - lane) > 5) return false; // (not standing by the street)
+            int lo = road.Start + 8, hi = road.End - 8;
+            if (hi < lo) return false;
+            int centre = Math.Max(lo, Math.Min(hi, road.AlongX ? x : y));
+            int baseTarget = centre + (forward ? -3 : 3);
+            int start = Math.Max(road.Start + 7, Math.Min(road.End - 7, baseTarget + (forward ? -12 : 12)));
+            start = forward ? Math.Min(start, baseTarget) : Math.Max(start, baseTarget);
+            var group = SpawnGroup(vm, road, forward, ReduxCarShop.CarGUID, skin, start, 0);
+            if (group?.BaseObject == null) return false;
+            var b = group.BaseObject;
+            b.SetAttribute(ReduxCarShop.FamilyAttribute, family);
+            if (start == baseTarget) ReduxCarShop.PulledUp(group, family, tag); // (no room to drive up: it's just there)
+            else
+            {
+                b.SetAttribute(PickupAttribute, tag);
+                b.SetAttribute(StopAttribute, (short)(baseTarget * 16 + 8 + 1));
+            }
+            LotCars st;
+            if (Seen.TryGetValue(vm, out st)) st.Traffic = null; // (picked up on the next tick)
             return true;
         }
 
-        /// <summary>21.6: is a car parked at the kerb in this lane of this street (no new passing car comes down it)?</summary>
+        /// <summary>21.7: is a car on its way up for this pick-up (DriveUp, not stopped yet)?</summary>
+        public static bool DrivingUp(VM vm, short tag)
+        {
+            if (vm == null || tag <= 0) return false;
+            foreach (var e in vm.Entities)
+                if (e != null && !e.Dead && e.MultitileGroup?.BaseObject == e && e.GetAttribute(0) == Marker && e.GetAttribute(PickupAttribute) == tag) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// 21.6: is a car parked at the kerb in this lane of this street (no new passing car comes down it)? (21.7: only ever
+        /// for the moment a car has pulled up to pick a Sim up - no car stays parked in the street any more.)
+        /// </summary>
         private static bool KerbTaken(List<VMEntity> parked, Road road, bool forward)
         {
             if (parked == null || parked.Count == 0) return false;
@@ -481,6 +563,12 @@ namespace FSO.SimAntics.Utils
 
         private static bool Spawn(VM vm, Road road, bool forward, uint guid, short skin = 0, int alongAt = int.MinValue, short tag = 0)
         {
+            return SpawnGroup(vm, road, forward, guid, skin, alongAt, tag) != null;
+        }
+
+        /// <summary>Spawn, giving the car made (null: none).</summary>
+        private static VMMultitileGroup SpawnGroup(VM vm, Road road, bool forward, uint guid, short skin, int alongAt, short tag)
+        {
             var ctx = vm.Context;
             // right-hand traffic: heading +x the lane is on the +y side, heading +y it's on the -x side
             int lane = road.AlongX ? (forward ? road.Middle + 2 : road.Middle - 2) : (forward ? road.Middle - 2 : road.Middle + 2);
@@ -488,7 +576,7 @@ namespace FSO.SimAntics.Utils
             int along = forward ? road.Start + 7 : road.End - 7;
             if (alongAt != int.MinValue) along = Math.Max(road.Start + 1, Math.Min(road.End - 1, alongAt)); // (round 3: a parked car pulling out)
             var group = ctx.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, dir);
-            if (group == null) return false;
+            if (group == null) return null;
             foreach (var o in group.Objects) o.SetAttribute(0, Marker); // (not a carpool: its main just waits)
             if (tag != 0 && group.BaseObject != null) group.BaseObject.SetAttribute(ReduxCarShop.TagAttribute, tag);
             // 20.x: its NFSU2 car (picked without looking at the pack, so every game keeps the same lot), then its pictures
@@ -503,15 +591,15 @@ namespace FSO.SimAntics.Utils
             // put it there, then line its middle up with the lane
             var pos = road.AlongX ? LotTilePos.FromBigTile((short)along, (short)lane, 1) : LotTilePos.FromBigTile((short)lane, (short)along, 1);
             pos = new LotTilePos((short)(pos.x + 8), (short)(pos.y + 8), 1);
-            if (Move(group, pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return false; }
+            if (Move(group, pos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return null; }
             int cx = 0, cy = 0, n = 0;
             foreach (var o in group.Objects) { if (o.Position == LotTilePos.OUT_OF_WORLD) continue; cx += o.Position.x; cy += o.Position.y; n++; }
-            if (n == 0) { group.Delete(ctx); return false; }
+            if (n == 0) { group.Delete(ctx); return null; }
             cx /= n; cy /= n;
             int want = lane * 16 + 8;
             var fixedPos = road.AlongX ? new LotTilePos(pos.x, (short)(pos.y + (want - cy)), 1) : new LotTilePos((short)(pos.x + (want - cx)), pos.y, 1);
-            if (Move(group, fixedPos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return false; }
-            return true;
+            if (Move(group, fixedPos, dir, ctx, VMPlaceRequestFlags.AllowIntersection).Status != VMPlacementError.Success) { group.Delete(ctx); return null; }
+            return group;
         }
 
         private static void Drive(VM vm, VMMultitileGroup group)
@@ -520,6 +608,7 @@ namespace FSO.SimAntics.Utils
             var b = group.BaseObject;
             var pos = b.Position;
             if (pos == LotTilePos.OUT_OF_WORLD) { group.Delete(ctx); return; }
+            if (b.GetAttribute(0) != Marker) return; // (21.7: it pulled up - a parked car now, until the next look round)
             var dir = b.Direction;
             var travel = dir;
             if (FrontFlipped) travel = (Direction)(((int)dir << 4 | (int)dir >> 4) & 0xFF);
@@ -531,6 +620,20 @@ namespace FSO.SimAntics.Utils
                 case Direction.SOUTH: dy = Speed; break;
                 case Direction.NORTH: dy = -Speed; break;
                 default: group.Delete(ctx); return;
+            }
+            // 21.7 "Drive Home": a car driving up to pick a Sim up stops level with them (DriveUp)
+            var stop = b.GetAttribute(StopAttribute);
+            if (stop > 0)
+            {
+                int at = dx != 0 ? pos.x : pos.y, target = stop - 1;
+                if ((dx + dy > 0) ? at >= target : at <= target)
+                {
+                    var tag = b.GetAttribute(PickupAttribute);
+                    b.SetAttribute(StopAttribute, 0);
+                    b.SetAttribute(PickupAttribute, 0);
+                    ReduxCarShop.PulledUp(group, b.GetAttribute(ReduxCarShop.FamilyAttribute), tag);
+                    return;
+                }
             }
             var next = new LotTilePos((short)(pos.x + dx), (short)(pos.y + dy), pos.Level);
             var arch = ctx.Architecture;

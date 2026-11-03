@@ -518,6 +518,36 @@ namespace FSO.SimAntics.Utils
             return x >= 0 && y >= 0 && x < arch.Width && y < arch.Height && t[y * arch.Width + x];
         }
 
+        /// <summary>
+        /// 21.7: tile x,y is off the street Sims' path but beside a path tile (within two) whose middle a thing stands on - a
+        /// step round it (Detours) - and not road or water. For the soak test's off-sidewalk check (the router's own test also
+        /// runs each object's "may walk through" tree; this one goes by the flags only). Never used inside the lot's simulation.
+        /// </summary>
+        public static bool IsDetourTile(VMContext ctx, int x, int y)
+        {
+            var tiles = RouteTiles(ctx);
+            if (tiles == null || !IsWalkTile(ctx, x, y) || OnRouteTile(ctx, x, y) || ctx.VM == null) return false;
+            var arch = ctx.Architecture;
+            int w = arch.Width, h = arch.Height;
+            foreach (var obj in ctx.VM.Entities)
+            {
+                if (!(obj is VMGameObject) || obj.Dead || obj.Footprint == null || obj.Position.Level != 1) continue;
+                if (obj.Position == LotTilePos.OUT_OF_WORLD || obj.Object?.OBJ?.GUID == GotoGUID) continue;
+                var flags = (VMEntityFlags)obj.GetValue(VMStackObjectVariable.Flags);
+                if ((flags & VMEntityFlags.DisallowPersonIntersection) == 0 && (flags & VMEntityFlags.AllowPersonIntersection) != 0) continue;
+                var ft = obj.Footprint;
+                var o = new VMObstacle(ft.x1 - 3, ft.y1 - 3, ft.x2 + 3, ft.y2 + 3);
+                for (int dy = -2; dy <= 2; dy++)
+                    for (int dx = -2; dx <= 2; dx++)
+                    {
+                        int px = x + dx, py = y + dy;
+                        if (px < 0 || py < 0 || px >= w || py >= h || !tiles[py * w + px]) continue;
+                        if (CoversMiddle(o, px, py)) return true;
+                    }
+            }
+            return false;
+        }
+
         /// <summary>20.1: a tile a street Sim may stand on along sidewalk wk: a walk tile, and on a sidewalk-floor line (Paved) a
         /// sidewalk tile - never the grass strip by the kerb (the same on every game).</summary>
         public static bool IsStopTile(VMContext ctx, Walk wk, int x, int y)
@@ -633,8 +663,12 @@ namespace FSO.SimAntics.Utils
         /// the road itself where the sidewalk meets the kerb), and (2) a Sim whose step started off the sidewalk routed with no
         /// limit at all - across the grass and the road. Now a Sim off the sidewalk (only ever by being put there) may only
         /// step back onto it from where it stands: its own tile and the walk tiles right round it (never road or water).
+        /// 21.7 (Joey's video: walkers stopping at the mailbox and taken off): things: what the router found in the way (each
+        /// object's footprint, as it adds them). Where one stands on the sidewalk - a mailbox, a bin, a street light, a tree,
+        /// a newspaper, a Sim of the family - the tiles beside it are let through too (Detours), so they step round it, never
+        /// onto the road; the end of the step is still on the sidewalk.
         /// </summary>
-        public static bool LimitRoute(VMContext ctx, LotTilePos start, LotTilePos end, bool goHere, VMObstacleSet obstacles)
+        public static bool LimitRoute(VMContext ctx, LotTilePos start, LotTilePos end, bool goHere, VMObstacleSet obstacles, List<VMObstacle> things = null)
         {
             if (start.Level != 1 || end.Level != 1) return true;
             var tiles = RouteTiles(ctx);
@@ -653,8 +687,9 @@ namespace FSO.SimAntics.Utils
                     for (int dx = -1; dx <= 1; dx++)
                         if (IsWalkTile(ctx, sx + dx, sy + dy)) back.Add((sy + dy) * w + sx + dx);
             }
+            var detour = Detours(ctx, tiles, w, h, things);
             List<VMObstacle> rects;
-            if (tiles[si])
+            if (tiles[si] && detour.Count == 0)
             {
                 // (21.6: on the sidewalk - the tiles not to be walked on are the same for every step on this lot: worked out
                 //  once and kept, the same rectangles in the same order as before, so every path is as it was)
@@ -662,9 +697,51 @@ namespace FSO.SimAntics.Utils
                 if (f.Rects == null) f.Rects = NoGoRects(w, h, i => tiles[i]);
                 rects = f.Rects;
             }
-            else rects = NoGoRects(w, h, i => tiles[i] || i == si || back.Contains(i));
+            else rects = NoGoRects(w, h, i => tiles[i] || i == si || back.Contains(i) || detour.Contains(i));
             foreach (var o in rects) obstacles.Add(new VMObstacle(o.x1, o.y1, o.x2, o.y2));
             return true;
+        }
+
+        /// <summary>21.7: a thing (its footprint as the router has it, 3 units round) covers the middle of tile x,y - a Sim can't
+        /// walk along through that tile.</summary>
+        private static bool CoversMiddle(VMObstacle o, int x, int y)
+        {
+            int cx0 = x * 16 + 5, cy0 = y * 16 + 5, cx1 = x * 16 + 11, cy1 = y * 16 + 11;
+            return !(o.x1 > cx1 || o.x2 < cx0 || o.y1 > cy1 || o.y2 < cy0);
+        }
+
+        /// <summary>
+        /// 21.7: the way round each thing standing on the street Sims' path (tiles: RouteTiles): for every path tile whose
+        /// middle a thing covers, the tiles beside the path there - up to two either side (a mailbox is two tiles: one on the
+        /// sidewalk, one beside it), from two before it to two after it, so they can step out and back in - that can be walked
+        /// on (never road, a driveway, water or a pool; a fence still stops them, as the router has it). The router takes the
+        /// shortest way, so they only leave the sidewalk right by the thing. Empty: nothing on the path. From the lot and what
+        /// the router found only.
+        /// </summary>
+        public static HashSet<int> Detours(VMContext ctx, bool[] tiles, int w, int h, List<VMObstacle> things)
+        {
+            var res = new HashSet<int>();
+            if (things == null || tiles == null) return res;
+            Func<int, int, bool> path = (x, y) => x >= 0 && y >= 0 && x < w && y < h && tiles[y * w + x];
+            foreach (var o in things)
+            {
+                int tx0 = Math.Max(0, o.x1 >> 4), ty0 = Math.Max(0, o.y1 >> 4), tx1 = Math.Min(w - 1, o.x2 >> 4), ty1 = Math.Min(h - 1, o.y2 >> 4);
+                for (int y = ty0; y <= ty1; y++)
+                    for (int x = tx0; x <= tx1; x++)
+                    {
+                        if (!path(x, y) || !CoversMiddle(o, x, y)) continue;
+                        bool alongX = path(x - 1, y) || path(x + 1, y), alongY = path(x, y - 1) || path(x, y + 1);
+                        if (!alongX && !alongY) alongX = alongY = true;
+                        for (int k = -2; k <= 2; k++)
+                            for (int side = -2; side <= 2; side++)
+                            {
+                                if (side == 0) continue;
+                                if (alongX && IsWalkTile(ctx, x + k, y + side) && !path(x + k, y + side)) res.Add((y + side) * w + x + k);
+                                if (alongY && IsWalkTile(ctx, x + side, y + k) && !path(x + side, y + k)) res.Add((y + k) * w + x + side);
+                            }
+                    }
+            }
+            return res;
         }
 
         /// <summary>20.2: the tiles not to be walked on (walkable false), as rectangles: row by row, a row's runs joined with
@@ -703,59 +780,88 @@ namespace FSO.SimAntics.Utils
         }
 
         /// <summary>
-        /// 21.6: where the way r along the sidewalk is blocked for street Sim ava (just put at its start) - a wall or fence
-        /// across it, a change of room, or a thing in the way (a parked car, a tree, a bin... - the same test the router makes:
-        /// its flags, then the object's and the Sim's own "may walk through" trees, entry point 5). Null: clear. The router
-        /// keeps street Sims on the sidewalk, so a way blocked from the start can only end with them stuck - such a walk is
-        /// never begun (VMNetReduxTownieCmd.StreetWalk). From the lot itself only (the same on every game).
+        /// 21.6: where the way r along the sidewalk is blocked for street Sim ava (just put at its start) - null: clear. The
+        /// router keeps street Sims on the sidewalk, so a way blocked from the start can only end with them stuck - such a walk
+        /// is never begun (VMNetReduxTownieCmd.StreetWalk). From the lot itself only (the same on every game).
+        /// 21.7: what the router itself would do, tile by tile: the things in the way are found as the router finds them (their
+        /// flags, then the object's and the Sim's own "may walk through" trees, entry point 5 - footprints 3 units round), each
+        /// one on the path opens the tiles beside it (Detours), and a step from tile to tile is stopped by a wall or fence (the
+        /// room's own obstacles) or a change of room. Blocked: no way from the start to the end over the path and those tiles.
+        /// 21.6 refused a way with anything at all on it - and checked only a thin line down its middle, so a mailbox or a bin
+        /// half on the sidewalk got through the check and then stopped the walker there (Joey's 21.6 video).
         /// </summary>
         public static string RouteBlocked(VMContext ctx, VMAvatar ava, Route r)
         {
             var arch = ctx?.Architecture;
             if (arch == null || r == null || ctx.VM == null || ctx.RoomInfo == null) return null;
-            var blockers = new List<VMEntity>();
+            var tiles = RouteTiles(ctx);
+            if (tiles == null) return null;
+            int w = arch.Width, h = arch.Height;
+            var things = new List<VMObstacle>();
             foreach (var obj in ctx.VM.Entities)
             {
-                if (!(obj is VMGameObject) || obj.Dead || obj.Footprint == null) continue;
+                if (obj == ava || obj.Dead || obj.Footprint == null) continue;
+                if (!(obj is VMGameObject)) continue; // (Sims move on - the router waits for them or asks them to step aside)
                 if (obj.Position == LotTilePos.OUT_OF_WORLD || obj.Position.Level != 1) continue;
-                if (obj.Object?.OBJ?.GUID == GotoGUID) continue; // (the walk's own Go Here markers)
+                if (obj.Object?.OBJ?.GUID == GotoGUID) continue; // (the walks' own Go Here markers)
                 var flags = (VMEntityFlags)obj.GetValue(VMStackObjectVariable.Flags);
                 if ((flags & VMEntityFlags.DisallowPersonIntersection) == 0 && (flags & VMEntityFlags.AllowPersonIntersection) != 0) continue;
-                blockers.Add(obj);
+                var ft = obj.Footprint;
+                var o = new VMObstacle(ft.x1 - 3, ft.y1 - 3, ft.x2 + 3, ft.y2 + 3);
+                // (only one near the path matters - the "may walk through" trees run only for those)
+                bool near = false;
+                for (int y = Math.Max(0, (o.y1 >> 4) - 1); y <= Math.Min(h - 1, (o.y2 >> 4) + 1) && !near; y++)
+                    for (int x = Math.Max(0, (o.x1 >> 4) - 1); x <= Math.Min(w - 1, (o.x2 >> 4) + 1) && !near; x++)
+                        if (tiles[y * w + x]) near = true;
+                if (!near) continue;
+                if (ava != null && (ava.ExecuteEntryPoint(5, ctx, true, obj, new short[] { obj.ObjectID, 1, 0, 0 })
+                    || obj.ExecuteEntryPoint(5, ctx, true, ava, new short[] { ava.ObjectID, 1, 0, 0 }))) continue;
+                things.Add(o);
             }
-            int px = -1, py = -1;
-            foreach (var l in r.Legs)
+            var detour = Detours(ctx, tiles, w, h, things);
+            int si = r.StartY * w + r.StartX;
+            Func<int, bool> open = i =>
             {
-                int dir = l.To >= l.From ? 1 : -1;
-                for (int a = l.From; ; a += dir)
+                if (!tiles[i] && !detour.Contains(i)) return false;
+                if (i == si) return true;
+                int x = i % w, y = i / w;
+                foreach (var o in things) if (CoversMiddle(o, x, y)) return false;
+                return true;
+            };
+            Func<int, int, bool> step = (i, j) =>
+            {
+                int x0 = i % w, y0 = i / w, x1 = j % w, y1 = j / w;
+                var pr = ctx.GetRoomAt(LotTilePos.FromBigTile((short)x0, (short)y0, 1));
+                var room = ctx.GetRoomAt(LotTilePos.FromBigTile((short)x1, (short)y1, 1));
+                if (pr != room) return false;
+                var box = new VMObstacle(Math.Min(x0, x1) * 16 + 7, Math.Min(y0, y1) * 16 + 7, Math.Max(x0, x1) * 16 + 9, Math.Max(y0, y1) * 16 + 9);
+                return !(room < ctx.RoomInfo.Length && ctx.RoomInfo[room].Room.RoutingObstacles != null
+                    && ctx.RoomInfo[room].Room.RoutingObstacles.SearchForIntersect(box));
+            };
+            // (the end is reached 2 tiles short - the street portal stands on the very end on many lots)
+            Func<int, bool> atEnd = i => Math.Max(Math.Abs(i % w - r.EndX), Math.Abs(i / w - r.EndY)) <= 2;
+            var seen = new bool[w * h];
+            var queue = new Queue<int>();
+            seen[si] = true; queue.Enqueue(si);
+            int far = si, farD = int.MaxValue;
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue();
+                if (atEnd(c)) return null;
+                int cd = Math.Abs(c % w - r.EndX) + Math.Abs(c / w - r.EndY);
+                if (tiles[c] && cd < farD) { farD = cd; far = c; }
+                int cx = c % w, cy = c / w;
+                for (int d = 0; d < 4; d++)
                 {
-                    int x = l.W.X(a), y = l.W.Y(a);
-                    if (px >= 0 && (px != x || py != y))
-                    {
-                        var box = new VMObstacle(Math.Min(px, x) * 16 + 7, Math.Min(py, y) * 16 + 7, Math.Max(px, x) * 16 + 9, Math.Max(py, y) * 16 + 9);
-                        var pr = ctx.GetRoomAt(LotTilePos.FromBigTile((short)px, (short)py, 1));
-                        var room = ctx.GetRoomAt(LotTilePos.FromBigTile((short)x, (short)y, 1));
-                        if (pr != room) return x + "," + y + " (into another room - a fence or wall)";
-                        if (room < ctx.RoomInfo.Length && ctx.RoomInfo[room].Room.RoutingObstacles != null
-                            && ctx.RoomInfo[room].Room.RoutingObstacles.SearchForIntersect(box)) return x + "," + y + " (a wall or fence)";
-                        // (not within 2 tiles of the edge of the lot where they come and go - the street portals stand there,
-                        //  and the walk's end is reached 2 tiles short anyway)
-                        bool edge = Math.Max(Math.Abs(x - r.StartX), Math.Abs(y - r.StartY)) <= 2 || Math.Max(Math.Abs(x - r.EndX), Math.Abs(y - r.EndY)) <= 2
-                            || Math.Max(Math.Abs(px - r.StartX), Math.Abs(py - r.StartY)) <= 2 || Math.Max(Math.Abs(px - r.EndX), Math.Abs(py - r.EndY)) <= 2;
-                        if (!edge) foreach (var b in blockers)
-                        {
-                            var ft = b.Footprint;
-                            if (ft.x1 - 3 > box.x2 || ft.x2 + 3 < box.x1 || ft.y1 - 3 > box.y2 || ft.y2 + 3 < box.y1) continue;
-                            if (ava != null && (ava.ExecuteEntryPoint(5, ctx, true, b, new short[] { b.ObjectID, 1, 0, 0 })
-                                || b.ExecuteEntryPoint(5, ctx, true, ava, new short[] { ava.ObjectID, 1, 0, 0 }))) continue;
-                            return x + "," + y + " (" + (b.ToString() ?? "something") + ")";
-                        }
-                    }
-                    px = x; py = y;
-                    if (a == l.To) break;
+                    int nx = cx + (d == 0 ? 1 : d == 1 ? -1 : 0), ny = cy + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    int n = ny * w + nx;
+                    if (seen[n] || !open(n) || !step(c, n)) continue;
+                    seen[n] = true;
+                    queue.Enqueue(n);
                 }
             }
-            return null;
+            return "past " + (far % w) + "," + (far / w) + " (something on the sidewalk with no way round it, or a fence across it)";
         }
 
         private static int TileIndex(LotTilePos p, int w, int h)

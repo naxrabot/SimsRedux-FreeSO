@@ -531,7 +531,10 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             Sidewalk.EndOf(ava, out ex, out ey);
             if (!OnLot(vm, ex, ey)) return false;
             var th = ava.Thread;
-            if (th.Queue.Any(x => x.Callee?.Object?.OBJ?.GUID == Sidewalk.GotoGUID)) return false; // (still walking)
+            // (still walking: left be. 21.7: Kind 1 - sent on because they've stood still - whatever's left of the walk is
+            //  called off first: a stop they couldn't reach kept them standing, and the new way was refused)
+            if (Kind == 1) CancelWalk(vm, ava, false);
+            else if (th.Queue.Any(x => x.Callee?.Object?.OBJ?.GUID == Sidewalk.GotoGUID)) return false;
             // (19.10: Kind 1 - the walk keeps stopping short: they turn for the nearer end of the sidewalk instead, and leave
             //  the lot there - never through the yard. 20.1: the nearest edge of the lot along the sidewalks - never a corner)
             //  (the end the game deciding picked is in ToX/ToY - so it knows where they'll be; else the nearest one from here)

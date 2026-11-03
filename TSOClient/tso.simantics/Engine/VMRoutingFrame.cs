@@ -360,9 +360,9 @@ namespace FSO.SimAntics.Engine
             var considerAvatars = !Caller.GetFlag(VMEntityFlags.AllowPersonIntersection);
             // SimsRedux 20.2: a Sim out on the street routes along the sidewalk only (and passes the others out there)
             var reduxStreet = VM.TS1 && FSO.SimAntics.Utils.ReduxSidewalk.IsStreet(Caller);
-            if (reduxStreet && !FSO.SimAntics.Utils.ReduxSidewalk.LimitRoute(VM.Context, startPos, CurRoute.Position,
-                Callee?.Object?.GUID == GOTO_GUID, obstacles)) return false;
-
+            // (21.7: the things in the way are found first, so the sidewalk limit can open a step round one standing on the
+            //  sidewalk - a mailbox, a bin, a street light; they're added after the limit, as before)
+            var thingObs = new List<VMObstacle>();
             foreach (var obj in roomInfo.Entities)
             {
                 var ft = obj.Footprint;
@@ -374,8 +374,11 @@ namespace FSO.SimAntics.Engine
                     ((flags & VMEntityFlags.DisallowPersonIntersection) > 0 || (flags & VMEntityFlags.AllowPersonIntersection) == 0)
                     && (!(Caller.ExecuteEntryPoint(5, VM.Context, true, obj, new short[] { obj.ObjectID, 1, 0, 0 })
                         || obj.ExecuteEntryPoint(5, VM.Context, true, Caller, new short[] { Caller.ObjectID, 1, 0, 0 }))))
-                    obstacles.Add(new VMObstacle(ft.x1-3, ft.y1-3, ft.x2+3, ft.y2+3));
+                    thingObs.Add(new VMObstacle(ft.x1-3, ft.y1-3, ft.x2+3, ft.y2+3));
             }
+            if (reduxStreet && !FSO.SimAntics.Utils.ReduxSidewalk.LimitRoute(VM.Context, startPos, CurRoute.Position,
+                Callee?.Object?.GUID == GOTO_GUID, obstacles, thingObs)) return false;
+            foreach (var o in thingObs) obstacles.Add(o);
 
             if (obstacles.SearchForIntersect(new VMObstacle(startPoint, startPoint))) return false;
 
