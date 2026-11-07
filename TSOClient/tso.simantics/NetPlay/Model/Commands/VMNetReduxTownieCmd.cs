@@ -170,9 +170,8 @@ namespace FSO.SimAntics.NetPlay.Model.Commands
             if (shared.Contains(obj)) return true;
             var file = obj.SemiGlobal?.MainIff?.Filename;
             if (file == null || file.IndexOf("social", StringComparison.OrdinalIgnoreCase) < 0) return false;
-            for (int i = 0; i < 16; i++)
-                if (obj.GetAttribute(i) == ent.ObjectID) return true;
-            return false;
+            // (SocialGlobals' "set person to init with": Person B's object id in attribute 0, Person A's in attribute 6)
+            return obj.GetAttribute(0) == ent.ObjectID || obj.GetAttribute(6) == ent.ObjectID;
         }
 
         private bool Arrive(VM vm)

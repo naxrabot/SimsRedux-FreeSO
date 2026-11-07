@@ -981,6 +981,7 @@ namespace FSO.SimAntics
                 if (ent.Container == null) ent.PositionChange(Context, true); //called recursively for contained objects.
             }
 
+            if (TS1 && !ReduxLoadingLiveState) ReduxStartOverOrphanedSocials(); // (21.9b: before the start-overs are finished)
             ReduxFinishStartOver();
 
             GlobalState = input.GlobalState;
@@ -1074,6 +1075,78 @@ namespace FSO.SimAntics
         /// Here it gets what VMAvatar.Reset / the Reset Sim command give it. Lot state only, worked out from
         /// the save alone, so every game loading the same save does the same.
         /// </summary>
+        /// <summary>
+        /// SimsRedux 21.9b: a Sim saved in the middle of a Sims 1 social whose other half isn't coming back starts over too.
+        /// A social runs on a conversation object of its own (semi-globals "SocialGlobals": "Social Proposition 1.4",
+        /// "Social - Child 1.5"...) holding Person B's object id in attribute 0 and Person A's in attribute 6 ("set person to
+        /// init with"); its main counts the Sims still in the conversation ("update person count") and deletes the object
+        /// when fewer than two are. When the house was saved with one of the two left out (a visitor or a walk-by - they're
+        /// never saved with a house) or that one starts over on loading (VMThread.Load: busy with something not in the save),
+        /// the object deleted itself a moment after the house opened, under the Sim still in it (Headless Test #18:
+        /// "MISSINGSO:write:Invite Downtown A:7/:2" on Betty right after arriving at lot 5 - "Social Proposition 1.4 deleted
+        /// by its own main:2"). Only a Sim's interactions (stack frames of an interaction, queued orders) are looked at; the
+        /// conversation object itself is left to tidy itself away as before. Disk loads only (never an online join/resync -
+        /// that takes the running lot as it is); worked out from the save alone, in object order, so every game does the same.
+        /// </summary>
+        private void ReduxStartOverOrphanedSocials()
+        {
+            try
+            {
+                for (int pass = 0; pass < 4; pass++) // (one starting over can orphan the other half of a second conversation)
+                {
+                    bool changed = false;
+                    foreach (var ent in Entities)
+                    {
+                        var sim = ent as VMAvatar;
+                        var thread = sim?.Thread;
+                        if (sim == null || thread == null || thread.ReduxStartedOver) continue;
+                        VMEntity orphan = null;
+                        foreach (var f in thread.Stack)
+                        {
+                            if (f == null || !f.ActionTree) continue;
+                            if (ReduxSocialOrphaned(f.Callee)) { orphan = f.Callee; break; }
+                            if (ReduxSocialOrphaned(f.StackObject)) { orphan = f.StackObject; break; }
+                        }
+                        if (orphan == null)
+                            foreach (var q in thread.Queue)
+                            {
+                                if (q == null) continue;
+                                if (ReduxSocialOrphaned(q.Callee)) { orphan = q.Callee; break; }
+                                if (ReduxSocialOrphaned(q.StackObject)) { orphan = q.StackObject; break; }
+                            }
+                        if (orphan == null) continue;
+                        Console.WriteLine("[SimsRedux] Something was saved busy with an object that isn't in this game; it starts over. ("
+                            + sim.ToString() + ": in a conversation (" + (orphan.Object?.OBJ?.ChunkLabel ?? "?") + " " + orphan.ObjectID
+                            + ") whose other Sim isn't here)");
+                        thread.Stack.Clear();
+                        thread.Queue.Clear();
+                        thread.ActiveQueueBlock = -1;
+                        thread.ReduxStartedOver = true;
+                        changed = true;
+                    }
+                    if (!changed) break;
+                }
+            }
+            catch (Exception e) { Console.WriteLine("[SimsRedux] checking saved conversations: " + e.Message); }
+        }
+
+        /// <summary>21.9b: a Sims 1 conversation object (SocialGlobals) one of whose two Sims is gone or starting over.</summary>
+        private bool ReduxSocialOrphaned(VMEntity obj)
+        {
+            if (obj == null || obj is VMAvatar || obj.Dead) return false;
+            var file = obj.SemiGlobal?.MainIff?.Filename;
+            if (file == null || file.IndexOf("social", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            return ReduxParticipantMissing(obj.GetAttribute(0)) || ReduxParticipantMissing(obj.GetAttribute(6));
+        }
+
+        private bool ReduxParticipantMissing(short id)
+        {
+            if (id <= 0) return false; // (0: not a person - a pet listener, or not set yet)
+            var who = GetObjectById(id);
+            if (who == null) return true;
+            return who is VMAvatar && who.Thread != null && who.Thread.ReduxStartedOver;
+        }
+
         private void ReduxFinishStartOver()
         {
             foreach (var ent in Entities)
